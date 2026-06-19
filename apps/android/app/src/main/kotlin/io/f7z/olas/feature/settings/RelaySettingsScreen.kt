@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
 import io.f7z.olas.core.DefaultRelay
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
@@ -48,7 +47,7 @@ import kotlinx.serialization.json.Json
 private data class RelayEntry(val url: String, val role: String, val connected: Boolean)
 
 @Composable
-fun RelaySettingsScreen(navController: NavController) {
+fun RelaySettingsScreen() {
     val json = remember { Json { ignoreUnknownKeys = true } }
     val relays = remember {
         val defaults = runCatching {

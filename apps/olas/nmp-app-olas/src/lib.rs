@@ -49,9 +49,8 @@ pub extern "C" fn olas_decode_snapshot_action_results_json(
                 if let Some(result_str) = row.result {
                     // result is already a serialised JSON string — parse it into
                     // a Value so it embeds cleanly (not double-encoded).
-                    obj["result"] =
-                        serde_json::from_str::<serde_json::Value>(&result_str)
-                            .unwrap_or(serde_json::Value::Null);
+                    obj["result"] = serde_json::from_str::<serde_json::Value>(&result_str)
+                        .unwrap_or(serde_json::Value::Null);
                 }
                 obj
             })
@@ -120,7 +119,8 @@ pub extern "C" fn olas_decode_snapshot_claimed_profiles_json(
                     obj["nip05"] = serde_json::Value::String(card.nip05.clone());
                 }
                 obj["npub"] = serde_json::Value::String(nmp_core::display::to_npub(pubkey));
-                obj["npub_short"] = serde_json::Value::String(nmp_core::display::short_npub(pubkey));
+                obj["npub_short"] =
+                    serde_json::Value::String(nmp_core::display::short_npub(pubkey));
                 obj
             })
             .collect();
@@ -179,6 +179,27 @@ pub extern "C" fn olas_decode_snapshot_active_account_json(
 // Re-export nmp-ffi's NmpApp type so this staticlib contains all needed symbols.
 pub use nmp_ffi::NmpApp;
 
+mod actions;
+mod config_ffi;
+mod event_models;
+mod location;
+mod photo_feed;
+mod zaps;
+
+pub use actions::{olas_bookmark_event_action_json, olas_react_action_json, olas_zap_action_json};
+pub use config_ffi::{
+    olas_compose_steps_json, olas_decode_zap_notification_json, olas_filter_catalog_json,
+    olas_media_upload_config_json, olas_onboarding_steps_json, olas_picker_config_json,
+    olas_settings_catalog_json,
+};
+pub use event_models::{
+    olas_add_default_relays, olas_contact_list_pubkeys_json, olas_default_relays_json,
+    olas_notification_json, olas_profile_json,
+};
+pub use location::olas_location_geohash4;
+pub use photo_feed::olas_filter_photo_post_json;
+pub use zaps::olas_bolt11_amount_sats;
+
 // Android JNI shims — gated to android targets only.
 #[cfg(target_os = "android")]
 mod jni;
@@ -194,10 +215,8 @@ pub use extras::{
 // New event-decoder, BOLT11, geohash and config FFI helpers.
 mod extras_ffi;
 pub use extras_ffi::{
-    olas_bolt11_amount_msats, olas_build_zap_action_json, olas_compose_steps_json,
-    olas_compute_geohash, olas_decode_kind0_event_json, olas_decode_kind20_event_json,
-    olas_filter_catalog_json, olas_media_upload_config_json, olas_onboarding_steps_json,
-    olas_picker_config_json, olas_settings_catalog_json,
+    olas_bolt11_amount_msats, olas_build_zap_action_json, olas_compute_geohash,
+    olas_decode_kind0_event_json, olas_decode_kind20_event_json,
 };
 
 // Mutable app-state: Blossom server URL and feed mode (OnceLock<Mutex<String>>).
@@ -206,7 +225,6 @@ pub use extras_state::{
     olas_blossom_server_url_get, olas_blossom_server_url_set, olas_feed_mode_get,
     olas_feed_mode_set,
 };
-
 
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
@@ -227,8 +245,13 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
         // SAFETY: caller guarantees a valid pointer from nmp_app_new, no other
         // exclusive reference aliases it here (same pattern as nmp-app-chirp).
         let app_ref = unsafe { &mut *app };
-        nmp_defaults::register_defaults(app_ref);
+        let handles = nmp_defaults::register_defaults_with_handles(
+            app_ref,
+            nmp_defaults::NmpDefaults::default(),
+        );
+        photo_feed::install_wot_runtime(handles.wot);
         nmp_blossom::register_actions(app_ref);
+        event_models::olas_add_default_relays(app);
     }));
 }
 
@@ -240,10 +263,8 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
 /// Internally calls nmp_app_open_interest with the appropriate kind:20 filter.
 /// The NmpApp update callback receives kind:20 events via the standard update frame.
 ///
-/// WoT FILTERING NOTE: Per-event WoT score filtering on network feed is gated on
-/// a pending NMP gap (nmp_app_wot_score FFI function does not exist yet).
-/// Until that gap is resolved, network feed is unfiltered at the kernel level.
-/// The UI must note this limitation in the Network tab subtitle.
+/// Network feed events are filtered at decode time by `olas_filter_photo_post_json`,
+/// using the shared Rust WoT runtime installed during `olas_app_register`.
 #[no_mangle]
 pub extern "C" fn olas_open_photo_feed(
     app: *mut NmpApp,
@@ -280,29 +301,6 @@ pub extern "C" fn olas_open_photo_feed(
             Err(_) => return,
         };
         nmp_ffi::nmp_app_open_interest(app, filter_cstr.as_ptr(), consumer_cstr.as_ptr(), scope);
-    }));
-}
-
-/// Open a NIP-51 kind:30000 (follow set / starter pack) subscription.
-/// Used during onboarding to hydrate follow pack contents.
-///
-/// pack_addr: the NIP-19 naddr1... or "kind:30000:<pubkey>:<d-tag>" string.
-#[no_mangle]
-pub extern "C" fn olas_open_follow_pack(app: *mut NmpApp, pack_addr: *const c_char) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if pack_addr.is_null() {
-            return;
-        }
-        let addr = match unsafe { CStr::from_ptr(pack_addr) }.to_str() {
-            Ok(s) if !s.is_empty() => s.to_string(),
-            _ => return,
-        };
-        // Open the URI — nmp-ffi handles NIP-19 naddr decoding.
-        let addr_cstr = match CString::new(addr) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        nmp_ffi::nmp_app_open_uri(app, addr_cstr.as_ptr());
     }));
 }
 

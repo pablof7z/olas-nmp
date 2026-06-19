@@ -120,16 +120,12 @@ final class FeedViewModel {
         NMPBridge.shared.loadOlderFeed(key: feedKey)
     }
 
-    // NMP-GAP(#24): Reaction state will be updated by the Rust photo-feed projection.
-    // Do NOT add optimistic mutations — Rust is the single source of truth.
-    func toggleLike(postId: String) {
-        let json = "{\"event_id\":\"\(postId)\"}"
-        _ = NMPBridge.shared.dispatchAction(namespace: "nmp.react", json: json)
+    func toggleLike(post: PhotoPost) {
+        if post.isLiked { return }
+        _ = NMPBridge.shared.react(to: post)
     }
 
-    // NMP-GAP(#24): Bookmark requires a Rust bookmark projection. Do NOT optimistically
-    // mutate isBookmarked — the action will be wired once the projection exists.
-    func toggleBookmark(postId: String) {
-        // Intentionally empty: wired once the NMP bookmark projection ships.
+    func toggleBookmark(post: PhotoPost) {
+        _ = NMPBridge.shared.bookmark(post: post, add: !post.isBookmarked)
     }
 }

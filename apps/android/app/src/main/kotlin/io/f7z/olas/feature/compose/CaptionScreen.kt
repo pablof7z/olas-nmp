@@ -1,6 +1,9 @@
 package io.f7z.olas.feature.compose
 
+import android.Manifest
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,15 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
@@ -50,11 +49,13 @@ fun CaptionScreen(
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     var caption by remember { mutableStateOf("") }
-    // Blossom server URL comes from Rust-owned server-config projection.
-    val blossomUrl = remember { NMPBridge.blossomServerUrl() }
-    // Geohash is computed by Rust when location is toggled on (NMPBridge.computeGeohash(lat, lon, 6)).
     var locationEnabled by remember { mutableStateOf(false) }
     val altTexts = remember { mutableMapOf<Uri, String>() }
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        locationEnabled = granted
+    }
 
     Column(
         modifier = Modifier
@@ -62,21 +63,6 @@ fun CaptionScreen(
             .background(OlasColors.Background)
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
-        // Hashtag-colored caption field
-        val annotated = buildAnnotatedString {
-            val words = caption.split(" ")
-            words.forEachIndexed { i, word ->
-                if (word.startsWith("#")) {
-                    withStyle(SpanStyle(color = OlasColors.Blue, fontWeight = FontWeight.SemiBold)) {
-                        append(word)
-                    }
-                } else {
-                    append(word)
-                }
-                if (i < words.size - 1) append(" ")
-            }
-        }
-
         TextField(
             value         = caption,
             onValueChange = { caption = it },
@@ -96,7 +82,7 @@ fun CaptionScreen(
         HorizontalDivider(color = OlasColors.Border)
 
         // Alt text chips per image
-        uris.forEachIndexed { index, uri ->
+        uris.forEachIndexed { index, _ ->
             Row(
                 modifier          = Modifier.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -127,7 +113,13 @@ fun CaptionScreen(
             }
             Switch(
                 checked         = locationEnabled,
-                onCheckedChange = { locationEnabled = it },
+                onCheckedChange = { enabled ->
+                    if (enabled && !hasCoarseLocationPermission(context)) {
+                        locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    } else {
+                        locationEnabled = enabled
+                    }
+                },
                 colors          = SwitchDefaults.colors(
                     checkedThumbColor   = OlasColors.Background,
                     checkedTrackColor   = OlasColors.Text1,
@@ -145,7 +137,7 @@ fun CaptionScreen(
 
         Button(
             onClick  = {
-                vm.upload(context, uris, caption, altTexts)
+                vm.upload(context, uris, caption, altTexts, includeLocation = locationEnabled)
                 onShare()
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),

@@ -13,7 +13,7 @@ fun hasCoarseLocationPermission(context: Context): Boolean =
         PackageManager.PERMISSION_GRANTED
 
 @SuppressLint("MissingPermission")
-fun currentCoarseGeohash4(context: Context): String? {
+fun currentCoarseGeohash(context: Context): String? {
     if (!hasCoarseLocationPermission(context)) return null
     val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
     val location = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
@@ -24,5 +24,5 @@ fun currentCoarseGeohash4(context: Context): String? {
         }
         .maxByOrNull(Location::getTime)
         ?: return null
-    return NMPBridge.locationGeohash4(location.latitude, location.longitude)
+    return NMPBridge.computeGeohash(location.latitude, location.longitude, precision = 6)
 }

@@ -20,7 +20,6 @@ targets:
     platform: iOS
     sources:
       - path: Olas
-      - path: Components
     dependencies:
       - package: FlatBuffers
     info:

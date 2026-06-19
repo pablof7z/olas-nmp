@@ -60,7 +60,7 @@ fun DiscoverScreen() {
                     ?: return@collect
                 val name = profile.displayName ?: profile.name ?: profile.pubkey.take(8)
                 if (suggested.none { it.pubkey == profile.pubkey } && suggested.size < 8) {
-                    suggested.add(SuggestedAccount(profile.pubkey, name, profile.picture, emptyList(), 0, null))
+                    suggested.add(SuggestedAccount(profile.pubkey, name, profile.picture, emptyList()))
                 }
             }
     }

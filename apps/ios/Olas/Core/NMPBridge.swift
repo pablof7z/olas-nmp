@@ -17,9 +17,6 @@ import Combine
 
     // MARK: - Follow state
 
-    // NMP-GAP(#7): followedPubkeys will be populated by a Rust follow-graph projection.
-    // Until that projection exists, this set remains empty. The UI will reflect reality
-    // only once Rust owns the follow state. Do NOT add optimistic mutations here.
     private(set) var followedPubkeys: Set<String> = []
 
     func follow(pubkey: String) {
@@ -112,6 +109,7 @@ import Combine
         var lines = ""
         for json in batch {
             let th = CFAbsoluteTimeGetCurrent()
+            updateFollowStateIfNeeded(json)
             eventHandlers.forEach { $0(json) }
             lines += String(format: "event %.1fms\n", (CFAbsoluteTimeGetCurrent() - th) * 1000)
         }
@@ -134,8 +132,8 @@ import Combine
 
     // Fast-path dedup for snapshot ticks (~100ms cadence): skip the MainActor hop
     // when the JSON payload hasn't changed since the last tick.
-    nonisolated(unsafe) var lastProfilesJSON = ""
-    nonisolated(unsafe) var lastActiveAccountJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastProfilesJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastActiveAccountJSON = ""
     let tickLock = NSLock()
 
     func scheduleProfileFlush(_ json: String) {
@@ -170,7 +168,20 @@ import Combine
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let pubkey = obj["pubkey"], !pubkey.isEmpty else { return }
-        if activeAccountPubkey != pubkey { activeAccountPubkey = pubkey }
+        if activeAccountPubkey != pubkey {
+            activeAccountPubkey = pubkey
+            followedPubkeys = []
+        }
+    }
+
+    private func updateFollowStateIfNeeded(_ json: String) {
+        guard let active = activeAccountPubkey,
+              let data = json.data(using: .utf8),
+              let event = try? JSONDecoder().decode(NostrEvent.self, from: data),
+              event.kind == 3,
+              let pubkeys = contactListPubkeys(from: json, activePubkey: active) else { return }
+        let next = Set(pubkeys)
+        if followedPubkeys != next { followedPubkeys = next }
     }
 
     private func handleClaimedProfilesJSON(_ json: String) {
@@ -230,9 +241,8 @@ import Combine
         }
     }
 
-    // NMP-GAP(#18): dispatchAndAwaitResult suspends on an action terminal, making native
-    // Swift the owner of the upload/publish lifecycle state machine. Once NMP ships a
-    // stream-based action-result projection, this bridging shim must be removed.
+    // Temporary host-side waiter until NMP exposes a typed action terminal stream:
+    // https://github.com/pablof7z/nostr-multi-platform/issues/1634
     func dispatchAndAwaitResult(namespace: String, json: String) async -> ActionTerminal? {
         guard let returnJSON = dispatchAction(namespace: namespace, json: json),
               let data = returnJSON.data(using: .utf8),
@@ -277,11 +287,24 @@ import Combine
         key.withCString { nmp_app_load_older_feed(app, $0) }
     }
 
+    func contactListPubkeys(from eventJSON: String, activePubkey: String) -> [String]? {
+        let ptr = eventJSON.withCString { eventPtr in
+            activePubkey.withCString { activePtr in
+                olas_contact_list_pubkeys_json(eventPtr, activePtr)
+            }
+        }
+        guard let ptr else { return nil }
+        defer { nmp_free_string(ptr) }
+        let json = String(cString: ptr)
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode([String].self, from: data)
+    }
+
     // MARK: - Profile
 
-    // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles
-    // Rust projection. It is NOT an authoritative store — only Rust's snapshot is truth.
-    // A future typed projection will supersede this dictionary entirely.
+    // Read-through cache for the Rust claimed_profiles snapshot. The typed NMP
+    // replacement is tracked at:
+    // https://github.com/pablof7z/nostr-multi-platform/issues/1635
     private(set) var profileCache: [String: ProfileWire] = [:]
 
     func claimProfile(pubkey: String, consumer: String = "olas.profile") {
@@ -303,6 +326,28 @@ import Combine
                 guard let ptr = nmp_app_dispatch_action(app, ns, j) else { return nil }
                 defer { nmp_free_string(ptr) }
                 return String(cString: ptr)
+            }
+        }
+    }
+
+    func react(to post: PhotoPost) -> String? {
+        post.id.withCString { eventId in
+            post.authorPubkey.withCString { author in
+                guard let ptr = olas_react_action_json(eventId, author) else { return nil }
+                defer { nmp_free_string(ptr) }
+                return dispatchAction(namespace: "nmp.nip25.react", json: String(cString: ptr))
+            }
+        }
+    }
+
+    func bookmark(post: PhotoPost, add: Bool) -> String? {
+        guard let account = activeAccountPubkey else { return nil }
+        return account.withCString { accountPubkey in
+            post.id.withCString { eventId in
+                guard let ptr = olas_bookmark_event_action_json(accountPubkey, eventId) else { return nil }
+                defer { nmp_free_string(ptr) }
+                let namespace = add ? "nmp.nip51.add_bookmark" : "nmp.nip51.remove_bookmark"
+                return dispatchAction(namespace: namespace, json: String(cString: ptr))
             }
         }
     }
@@ -353,6 +398,13 @@ import Combine
         }
     }
 
+    func profile(from json: String) -> OlasProfile? {
+        guard let profileJSON = decodeKind0Event(json),
+              let data = profileJSON.data(using: .utf8)
+        else { return nil }
+        return try? JSONDecoder().decode(OlasProfile.self, from: data)
+    }
+
     func decodeZapNotification(_ json: String) -> String? {
         json.withCString { ptr in
             guard let res = olas_decode_zap_notification_json(ptr) else { return nil }
@@ -377,42 +429,6 @@ import Combine
             defer { nmp_free_string(res) }
             return String(cString: res)
         }
-    }
-
-    func filterCatalogJSON() -> String? {
-        guard let res = olas_filter_catalog_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
-    }
-
-    func mediaUploadConfigJSON() -> String? {
-        guard let res = olas_media_upload_config_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
-    }
-
-    func pickerConfigJSON() -> String? {
-        guard let res = olas_picker_config_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
-    }
-
-    func settingsCatalogJSON() -> String? {
-        guard let res = olas_settings_catalog_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
-    }
-
-    func onboardingStepsJSON() -> String? {
-        guard let res = olas_onboarding_steps_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
-    }
-
-    func composeStepsJSON() -> String? {
-        guard let res = olas_compose_steps_json() else { return nil }
-        defer { nmp_free_string(res) }
-        return String(cString: res)
     }
 
     var blossomServerURL: String {

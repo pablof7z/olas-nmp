@@ -19,6 +19,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Composable
 fun ProfileScreen(navController: NavController, pubkey: String?) {
@@ -60,11 +62,10 @@ fun ProfileScreen(navController: NavController, pubkey: String?) {
                             profile       = state.profile!!,
                             isOwnProfile  = isOwnProfile,
                             isFollowing   = state.isFollowing,
-                            followerCount = 0,
-                            followingCount = 0,
                             onFollow      = { vm.toggleFollow() },
-                            onZap         = {},
-                            onEdit        = { navController.navigate("profile_edit") },
+                            onEdit        = {
+                                navController.navigate(Routes.profileEdit(Json.encodeToString(state.profile!!)))
+                            },
                         )
                     }
                     item {

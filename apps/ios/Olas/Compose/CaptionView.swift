@@ -9,7 +9,6 @@ struct CaptionView: View {
     @State private var caption = ""
     @State private var altTexts: [Int: String] = [:]
     @State private var locationEnabled = false
-    @State private var showServerPicker = false
     @FocusState private var captionFocused: Bool
 
     // Location
@@ -75,20 +74,14 @@ struct CaptionView: View {
 
                 Divider().background(Color.olasBorder)
 
-                Button { showServerPicker = true } label: {
-                    HStack(spacing: OlasSpacing.xs) {
-                        Image(systemName: "server.rack")
-                            .foregroundStyle(Color.olasText2)
-                        Text("Posting to \(serverName)")
-                            .font(OlasFont.body())
-                            .foregroundStyle(Color.olasText1)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(Color.olasText3)
-                            .font(.system(size: 13))
-                    }
+                HStack(spacing: OlasSpacing.xs) {
+                    Image(systemName: "server.rack")
+                        .foregroundStyle(Color.olasText2)
+                    Text("Posting to \(serverName)")
+                        .font(OlasFont.body())
+                        .foregroundStyle(Color.olasText1)
+                    Spacer()
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, OlasSpacing.md)
                 .padding(.vertical, OlasSpacing.sm)
 

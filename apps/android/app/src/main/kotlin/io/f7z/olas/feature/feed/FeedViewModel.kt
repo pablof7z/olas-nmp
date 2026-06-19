@@ -5,13 +5,11 @@ import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 data class FeedUiState(
@@ -38,22 +36,12 @@ class FeedViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(feedMode = persistedMode)
         if (persistedMode == FeedMode.FOLLOWING) NMPBridge.openFollowingFeed() else NMPBridge.openNetworkFeed()
         observeEvents()
-        // On cold restart, relay WebSocket connections establish asynchronously.
-        // Re-open the subscription after 6s and 18s if no events have arrived yet.
-        viewModelScope.launch {
-            for (delayMs in listOf(6_000L, 18_000L)) {
-                delay(delayMs)
-                if (_uiState.value.isLoading && _uiState.value.posts.isEmpty()) {
-                    NMPBridge.openNetworkFeed()
-                }
-            }
-        }
     }
 
     private fun observeEvents() {
         NMPBridge.nostrEvents
             .onEach { raw ->
-                val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
+                val postJson = NMPBridge.photoPostJson(raw, _uiState.value.feedMode) ?: return@onEach
                 val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
                 val current = _uiState.value
                 if (current.posts.isEmpty()) {
@@ -103,5 +91,18 @@ class FeedViewModel : ViewModel() {
 
     fun loadOlderPosts() {
         NMPBridge.loadOlderFeed("photo_feed")
+    }
+
+    fun react(post: PhotoPost) {
+        if (post.isLiked) return
+        NMPBridge.reactTo(post)
+    }
+
+    fun bookmark(post: PhotoPost) {
+        NMPBridge.bookmarkEvent(post, add = !post.isBookmarked)
+    }
+
+    fun zap(post: PhotoPost, amountSats: Long = 21) {
+        NMPBridge.zapPost(post, amountSats)
     }
 }

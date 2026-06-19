@@ -12,8 +12,8 @@ enum ImageEncoder {
     /// JPEG at `quality` with ALL EXIF metadata stripped.
     ///
     /// We always strip EXIF regardless of whether the user enabled location.
-    /// Location is communicated only via the NIP-52 "g" Nostr tag, which the
-    /// caller computes at 4-char geohash precision.
+    /// Location is communicated only via the NIP-52 "g" Nostr tag, computed by
+    /// Rust at 6-character geohash precision.
     static func encodeStrippingEXIF(
         _ image: UIImage,
         maxDimension: CGFloat,

@@ -2,8 +2,6 @@ import SwiftUI
 
 struct PostCardHeaderView: View {
     let post: PhotoPost
-    var onMute: (() -> Void)?
-    var onReport: (() -> Void)?
 
     @State private var isFollowing: Bool = false
 
@@ -36,9 +34,6 @@ struct PostCardHeaderView: View {
                     )
                 }
                 .buttonStyle(.plain)
-
-                // Trust line: hidden until follow graph data flows from NMP
-
             }
             .frame(maxHeight: .infinity, alignment: .center)
 
@@ -48,10 +43,8 @@ struct PostCardHeaderView: View {
                 Button {
                     if isFollowing {
                         bridge.unfollow(pubkey: post.authorPubkey)
-                        isFollowing = false
                     } else {
                         bridge.follow(pubkey: post.authorPubkey)
-                        isFollowing = true
                     }
                 } label: {
                     Text(isFollowing ? "Following" : "Follow")
@@ -83,30 +76,6 @@ struct PostCardHeaderView: View {
                 .font(OlasFont.feedTimestamp())
                 .foregroundStyle(Color.olasText3)
                 .frame(maxHeight: .infinity, alignment: .center)
-
-            Menu {
-                Button(action: { onMute?() }) {
-                    Label("Mute account", systemImage: "speaker.slash")
-                }
-                Button(action: { onReport?() }) {
-                    Label("Report", systemImage: "flag")
-                }
-                Button {
-                    // Copy link
-                } label: {
-                    Label("Copy link", systemImage: "link")
-                }
-                Button {
-                    // Why am I seeing this
-                } label: {
-                    Label("Why am I seeing this?", systemImage: "questionmark.circle")
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(Color.olasText3)
-                    .frame(width: 44, height: 44)
-            }
         }
         .padding(.horizontal, OlasSpacing.md)
         .frame(height: 52)

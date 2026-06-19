@@ -19,9 +19,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
@@ -38,13 +36,12 @@ data class SuggestedAccount(
     val name: String,
     val avatarUrl: String?,
     val photoUrls: List<String>,
-    val mutualFollowCount: Int,
-    val mutualFollowName: String?,
 )
 
 @Composable
 fun SuggestedAccountCard(account: SuggestedAccount, modifier: Modifier = Modifier) {
-    var isFollowing by remember { mutableStateOf(false) }
+    val followedPubkeys by NMPBridge.followedPubkeys.collectAsStateWithLifecycle()
+    val isFollowing = followedPubkeys.contains(account.pubkey)
 
     Column(
         modifier = modifier
@@ -114,15 +111,6 @@ fun SuggestedAccountCard(account: SuggestedAccount, modifier: Modifier = Modifie
         )
         Spacer(Modifier.height(6.dp))
         Text(account.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = OlasColors.Text1)
-        if (account.mutualFollowName != null) {
-            Text(
-                text     = "Followed by ${account.mutualFollowName}" +
-                    if (account.mutualFollowCount > 1) " + ${account.mutualFollowCount - 1}" else "",
-                fontSize = 12.sp,
-                color    = OlasColors.Text2,
-                maxLines = 1,
-            )
-        }
         Spacer(Modifier.height(8.dp))
         Button(
             onClick  = {

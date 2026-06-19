@@ -34,7 +34,7 @@ struct PostCardView: View {
                         .onTapGesture { onImageTap?(0) }
                         .onTapGesture(count: 2) { location in
                             triggerHeartBurst(at: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2))
-                            vm.toggleLike(postId: post.id)
+                            vm.toggleLike(post: post)
                         }
                 } else {
                     carouselImages(width: geo.size.width)

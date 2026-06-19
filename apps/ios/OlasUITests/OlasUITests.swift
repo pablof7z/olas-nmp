@@ -5,14 +5,31 @@ final class OlasUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testActivityTrustFilterCopyVisible() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5), "App should launch")
+
+        let activityTab = app.tabBars.buttons["Activity"]
+        XCTAssertTrue(activityTab.waitForExistence(timeout: 5), "Activity tab should exist")
+        activityTab.tap()
+
+        let trustCopy = app.staticTexts["Filtered by your trust settings"]
+        XCTAssertTrue(trustCopy.waitForExistence(timeout: 5), "Activity should show trust filtering copy")
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "ActivityTrustFiltering"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testSearchFunctionality() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Wait for app to load
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5), "App should launch")
 
-        // Step 1: Tap the Search tab (2nd tab button)
         let tabBars = app.tabBars
         XCTAssertTrue(tabBars.buttons.count >= 2, "Tab bar should have at least 2 buttons")
 
@@ -20,34 +37,24 @@ final class OlasUITests: XCTestCase {
         XCTAssertTrue(searchButton.exists, "Search tab button should exist")
         searchButton.tap()
 
-        // Step 2: Wait for Search view to load
-        sleep(2)
-
-        // Step 3: Look for search bar (searchable modifier creates a search field)
         let searchFields = app.searchFields
         if searchFields.count > 0 {
             let searchField = searchFields.element(boundBy: 0)
-            XCTAssertTrue(searchField.exists, "Search field should exist")
-
-            // Tap the search field
+            XCTAssertTrue(searchField.waitForExistence(timeout: 5), "Search field should exist")
             searchField.tap()
-
-            // Type search query
             searchField.typeText("photography")
 
-            // Wait for results to load
-            sleep(2)
-
-            // Take screenshot
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.name = "SearchResults"
+            attachment.lifetime = .keepAlways
             self.add(attachment)
 
-            print("✓ Search functionality test passed")
+            print("Search functionality test passed")
         } else {
-            print("⚠️ No search fields found, but Search tab is accessible")
+            print("No search fields found, but Search tab is accessible")
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.name = "SearchViewWithoutSearchBar"
+            attachment.lifetime = .keepAlways
             self.add(attachment)
         }
     }
@@ -56,10 +63,8 @@ final class OlasUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // Wait for app to load
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
 
-        // Step 1: Tap the Compose button (+ icon in tab bar, should be the 3rd tab button)
         let tabBars = app.tabBars
         XCTAssertTrue(tabBars.buttons.count >= 3, "Tab bar should have at least 3 buttons")
 
@@ -67,10 +72,9 @@ final class OlasUITests: XCTestCase {
         XCTAssertTrue(composeButton.exists, "Compose button should exist")
         composeButton.tap()
 
-        // Step 2: Wait for photo picker to appear
         let photoPickerTitle = app.staticTexts["New Post"]
         XCTAssertTrue(photoPickerTitle.waitForExistence(timeout: 2), "Photo picker should appear")
 
-        print("✓ Compose sheet opened successfully")
+        print("Compose sheet opened successfully")
     }
 }

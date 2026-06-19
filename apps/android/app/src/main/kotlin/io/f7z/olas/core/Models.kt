@@ -42,6 +42,8 @@ data class PhotoPost(
     val commentCount: Int,
     val zapTotal: Long,
     val createdAt: Long,
+    val isLiked: Boolean = false,
+    val isBookmarked: Boolean = false,
 )
 
 /** A Nostr profile (kind-0). */
@@ -57,16 +59,30 @@ data class OlasProfile(
     val lud16: String? = null,
 )
 
-/** A curated starter follow pack (NIP-51 kind:30000). */
 @Serializable
-data class FollowPack(
+data class OlasNotificationPayload(
+    val id: String,
+    val kind: String,
+    val actorPubkey: String,
+    val postId: String? = null,
+    val createdAt: Long,
+    val zapSats: Long? = null,
+)
+
+@Serializable
+data class DefaultRelay(
     val id: String,
     val name: String,
-    val description: String,
-    val category: String,
-    val accentColor: String,
-    val count: Int,
+    val iconHost: String,
+    val url: String,
+    val role: String,
+    val connected: Boolean,
 )
 
 /** Which feed source the user is currently viewing. */
 enum class FeedMode { FOLLOWING, NETWORK }
+
+const val WOT_NETWORK_FEED_LABEL = "Filtered by your trust settings"
+const val WOT_NOTIFICATIONS_NOTE = "Filtered by your trust settings"
+const val WOT_SETTINGS_NOTE =
+    "Network uses your local trust graph. Close is stricter; Open still hides accounts you mute."

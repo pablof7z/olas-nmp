@@ -30,20 +30,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
-private data class ServerOption(val id: String, val name: String, val note: String)
+private data class ServerOption(val id: String, val name: String, val note: String, val url: String)
 
 private val SERVER_OPTIONS = listOf(
-    ServerOption("primal",    "Olas Network",     "Fast and free — recommended for most users."),
-    ServerOption("satellite", "Satellite CDN",    "Reliable global CDN with redundancy."),
-    ServerOption("custom",    "Choose your own",  "Enter a custom Blossom server URL."),
+    ServerOption("primal", "Olas Network", "Primal's Blossom infrastructure.", "https://blossom.primal.net"),
+    ServerOption("satellite", "Satellite.earth", "Community-run media hosting.", "https://cdn.satellite.earth"),
+    ServerOption("nostrcheck", "Nostrcheck", "Privacy-focused media hosting.", "https://nostrcheck.me"),
 )
 
 @Composable
 fun MediaServerScreen(navController: NavController) {
-    var selected by remember { mutableStateOf(SERVER_OPTIONS.first().id) }
+    var selected by remember { mutableStateOf(NMPBridge.primaryBlossomServer()) }
 
     Column(
         modifier = Modifier
@@ -52,7 +53,7 @@ fun MediaServerScreen(navController: NavController) {
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ProgressDots(currentStep = 2, totalSteps = 3)
+        ProgressDots(currentStep = 1, totalSteps = 2)
         Spacer(Modifier.height(24.dp))
 
         Text("Where to post", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = OlasColors.Text1)
@@ -65,7 +66,7 @@ fun MediaServerScreen(navController: NavController) {
         Spacer(Modifier.height(32.dp))
 
         SERVER_OPTIONS.forEach { option ->
-            val isSelected = option.id == selected
+            val isSelected = option.url == selected
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -76,13 +77,13 @@ fun MediaServerScreen(navController: NavController) {
                         color = if (isSelected) OlasColors.Text1 else OlasColors.Border,
                         shape = RoundedCornerShape(12.dp),
                     )
-                    .clickable { selected = option.id }
+                    .clickable { selected = option.url }
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(
-                    selected = isSelected,
-                    onClick  = { selected = option.id },
+                    RadioButton(
+                        selected = isSelected,
+                    onClick  = { selected = option.url },
                     colors   = RadioButtonDefaults.colors(
                         selectedColor   = OlasColors.Text1,
                         unselectedColor = OlasColors.Text3,
@@ -99,7 +100,10 @@ fun MediaServerScreen(navController: NavController) {
         Spacer(Modifier.weight(1f))
 
         Button(
-            onClick  = { navController.navigate(Routes.ONBOARDING_COMPLETE) },
+            onClick  = {
+                NMPBridge.setPrimaryBlossomServer(selected)
+                navController.navigate(Routes.ONBOARDING_COMPLETE)
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape    = RoundedCornerShape(12.dp),
             colors   = ButtonDefaults.buttonColors(

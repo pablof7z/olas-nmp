@@ -30,7 +30,9 @@ pub extern "C" fn olas_blossom_server_url_get(_app: *mut NmpApp) -> *mut c_char 
         } else {
             url
         };
-        CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut())
+        CString::new(s)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(std::ptr::null_mut())
     }));
     result.unwrap_or(std::ptr::null_mut())
 }
@@ -70,7 +72,9 @@ pub extern "C" fn olas_feed_mode_get(_app: *mut NmpApp) -> *mut c_char {
             .lock()
             .map(|g| g.clone())
             .unwrap_or_else(|_| "network".to_string());
-        CString::new(mode).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut())
+        CString::new(mode)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(std::ptr::null_mut())
     }));
     result.unwrap_or(std::ptr::null_mut())
 }

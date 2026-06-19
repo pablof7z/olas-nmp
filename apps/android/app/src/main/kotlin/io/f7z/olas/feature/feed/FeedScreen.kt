@@ -104,7 +104,7 @@ fun FeedScreen(navController: NavController) {
                         items(state.posts, key = { it.id }) { post ->
                             PostCard(
                                 post       = post,
-                                onImageTap = { /* fullscreen */ },
+                                onImageTap = { url -> navController.navigate(Routes.fullscreenImage(url)) },
                                 onLike     = vm::react,
                                 onBookmark = vm::bookmark,
                                 onZap      = { vm.zap(it) },
@@ -115,7 +115,6 @@ fun FeedScreen(navController: NavController) {
                                     }
                                     context.startActivity(Intent.createChooser(share, "Share post"))
                                 },
-                                onComment  = {},
                             )
                         }
                         item {

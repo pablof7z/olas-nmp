@@ -3,8 +3,11 @@ package io.f7z.olas.core
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -20,6 +23,8 @@ import java.util.concurrent.ConcurrentHashMap
 object NMPBridge {
     private const val SETTINGS_PREFS = "olas_settings"
     private const val KEY_WOT_PRESET = "wotPreset"
+    private const val KEY_BLOSSOM_SERVER = "primaryBlossomServer"
+    private const val DEFAULT_BLOSSOM_SERVER = "https://blossom.primal.net"
 
     init {
         System.loadLibrary("nmp_app_olas")
@@ -35,6 +40,9 @@ object NMPBridge {
     // JSON-encoded KernelEvent strings delivered by the kernel event observer.
     private val _nostrEvents = MutableSharedFlow<String>(extraBufferCapacity = 512)
     val nostrEvents: SharedFlow<String> = _nostrEvents.asSharedFlow()
+
+    private val _followedPubkeys = MutableStateFlow<Set<String>>(emptySet())
+    val followedPubkeys: StateFlow<Set<String>> = _followedPubkeys.asStateFlow()
 
     @Volatile
     var activeAccountPubkey: String? = null
@@ -139,6 +147,7 @@ object NMPBridge {
         // Wire the kernel event observer: emit decoded JSON strings to _nostrEvents.
         nativeRegisterEventObserver(appHandle, object : EventObserverListener {
             override fun onEvent(json: String) {
+                handleContactListEvent(json)
                 _nostrEvents.tryEmit(json)
             }
         })
@@ -188,17 +197,28 @@ object NMPBridge {
             ?.apply()
     }
 
+    fun primaryBlossomServer(): String =
+        appContext
+            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.getString(KEY_BLOSSOM_SERVER, DEFAULT_BLOSSOM_SERVER)
+            ?: DEFAULT_BLOSSOM_SERVER
+
+    fun setPrimaryBlossomServer(url: String) {
+        appContext
+            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(KEY_BLOSSOM_SERVER, url)
+            ?.apply()
+    }
+
     fun loadOlderFeed(key: String) = nativeLoadOlderFeed(appHandle, key)
 
     fun dispatchAction(namespace: String, json: String): String? =
         nativeDispatchAction(appHandle, namespace, json)
 
-    // --- Follow / Unfollow ----------------------------------------------------
-    // followedPubkeys state comes from the Rust follow-graph projection (#7).
-    // Do NOT add optimistic mutations here — Rust is the single source of truth.
-
     fun follow(pubkey: String) = dispatchAction("nmp.follow", """{"pubkey":"$pubkey"}""")
     fun unfollow(pubkey: String) = dispatchAction("nmp.unfollow", """{"pubkey":"$pubkey"}""")
+    fun isFollowing(pubkey: String): Boolean = _followedPubkeys.value.contains(pubkey)
 
     // --- Post interactions ----------------------------------------------------
 
@@ -253,7 +273,12 @@ object NMPBridge {
                 runCatching { JSONObject(raw).optString("pubkey") }
                     .getOrNull()
                     ?.takeIf { it.isNotEmpty() }
-                    ?.let { activeAccountPubkey = it }
+                    ?.let {
+                        if (activeAccountPubkey != it) {
+                            activeAccountPubkey = it
+                            _followedPubkeys.value = emptySet()
+                        }
+                    }
             }
 
         if (actionResultWaiters.isEmpty()) return
@@ -268,6 +293,18 @@ object NMPBridge {
             val resultJson = if (row.isNull("result")) "null" else row.get("result").toString()
             waiter.complete(ActionTerminal(status, resultJson))
         }
+    }
+
+    private fun handleContactListEvent(json: String) {
+        val active = activeAccountPubkey ?: return
+        val pubkeysJson = contactListPubkeysJson(json, active) ?: return
+        val array = runCatching { JSONArray(pubkeysJson) }.getOrNull() ?: return
+        val next = buildSet {
+            for (i in 0 until array.length()) {
+                array.optString(i).takeIf { it.isNotEmpty() }?.let(::add)
+            }
+        }
+        if (_followedPubkeys.value != next) _followedPubkeys.value = next
     }
 
     /**

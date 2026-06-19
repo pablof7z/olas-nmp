@@ -4,7 +4,6 @@ enum OnboardingStep: Hashable {
     case welcome
     case signIn
     case createAccount
-    case followPacks
     case mediaServer
     case complete
 }
@@ -14,7 +13,6 @@ final class OnboardingViewModel {
     var step: OnboardingStep = .welcome
     var createdName: String = ""
     var createdUsername: String = ""
-    var selectedPackIds: Set<String> = []
     var mediaServerURL: String = "https://blossom.primal.net"
 
     // Sign-in state
@@ -29,7 +27,7 @@ final class OnboardingViewModel {
 
     func createAndContinue() {
         NMPBridge.shared.createAccount(name: createdName, username: createdUsername)
-        advance(to: .followPacks)
+        advance(to: .mediaServer)
     }
 
     func signInNsec(_ nsec: String) {
@@ -82,14 +80,6 @@ struct OnboardingView: View {
                         removal: .move(edge: .leading)
                     ))
                     .id(OnboardingStep.createAccount)
-
-            case .followPacks:
-                FollowPacksView(vm: vm)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
-                    .id(OnboardingStep.followPacks)
 
             case .mediaServer:
                 MediaServerView(vm: vm)
