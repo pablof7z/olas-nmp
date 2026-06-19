@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
@@ -15,13 +16,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
-import org.nmp.registry.NostrAvatar
-import org.nmp.registry.NostrProfileName
 
 @Composable
 fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Modifier) {
@@ -31,22 +32,21 @@ fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Mod
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // NMP avatar — uses profile host if available, falls back to identicon
-        NostrAvatar(
-            pubkey    = post.authorPubkey,
-            avatarUrl = post.authorAvatar,
-            size      = 32.dp,
+        // 32dp avatar
+        AsyncImage(
+            model             = post.authorAvatar,
+            contentDescription = "Avatar of ${post.authorName ?: post.authorPubkey.take(8)}",
+            modifier          = Modifier
+                .size(32.dp)
+                .clip(CircleShape),
         )
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
-            // NMP profile name — uses profile host if available, falls back to
-            // the authorName already embedded in the post
-            NostrProfileName(
-                pubkey = post.authorPubkey,
-                style  = androidx.compose.material3.MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color  = OlasColors.Text1,
+            Text(
+                text       = post.authorName ?: post.authorPubkey.take(8) + "...",
+                fontSize   = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = OlasColors.Text1,
             )
         }
         Spacer(Modifier.width(8.dp))

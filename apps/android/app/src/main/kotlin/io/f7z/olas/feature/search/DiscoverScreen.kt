@@ -33,40 +33,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import io.f7z.olas.core.DefaultRelay
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
-import kotlinx.coroutines.flow.filter
-import org.json.JSONObject
+import kotlinx.serialization.json.Json
 
-private data class RelayEntry(val host: String, val url: String)
-
-private val knownRelays = listOf(
-    RelayEntry("relay.damus.io",  "wss://relay.damus.io"),
-    RelayEntry("relay.primal.net","wss://relay.primal.net"),
-    RelayEntry("nos.lol",         "wss://nos.lol"),
-    RelayEntry("nostr.world",     "wss://nostr.world"),
-)
+private data class RelayEntry(val name: String, val iconHost: String, val url: String)
 
 @Composable
 fun DiscoverScreen() {
     val suggested = remember { mutableStateListOf<SuggestedAccount>() }
+    val json = remember { Json { ignoreUnknownKeys = true } }
+    val knownRelays = remember {
+        runCatching {
+            json.decodeFromString<List<DefaultRelay>>(NMPBridge.defaultRelaysJson())
+                .map { RelayEntry(it.name, it.iconHost, it.url) }
+        }.getOrDefault(emptyList())
+    }
 
     LaunchedEffect(Unit) {
         NMPBridge.nostrEvents
-            .filter { json ->
-                runCatching { JSONObject(json).optInt("kind") == 0 }.getOrDefault(false)
-            }
-            .collect { json ->
-                val obj     = runCatching { JSONObject(json) }.getOrNull() ?: return@collect
-                val pubkey  = obj.optString("pubkey").takeIf { it.isNotEmpty() } ?: return@collect
-                val content = runCatching { JSONObject(obj.optString("content")) }.getOrNull()
+            .collect { raw ->
+                val profile = NMPBridge.profileJson(raw)
+                    ?.let { runCatching { json.decodeFromString<OlasProfile>(it) }.getOrNull() }
                     ?: return@collect
-                val name    = content.optString("display_name").takeIf { it.isNotEmpty() }
-                    ?: content.optString("name").takeIf { it.isNotEmpty() }
-                    ?: pubkey.take(8)
-                val avatar  = content.optString("picture").takeIf { it.isNotEmpty() }
-                if (suggested.none { it.pubkey == pubkey } && suggested.size < 8) {
-                    suggested.add(SuggestedAccount(pubkey, name, avatar, emptyList(), 0, null))
+                val name = profile.displayName ?: profile.name ?: profile.pubkey.take(8)
+                if (suggested.none { it.pubkey == profile.pubkey } && suggested.size < 8) {
+                    suggested.add(SuggestedAccount(profile.pubkey, name, profile.picture, emptyList(), 0, null))
                 }
             }
     }
@@ -104,7 +98,7 @@ fun DiscoverScreen() {
         Spacer(Modifier.height(24.dp))
 
         Text(
-            text       = "Browse by relay",
+            text       = "Browse by server",
             fontSize   = 16.sp,
             fontWeight = FontWeight.SemiBold,
             color      = OlasColors.Text1,
@@ -154,7 +148,7 @@ private fun RelayRow(relay: RelayEntry) {
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(
-                model              = "https://${relay.host}/favicon.ico",
+                model              = "https://${relay.iconHost}/favicon.ico",
                 contentDescription = null,
                 modifier           = Modifier.size(20.dp).clip(CircleShape),
                 contentScale       = ContentScale.Crop,
@@ -162,8 +156,8 @@ private fun RelayRow(relay: RelayEntry) {
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(relay.host, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = OlasColors.Text1)
-            Text(relay.url,  fontSize = 12.sp, color = OlasColors.Text2)
+            Text(relay.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = OlasColors.Text1)
+            Text("Photo source", fontSize = 12.sp, color = OlasColors.Text2)
         }
         Box(
             modifier = Modifier

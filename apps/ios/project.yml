@@ -64,6 +64,7 @@ targets:
       - target: Olas
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas.tests
   OlasUITests:
     type: bundle.ui-testing
@@ -74,4 +75,5 @@ targets:
       - target: Olas
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas.uitests

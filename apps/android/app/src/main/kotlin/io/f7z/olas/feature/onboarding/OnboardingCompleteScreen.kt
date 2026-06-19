@@ -1,5 +1,6 @@
 package io.f7z.olas.feature.onboarding
 
+import android.content.Context
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -25,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +36,7 @@ import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun OnboardingCompleteScreen(navController: NavController) {
+    val context = LocalContext.current
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         progress.animateTo(1f, animationSpec = tween(durationMillis = 600))
@@ -97,6 +100,11 @@ fun OnboardingCompleteScreen(navController: NavController) {
 
             Button(
                 onClick  = {
+                    context
+                        .getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("onboarding_complete", true)
+                        .apply()
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.ONBOARDING_WELCOME) { inclusive = true }
                     }
@@ -108,7 +116,12 @@ fun OnboardingCompleteScreen(navController: NavController) {
                     contentColor   = OlasColors.Background,
                 ),
             ) {
-                Text("Explore Olas", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Explore Olas",
+                    color = OlasColors.Background,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }

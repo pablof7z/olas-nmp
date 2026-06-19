@@ -75,11 +75,14 @@ final class UploadQueue {
         }
 
         setStep(.done)
+    }
 
-        // Auto-clear after a short success window so the user sees the done state.
-        try? await Task.sleep(for: .seconds(2.5))
-        if case .done = active?.step {
+    func clearTerminal() {
+        switch active?.step {
+        case .done, .error:
             withAnimation(.olasStandard) { active = nil }
+        default:
+            break
         }
     }
 

@@ -82,7 +82,7 @@ fun WalletSettingsScreen(navController: NavController) {
                 Spacer(Modifier.height(8.dp))
                 TextButton(
                     onClick  = {
-                        // TODO: open NWC URI scanner / pairing flow
+                        // Tracked by https://github.com/pablof7z/olas/issues/52.
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {

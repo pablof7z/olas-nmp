@@ -80,7 +80,12 @@ struct NotificationItemView: View {
         case .mention:   Text("**\(groupedText)** mentioned you")
         case .follow:    Text("**\(groupedText)** followed you")
         case .repost:    Text("**\(groupedText)** reposted your photo")
-        case .zap(let amount): Text("**\(groupedText)** zapped ⚡ \(amount) sats")
+        case .zap(let amount):
+            if let amount {
+                Text("**\(groupedText)** zapped ⚡ \(amount) sats")
+            } else {
+                Text("**\(groupedText)** zapped your photo")
+            }
         }
     }
 }
