@@ -24,6 +24,7 @@ enum SearchResultTab: String, CaseIterable {
     // or event id (kind:20).
     private var collectedProfiles: [String: OlasProfile] = [:]
     private var collectedPosts: [String: PhotoPost] = [:]
+    private var lastSearchQuery: String?
 
     func startListening() {
         guard !isListening else { return }
@@ -61,13 +62,18 @@ enum SearchResultTab: String, CaseIterable {
     private func performSearch(query: String) {
         collectedProfiles = [:]
         collectedPosts = [:]
-        NMPBridge.shared.closeSearchFeed(consumer: consumer)
+        if let last = lastSearchQuery {
+            NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
+        }
+        lastSearchQuery = query
         NMPBridge.shared.openSearchFeed(query: query, consumer: consumer)
         // Results arrive asynchronously via handleSearchEvent; no sleep needed.
     }
 
     func closeSearch() {
-        NMPBridge.shared.closeSearchFeed(consumer: consumer)
+        guard let last = lastSearchQuery else { return }
+        NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
+        lastSearchQuery = nil
     }
 
     private func handleSearchEvent(_ json: String) {
