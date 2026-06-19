@@ -1,5 +1,6 @@
 // extras.rs — Olas-specific helper FFI functions.
 // Relay seeding, search feed management, and account creation in Rust (no Swift/Kotlin policy).
+// New event-decoding and config helpers live in extras_ffi.rs (kept within 500-line ceiling).
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
