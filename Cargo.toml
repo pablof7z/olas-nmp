@@ -1,0 +1,37 @@
+[workspace]
+members = [
+    "apps/olas/nmp-app-olas",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/pablof7z/olas"
+version = "0.1.0"
+
+# NMP crates — pin all to the same rev so the workspace compiles exactly
+# one copy of each NMP type. When bumping NMP:
+#   1. Bump all rev entries below to the new rev.
+#   2. Bump the [patch] paths if still using local checkout.
+#
+# Current rev: 5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c (NMP v0.8.0)
+[workspace.dependencies]
+nmp-core     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c" }
+nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c" }
+nmp-ffi      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c" }
+nmp-blossom  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c" }
+nmp-nip02    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "5dd71ba5c7f9e12e98c1068201e3f12f942bdb0c" }
+
+nostr     = "0.44"
+serde     = "1.0"
+serde_json = "1.0"
+
+# Uncomment during local NMP development to use the checkout at ../nostr-multi-platform
+# instead of fetching from git. Keep all paths in sync with workspace.dependencies above.
+#[patch."https://github.com/pablof7z/nostr-multi-platform.git"]
+#nmp-core     = { path = "../nostr-multi-platform/crates/nmp-core" }
+#nmp-defaults = { path = "../nostr-multi-platform/crates/nmp-defaults" }
+#nmp-ffi      = { path = "../nostr-multi-platform/crates/nmp-ffi" }
+#nmp-blossom  = { path = "../nostr-multi-platform/crates/nmp-blossom" }
+#nmp-nip02    = { path = "../nostr-multi-platform/crates/nmp-nip02" }

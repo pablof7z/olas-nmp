@@ -1,0 +1,19 @@
+[package]
+name = "nmp-app-olas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Olas app glue — app-specific Rust logic and C-ABI FFI for iOS/Android shells."
+
+[lib]
+name = "nmp_app_olas"
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = ["lmdb-backend"]
+lmdb-backend = ["nmp-core/lmdb-backend"]
+
+[dependencies]
+nmp-core.workspace = true
+nmp-defaults.workspace = true
+nmp-ffi.workspace = true

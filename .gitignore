@@ -1,0 +1,54 @@
+# Agent coordination — never commit
+WIP.md
+
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Xcode
+ios/*/DerivedData/
+ios/*/*.xcodeproj/
+ios/*/*.xcworkspace/
+ios/*/build/
+*.xcuserstate
+*.xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/jniLibs/
+
+# Go
+relay/vendor/
+relay/*.test
+
+# Node / npm
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
