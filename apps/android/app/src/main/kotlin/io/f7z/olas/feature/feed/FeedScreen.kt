@@ -1,5 +1,6 @@
 package io.f7z.olas.feature.feed
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -22,24 +23,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import io.f7z.olas.core.WOT_GAP_NETWORK_FEED_LABEL
 import io.f7z.olas.core.FeedMode
+import io.f7z.olas.core.WOT_NETWORK_FEED_LABEL
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun FeedScreen(navController: NavController) {
     val vm: FeedViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -70,8 +74,7 @@ fun FeedScreen(navController: NavController) {
                 text     = {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Network", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        // WoT gap note: unfiltered feed
-                        Text(WOT_GAP_NETWORK_FEED_LABEL, fontSize = 11.sp, color = OlasColors.Text3)
+                        Text(WOT_NETWORK_FEED_LABEL, fontSize = 11.sp, color = OlasColors.Text3)
                     }
                 },
             )
@@ -102,6 +105,17 @@ fun FeedScreen(navController: NavController) {
                             PostCard(
                                 post       = post,
                                 onImageTap = { /* fullscreen */ },
+                                onLike     = vm::react,
+                                onBookmark = vm::bookmark,
+                                onZap      = { vm.zap(it) },
+                                onShare    = {
+                                    val share = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, "https://njump.me/${it.id}")
+                                    }
+                                    context.startActivity(Intent.createChooser(share, "Share post"))
+                                },
+                                onComment  = {},
                             )
                         }
                         item {

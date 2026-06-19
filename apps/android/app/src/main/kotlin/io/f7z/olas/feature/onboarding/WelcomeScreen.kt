@@ -34,7 +34,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
-import org.nmp.registry.NostrLoginBlock
 
 @Composable
 fun WelcomeScreen(navController: NavController) {
@@ -81,7 +80,12 @@ fun WelcomeScreen(navController: NavController) {
                     contentColor   = OlasColors.Background,
                 ),
             ) {
-                Text("Get started", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Get started",
+                    color = OlasColors.Background,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Spacer(Modifier.height(16.dp))
             TextButton(
@@ -99,8 +103,6 @@ fun SignInScreen(navController: NavController) {
     val vm: OnboardingViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
     var nsec by remember { mutableStateOf("") }
-    // showManualEntry: false = show NostrLoginBlock, true = show nsec field
-    var showManualEntry by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.step) {
         if (state.step == OnboardingStep.COMPLETE) {
@@ -125,50 +127,40 @@ fun SignInScreen(navController: NavController) {
                 color      = OlasColors.Text1,
             )
             Spacer(Modifier.height(24.dp))
-
-            if (!showManualEntry) {
-                // NMP login block: shows Amber (if installed) + "Enter your key"
-                NostrLoginBlock(
-                    onSignerSelected = { /* Amber / NIP-55 integration pending */ },
-                    onManualKey      = { showManualEntry = true },
-                    modifier         = Modifier.fillMaxWidth(),
-                )
-            } else {
-                // Manual nsec entry — shown after tapping "Enter your key"
-                OutlinedTextField(
-                    value         = nsec,
-                    onValueChange = { nsec = it },
-                    label         = { Text("Recovery key (nsec1...)") },
-                    modifier      = Modifier.fillMaxWidth(),
-                    singleLine    = true,
-                )
-                if (state.error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(state.error!!, color = OlasColors.Destructive, fontSize = 14.sp)
-                }
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick  = { vm.signInNsec(nsec) },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape    = RoundedCornerShape(12.dp),
-                    enabled  = nsec.startsWith("nsec1") && !state.isLoading,
-                    colors   = ButtonDefaults.buttonColors(
-                        containerColor = OlasColors.Text1,
-                        contentColor   = OlasColors.Background,
-                    ),
-                ) {
-                    if (state.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.height(20.dp),
-                            color    = OlasColors.Background,
-                        )
-                    } else {
-                        Text("Sign in", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
+            OutlinedTextField(
+                value         = nsec,
+                onValueChange = { nsec = it },
+                label         = { Text("Recovery key (nsec1...)") },
+                modifier      = Modifier.fillMaxWidth(),
+                singleLine    = true,
+            )
+            if (state.error != null) {
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { showManualEntry = false }) {
-                    Text("Back", color = OlasColors.Text2)
+                Text(state.error!!, color = OlasColors.Destructive, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick  = { vm.signInNsec(nsec) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape    = RoundedCornerShape(12.dp),
+                enabled  = nsec.startsWith("nsec1") && !state.isLoading,
+                colors   = ButtonDefaults.buttonColors(
+                    containerColor = OlasColors.Text1,
+                    contentColor   = OlasColors.Background,
+                ),
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp),
+                        color    = OlasColors.Background,
+                    )
+                } else {
+                    Text(
+                        "Sign in",
+                        color = OlasColors.Background,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }

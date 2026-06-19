@@ -77,7 +77,12 @@ fun EditPhotoScreen(uri: Uri, onNext: (selectedFilter: PhotoFilter, intensity: F
                 contentColor   = OlasColors.Background,
             ),
         ) {
-            Text("Next", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Next",
+                color = OlasColors.Background,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         Spacer(Modifier.height(16.dp))
     }

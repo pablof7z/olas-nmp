@@ -58,7 +58,7 @@ func makeBridgeCallbackSink(bridge: NMPBridge) -> NMPCallbackSink {
 let olasEventCallback: NmpEventObserverCallback = { context, eventJson in
     guard let context, let eventJson else { return }
     let sink = Unmanaged<NMPCallbackSink>.fromOpaque(context).takeUnretainedValue()
-    guard let json = String(validatingUTF8: eventJson) else { return }
+    guard let json = String(validatingCString: eventJson) else { return }
     sink.onEvent(json)
 }
 
@@ -66,15 +66,15 @@ let olasUpdateCallback: NmpUpdateCallback = { context, data, len in
     guard let context, let data, len > 0 else { return }
     let sink = Unmanaged<NMPCallbackSink>.fromOpaque(context).takeUnretainedValue()
     if let ptr = olas_decode_snapshot_action_results_json(data, len) {
-        if let json = String(validatingUTF8: ptr) { sink.onUpdate(json) }
+        if let json = String(validatingCString: ptr) { sink.onUpdate(json) }
         nmp_free_string(ptr)
     }
     if let ptr = olas_decode_snapshot_claimed_profiles_json(data, len) {
-        if let json = String(validatingUTF8: ptr) { sink.onProfiles(json) }
+        if let json = String(validatingCString: ptr) { sink.onProfiles(json) }
         nmp_free_string(ptr)
     }
     if let ptr = olas_decode_snapshot_active_account_json(data, len) {
-        if let json = String(validatingUTF8: ptr) { sink.onActiveAccount(json) }
+        if let json = String(validatingCString: ptr) { sink.onActiveAccount(json) }
         nmp_free_string(ptr)
     }
 }

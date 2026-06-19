@@ -1,0 +1,4 @@
+module OlasFFI {
+    header "olas_app.h"
+    export *
+}

@@ -3,6 +3,7 @@ import SwiftUI
 struct SuggestedAccountCard: View {
     let profile: OlasProfile
     @State private var isFollowing = false
+    private var bridge: NMPBridge { NMPBridge.shared }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,12 +24,12 @@ struct SuggestedAccountCard: View {
                     .lineLimit(1)
 
                 Button {
-                    isFollowing.toggle()
-                    let json = "{\"pubkey\":\"\(profile.pubkey)\"}"
-                    _ = NMPBridge.shared.dispatchAction(
-                        namespace: isFollowing ? "nmp.follow" : "nmp.unfollow",
-                        json: json
-                    )
+                    if isFollowing {
+                        bridge.unfollow(pubkey: profile.pubkey)
+                    } else {
+                        bridge.follow(pubkey: profile.pubkey)
+                    }
+                    isFollowing = bridge.isFollowing(profile.pubkey)
                 } label: {
                     Text(isFollowing ? "Following" : "Follow")
                         .font(OlasFont.caption())
@@ -42,6 +43,12 @@ struct SuggestedAccountCard: View {
                 }
                 .buttonStyle(OlasPressedButtonStyle())
                 .animation(.olasStandard, value: isFollowing)
+                .onAppear {
+                    isFollowing = bridge.isFollowing(profile.pubkey)
+                }
+                .onChange(of: bridge.followedPubkeys) { _, _ in
+                    isFollowing = bridge.isFollowing(profile.pubkey)
+                }
             }
             .padding(.vertical, OlasSpacing.sm)
             .padding(.horizontal, OlasSpacing.sm)

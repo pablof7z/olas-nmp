@@ -39,7 +39,6 @@ import io.f7z.olas.ui.theme.OlasColors
 fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
     var selectedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
-    // NMP-GAP(#23): Picker constraints (max selection, ingestion policy) must come from Rust config.
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(10),
     ) { uris ->

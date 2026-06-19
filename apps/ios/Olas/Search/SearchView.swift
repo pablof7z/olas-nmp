@@ -20,8 +20,6 @@ enum SearchResultTab: String, CaseIterable {
     private var searchCancellable: AnyCancellable?
     private let consumer = "olas.search"
 
-    // Collected raw events from the search feed, keyed by pubkey (kind:0)
-    // or event id (kind:20).
     private var collectedProfiles: [String: OlasProfile] = [:]
     private var collectedPosts: [String: PhotoPost] = [:]
     private var lastSearchQuery: String?
@@ -77,37 +75,15 @@ enum SearchResultTab: String, CaseIterable {
     }
 
     private func handleSearchEvent(_ json: String) {
-        guard !query.isEmpty,
-              let data = json.data(using: .utf8),
-              // NMP-GAP(#11): Raw event decoding must be replaced by a typed Rust search projection.
-              let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
+        guard !query.isEmpty else { return }
 
-        switch event.kind {
-        case 0:
-            if let profileData = event.content.data(using: .utf8),
-               var parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
-                parsed = OlasProfile(
-                    pubkey: event.author,
-                    name: parsed.name,
-                    displayName: parsed.displayName,
-                    about: parsed.about,
-                    picture: parsed.picture,
-                    banner: parsed.banner,
-                    nip05: parsed.nip05,
-                    lud16: parsed.lud16
-                )
-                collectedProfiles[event.author] = parsed
-            }
-        case 20:
-            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
-            if let post = PhotoPostParser.parse(event) {
-                collectedPosts[event.id] = post
-            }
-        default:
-            break
+        if let profile = NMPBridge.shared.profile(from: json) {
+            collectedProfiles[profile.pubkey] = profile
+        }
+        if let post = NMPBridge.shared.photoPost(from: json, mode: .network) {
+            collectedPosts[post.id] = post
         }
 
-        // Apply results immediately as events arrive.
         isSearching = false
         applyFilteredResults(query: query)
     }

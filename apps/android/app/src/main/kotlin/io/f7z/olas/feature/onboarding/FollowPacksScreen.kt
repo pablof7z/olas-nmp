@@ -34,11 +34,11 @@ import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
 private val STARTER_PACKS = listOf(
-    FollowPack("1", "Photography",     "Best photographers on Nostr",       "Photography", "#F59E0B", 32),
+    FollowPack("1", "Photography",     "Best photographers from your network", "Photography", "#F59E0B", 32),
     FollowPack("2", "Travel",          "Wanderers sharing the world",        "Travel",      "#3B82F6", 28),
     FollowPack("3", "Food & Drink",    "Chefs, foodies, and tastemakers",    "Food",        "#EF4444", 24),
     FollowPack("4", "Art & Design",    "Illustrators and visual artists",    "Art",         "#8B5CF6", 19),
-    FollowPack("5", "Nostr Community", "Core builders and OGs of Nostr",    "Community",   "#10B981", 41),
+    FollowPack("5", "Open Web Builders", "People building independent social apps", "Community", "#10B981", 41),
 )
 
 @Composable
@@ -102,7 +102,12 @@ fun FollowPacksScreen(navController: NavController) {
                     contentColor   = OlasColors.Background,
                 ),
             ) {
-                Text("Continue", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Continue",
+                    color = OlasColors.Background,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }

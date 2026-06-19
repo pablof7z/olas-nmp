@@ -90,11 +90,6 @@ void nmp_free_string(char* s);
 
 // ── Olas-specific additions ───────────────────────────────────────────────────
 
-/// Seed the four canonical Olas relays (call once after nmp_app_start).
-/// Adds relay.damus.io, nos.lol, relay.primal.net (role "both") and
-/// purplepag.es (role "indexer"). Safe to call again after a relay-config reset.
-void olas_seed_default_relays(void* app);
-
 /// Open a NIP-50 search interest (kinds 0 + 20) for the given query string.
 /// Scope is global (1). Close with olas_close_search_feed using the same
 /// query and consumer_id.
@@ -118,9 +113,21 @@ void olas_app_register(void* app);
 /// consumer_id identifies this subscription; close with nmp_app_close_interest.
 void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* consumer_id);
 
+/// Convert a JSON-encoded KernelEvent kind:20 into an Olas PhotoPost JSON object.
+/// Following feed passes contact_list_only=1. Network feed passes 0 and is
+/// filtered against the active nmp-wot runtime using wot_preset
+/// ("close", "balanced", or "open"). Returns NULL when the event is not shown.
+char* olas_filter_photo_post_json(const char* event_json, uint8_t contact_list_only, const char* wot_preset);
+
 /// Open a NIP-51 kind:30000 follow pack by NIP-19 address (naddr1... or bare coord).
 /// Used during onboarding to hydrate follow pack contents.
 void olas_open_follow_pack(void* app, const char* pack_addr);
+
+/// Convert JSON-encoded KernelEvents into Olas view-model payloads.
+char* olas_profile_json(const char* event_json);
+char* olas_notification_json(const char* event_json);
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
+char* olas_default_relays_json(void);
 
 /// Build the Blossom upload action input JSON for nmp_app_dispatch_action.
 ///
@@ -171,3 +178,14 @@ char* olas_decode_snapshot_action_results_json(const uint8_t* frame, size_t len)
 /// stripped in the native encoding step; this tag is added only when the user
 /// explicitly enables location in the composer.
 char* olas_picture_post_publish_json(const char* blossom_result_json, const char* caption, const char* alt, const char* dim, const char* geohash);
+
+/// Build canonical action JSON payloads for registered NMP actions.
+char* olas_react_action_json(const char* target_event_id, const char* target_author_pubkey);
+char* olas_zap_action_json(const char* recipient_pubkey, const char* target_event_id, uint64_t amount_msats, const char* comment);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
+
+/// Decode a bolt11 invoice amount in sats. Returns 0 when no amount is present.
+uint64_t olas_bolt11_amount_sats(const char* bolt11);
+
+/// Encode a coarse 4-character geohash for an OS-provided location fix.
+char* olas_location_geohash4(double latitude, double longitude);

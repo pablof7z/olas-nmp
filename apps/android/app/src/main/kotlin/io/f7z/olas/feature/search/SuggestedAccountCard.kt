@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
 
 data class SuggestedAccount(
@@ -124,7 +125,9 @@ fun SuggestedAccountCard(account: SuggestedAccount, modifier: Modifier = Modifie
         }
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick  = { isFollowing = !isFollowing },
+            onClick  = {
+                if (isFollowing) NMPBridge.unfollow(account.pubkey) else NMPBridge.follow(account.pubkey)
+            },
             modifier = Modifier.fillMaxWidth().height(32.dp),
             shape    = RoundedCornerShape(8.dp),
             colors   = ButtonDefaults.buttonColors(

@@ -40,19 +40,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import io.f7z.olas.core.DefaultRelay
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
+import kotlinx.serialization.json.Json
 
 private data class RelayEntry(val url: String, val role: String, val connected: Boolean)
 
 @Composable
 fun RelaySettingsScreen(navController: NavController) {
+    val json = remember { Json { ignoreUnknownKeys = true } }
     val relays = remember {
-        mutableStateListOf(
-            RelayEntry("wss://relay.damus.io",   "both", true),
-            RelayEntry("wss://nos.lol",           "both", true),
-            RelayEntry("wss://relay.primal.net",  "both", false),
-        )
+        val defaults = runCatching {
+            json.decodeFromString<List<DefaultRelay>>(NMPBridge.defaultRelaysJson())
+                .map { RelayEntry(it.url, it.role, it.connected) }
+        }.getOrDefault(emptyList())
+        mutableStateListOf<RelayEntry>().also { it.addAll(defaults) }
     }
     var showAddDialog by remember { mutableStateOf(false) }
     var newRelayUrl by remember { mutableStateOf("") }
@@ -65,7 +68,7 @@ fun RelaySettingsScreen(navController: NavController) {
                 containerColor   = OlasColors.Text1,
                 contentColor     = OlasColors.Background,
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add relay")
+                Icon(Icons.Filled.Add, contentDescription = "Add server")
             }
         },
     ) { padding ->
@@ -77,7 +80,7 @@ fun RelaySettingsScreen(navController: NavController) {
         ) {
             item {
                 Text(
-                    text     = "Relays",
+                    text     = "Network Servers",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     color    = OlasColors.Text1,
@@ -95,12 +98,12 @@ fun RelaySettingsScreen(navController: NavController) {
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title            = { Text("Add relay", color = OlasColors.Text1) },
+            title            = { Text("Add server", color = OlasColors.Text1) },
             text             = {
                 OutlinedTextField(
                     value         = newRelayUrl,
                     onValueChange = { newRelayUrl = it },
-                    label         = { Text("wss://relay.example.com") },
+                    label         = { Text("Server URL") },
                     modifier      = Modifier.fillMaxWidth(),
                     singleLine    = true,
                 )
@@ -144,8 +147,8 @@ private fun RelayRow(relay: RelayEntry, onRemove: () -> Unit) {
                 .background(if (relay.connected) OlasColors.Success else OlasColors.Text3),
         )
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(relay.url.removePrefix("wss://"), fontSize = 14.sp, color = OlasColors.Text1, fontWeight = FontWeight.Medium)
-            Text(relay.role, fontSize = 12.sp, color = OlasColors.Text3)
+            Text(displayServerName(relay.url), fontSize = 14.sp, color = OlasColors.Text1, fontWeight = FontWeight.Medium)
+            Text(roleLabel(relay.role), fontSize = 12.sp, color = OlasColors.Text3)
         }
         TextButton(onClick = onRemove) {
             Text("Remove", color = OlasColors.Destructive, fontSize = 13.sp)
@@ -153,3 +156,8 @@ private fun RelayRow(relay: RelayEntry, onRemove: () -> Unit) {
     }
 }
 
+private fun displayServerName(url: String): String =
+    url.removePrefix("wss://").removePrefix("ws://").removePrefix("relay.")
+
+private fun roleLabel(role: String): String =
+    if (role == "both" || role == "read-write") "Read + post" else role

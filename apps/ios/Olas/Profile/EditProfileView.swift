@@ -30,7 +30,6 @@ struct EditProfileView: View {
 
             Section("About") {
                 ZStack(alignment: .topLeading) {
-                    // NMP-GAP(#25): Profile field validation and save policy must be enforced by Rust, not Swift.
                     TextEditor(text: $about)
                         .font(OlasFont.body())
                         .foregroundStyle(Color.olasText1)

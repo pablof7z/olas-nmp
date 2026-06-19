@@ -75,7 +75,6 @@ fun CreateAccountScreen(navController: NavController) {
         )
         Spacer(Modifier.height(32.dp))
 
-        // Avatar placeholder
         Box(
             modifier = Modifier
                 .size(96.dp)
@@ -153,7 +152,12 @@ fun CreateAccountScreen(navController: NavController) {
             if (state.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = OlasColors.Background)
             } else {
-                Text("Continue", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Continue",
+                    color = OlasColors.Background,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }

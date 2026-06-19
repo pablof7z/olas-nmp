@@ -17,14 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import io.f7z.olas.ui.theme.OlasColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(navController: NavController) {
-    // NMP-GAP(#11): Raw event decoding must be replaced by a typed Rust search projection.
-    // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Kotlin. Must be replaced by a typed Rust snapshot projection.
+fun SearchScreen() {
     var query by remember { mutableStateOf("") }
     var active by remember { mutableStateOf(false) }
 
@@ -46,7 +43,6 @@ fun SearchScreen(navController: NavController) {
                 dividerColor   = OlasColors.Border,
             ),
         ) {
-            // Search results placeholder
             if (query.isNotBlank()) {
                 Text(
                     text     = "No results for \"$query\"",

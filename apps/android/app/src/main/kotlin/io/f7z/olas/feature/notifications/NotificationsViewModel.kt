@@ -4,7 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
-import io.f7z.olas.core.NostrEvent
+import io.f7z.olas.core.OlasNotificationPayload
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,69 +27,59 @@ class NotificationsViewModel(app: Application) : AndroidViewModel(app) {
     init {
         NMPBridge.nostrEvents
             .onEach { raw ->
-                val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
-                    ?: run {
-                        // Not a valid NostrEvent frame — mark loading done on first frame.
-                        if (_uiState.value.isLoading) {
-                            _uiState.value = _uiState.value.copy(isLoading = false)
-                        }
-                        return@onEach
-                    }
-                handleEvent(event)
+                val payload = NMPBridge.notificationJson(raw)
+                    ?.let { runCatching { json.decodeFromString<OlasNotificationPayload>(it) }.getOrNull() }
+                    ?: return@onEach
+                handleEvent(payload)
             }
             .launchIn(viewModelScope)
     }
 
-    private fun handleEvent(event: NostrEvent) {
-        val item: NotificationItem? = when (event.kind) {
-            7 -> {
-                // kind 7 — reaction to one of our posts
+    private fun handleEvent(payload: OlasNotificationPayload) {
+        val item: NotificationItem? = when (payload.kind) {
+            "reaction" -> {
                 NotificationItem(
-                    id           = event.id,
+                    id           = payload.id,
                     type         = NotificationType.REACTION,
-                    actorName    = event.author.take(8),
+                    actorName    = payload.actorPubkey.take(8),
                     actorAvatar  = null,
                     body         = "reacted to your photo.",
                     thumbnailUrl = null,
-                    createdAt    = event.created_at,
+                    createdAt    = payload.createdAt,
                 )
             }
-            9735 -> {
-                // kind 9735 — zap receipt
-                // NMP-GAP(#8): Zap amount must be delivered by a Rust notification projection, not computed from raw event tags in Kotlin.
-                // bolt11 amount decoding is non-trivial; default to 21 sats like iOS.
+            "zap" -> {
+                val amount = payload.zapSats
                 NotificationItem(
-                    id           = event.id,
+                    id           = payload.id,
                     type         = NotificationType.ZAP,
-                    actorName    = event.author.take(8),
+                    actorName    = payload.actorPubkey.take(8),
                     actorAvatar  = null,
-                    body         = "zapped you 21 sats.",
+                    body         = amount?.let { "zapped you $it sats." } ?: "zapped you.",
                     thumbnailUrl = null,
-                    createdAt    = event.created_at,
+                    createdAt    = payload.createdAt,
                 )
             }
-            1 -> {
-                // kind 1 — text note mentioning us (comment / mention)
+            "comment" -> {
                 NotificationItem(
-                    id           = event.id,
+                    id           = payload.id,
                     type         = NotificationType.MENTION,
-                    actorName    = event.author.take(8),
+                    actorName    = payload.actorPubkey.take(8),
                     actorAvatar  = null,
                     body         = "mentioned you.",
                     thumbnailUrl = null,
-                    createdAt    = event.created_at,
+                    createdAt    = payload.createdAt,
                 )
             }
-            3 -> {
-                // kind 3 — contact list update (new follow)
+            "follow" -> {
                 NotificationItem(
-                    id           = event.id,
+                    id           = payload.id,
                     type         = NotificationType.FOLLOW,
-                    actorName    = event.author.take(8),
+                    actorName    = payload.actorPubkey.take(8),
                     actorAvatar  = null,
                     body         = "started following you.",
                     thumbnailUrl = null,
-                    createdAt    = event.created_at,
+                    createdAt    = payload.createdAt,
                 )
             }
             else -> null

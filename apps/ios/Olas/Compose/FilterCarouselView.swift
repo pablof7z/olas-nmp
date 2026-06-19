@@ -11,7 +11,6 @@ struct FilterDefinition: Identifiable, @unchecked Sendable {
 enum PhotoFilters {
     static let context = CIContext()
 
-    // NMP-GAP(#19): Photo filter catalog must come from a Rust-owned capability registry, not a hardcoded Swift array.
     static let all: [FilterDefinition] = [
         FilterDefinition(id: "original", name: "Original") { $0 },
         FilterDefinition(id: "daylight", name: "Daylight") { img in

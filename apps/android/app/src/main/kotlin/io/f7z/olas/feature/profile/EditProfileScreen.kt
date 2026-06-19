@@ -29,7 +29,6 @@ import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
 
-// NMP-GAP(#25): Profile field validation and save policy must be enforced by Rust, not Kotlin.
 private const val BIO_MAX_CHARS = 300
 
 @Composable

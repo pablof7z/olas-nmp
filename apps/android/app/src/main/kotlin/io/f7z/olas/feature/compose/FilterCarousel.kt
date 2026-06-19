@@ -39,7 +39,6 @@ import io.f7z.olas.ui.theme.OlasColors
 
 data class PhotoFilter(val name: String, val matrix: FloatArray)
 
-// NMP-GAP(#19): Photo filter catalog must come from a Rust-owned capability registry, not a hardcoded Kotlin list.
 val FILTERS: List<PhotoFilter> = listOf(
     PhotoFilter("Original", identityMatrix()),
     PhotoFilter("Daylight", warmMatrix(0.15f)),

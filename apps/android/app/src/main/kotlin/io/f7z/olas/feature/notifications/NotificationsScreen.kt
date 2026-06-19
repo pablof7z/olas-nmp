@@ -25,12 +25,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import io.f7z.olas.core.WOT_GAP_NOTIFICATIONS_NOTE
+import io.f7z.olas.core.WOT_NOTIFICATIONS_NOTE
 import io.f7z.olas.ui.theme.OlasColors
 import androidx.compose.foundation.layout.padding
 
 private enum class NotifTab { ALL, MENTIONS, ZAPS }
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun NotificationsScreen(navController: NavController) {
     val vm: NotificationsViewModel = viewModel()
@@ -62,6 +63,14 @@ fun NotificationsScreen(navController: NavController) {
             }
         }
 
+        Text(
+            text     = WOT_NOTIFICATIONS_NOTE,
+            fontSize = 12.sp,
+            color    = OlasColors.Text3,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        HorizontalDivider(color = OlasColors.Border, thickness = 0.5.dp)
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -74,15 +83,6 @@ fun NotificationsScreen(navController: NavController) {
                 )
             } else {
                 Column {
-                    // WoT gap note: score-based filtering pending upstream NMP update.
-                    Text(
-                        text     = WOT_GAP_NOTIFICATIONS_NOTE,
-                        fontSize = 12.sp,
-                        color    = OlasColors.Text3,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                    HorizontalDivider(color = OlasColors.Border, thickness = 0.5.dp)
-
                     val filtered = when (selectedTab) {
                         NotifTab.ALL      -> state.notifications
                         NotifTab.MENTIONS -> state.notifications.filter {

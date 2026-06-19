@@ -16,7 +16,6 @@ struct PhotoSelectionScreen: View {
                 ProgressView().tint(Color.olasText1)
             }
         }
-        // NMP-GAP(#23): Picker constraints (max selection, ingestion policy) must come from Rust config.
         .photosPicker(
             isPresented: $isPresented,
             selection: $selectedItems,

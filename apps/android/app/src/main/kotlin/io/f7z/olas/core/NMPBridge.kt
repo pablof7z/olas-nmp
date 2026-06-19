@@ -18,11 +18,15 @@ import java.util.concurrent.ConcurrentHashMap
  * kernel's listener thread; Kotlin collects via [events] / [nostrEvents] SharedFlow.
  */
 object NMPBridge {
+    private const val SETTINGS_PREFS = "olas_settings"
+    private const val KEY_WOT_PRESET = "wotPreset"
+
     init {
         System.loadLibrary("nmp_app_olas")
     }
 
     private var appHandle: Long = 0L
+    private var appContext: Context? = null
 
     // Raw FlatBuffer frames from the update callback (for action-result decoding).
     private val _events = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
@@ -32,9 +36,9 @@ object NMPBridge {
     private val _nostrEvents = MutableSharedFlow<String>(extraBufferCapacity = 512)
     val nostrEvents: SharedFlow<String> = _nostrEvents.asSharedFlow()
 
-    // JSON-encoded claimed_profiles array from snapshot frames.
-    private val _claimedProfilesJson = MutableSharedFlow<String>(extraBufferCapacity = 128)
-    val claimedProfilesJson: SharedFlow<String> = _claimedProfilesJson.asSharedFlow()
+    @Volatile
+    var activeAccountPubkey: String? = null
+        private set
 
     // JNI methods — implemented in nmp-app-olas/src/jni.rs
     private external fun nativeNew(): Long
@@ -45,21 +49,43 @@ object NMPBridge {
     private external fun nativeStop(handle: Long)
     private external fun nativeSetUpdateListener(handle: Long, listener: UpdateListener?)
     private external fun nativeCreateAccount(handle: Long, name: String, username: String)
-    private external fun nativeSeedDefaultRelays(handle: Long)
     private external fun nativeOpenSearchFeed(handle: Long, query: String, consumerId: String)
     private external fun nativeCloseSearchFeed(handle: Long, query: String, consumerId: String)
     private external fun nativeSignInNsec(handle: Long, nsec: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
     private external fun nativeOpenContactFeed(handle: Long, kindsJson: String)
     private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean)
+    private external fun nativeFilterPhotoPostJson(
+        handle: Long,
+        eventJson: String,
+        contactListOnly: Boolean,
+        wotPreset: String,
+    ): String?
+    private external fun nativeProfileJson(handle: Long, eventJson: String): String?
+    private external fun nativeNotificationJson(handle: Long, eventJson: String): String?
+    private external fun nativeContactListPubkeysJson(
+        handle: Long,
+        eventJson: String,
+        activePubkey: String,
+    ): String?
+    private external fun nativeDefaultRelaysJson(): String?
     private external fun nativeDispatchAction(handle: Long, namespace: String, actionJson: String): String?
     private external fun nativeRegisterEventObserver(handle: Long, listener: EventObserverListener)
     private external fun nativeDecodeActionResults(handle: Long, frame: ByteArray): String?
-    private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
-    private external fun nativeClaimProfile(handle: Long, pubkey: String, consumerId: String)
-    private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
+    private external fun nativeDecodeActiveAccount(handle: Long, frame: ByteArray): String?
     private external fun nativeBlossomUploadInputJson(filePath: String, contentType: String?, serverUrl: String?): String?
-    private external fun nativePicturePostPublishJson(blossomResultJson: String, caption: String?, alt: String?, dim: String?): String?
+    private external fun nativeReactActionJson(targetEventId: String, targetAuthorPubkey: String?): String?
+    private external fun nativeZapActionJson(recipientPubkey: String, targetEventId: String?, amountMsats: Long, comment: String?): String?
+    private external fun nativeBolt11AmountSats(bolt11: String): Long
+    private external fun nativeBookmarkEventActionJson(accountPubkey: String, eventId: String): String?
+    private external fun nativeLocationGeohash4(latitude: Double, longitude: Double): String?
+    private external fun nativePicturePostPublishJson(
+        blossomResultJson: String,
+        caption: String?,
+        alt: String?,
+        dim: String?,
+        geohash: String?,
+    ): String?
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
     private external fun nativeLifecycleBackground(handle: Long)
@@ -77,6 +103,7 @@ object NMPBridge {
     }
 
     fun initialize(context: Context) {
+        appContext = context.applicationContext
         if (appHandle != 0L) return
         appHandle = nativeNew()
         if (appHandle == 0L) return
@@ -101,8 +128,6 @@ object NMPBridge {
             }
         })
         nativeStart(appHandle, storageDir.absolutePath)
-        // Default relay set lives in Rust — no URLs hardcoded in Kotlin (D3).
-        nativeSeedDefaultRelays(appHandle)
     }
 
     fun createAccount(name: String, username: String) =
@@ -117,10 +142,36 @@ object NMPBridge {
     fun signInNsec(nsec: String) = nativeSignInNsec(appHandle, nsec)
 
     /** Following feed — kind 20 scoped to contact list. */
-    fun openFollowingFeed() = nativeOpenContactFeed(appHandle, "[20]")
+    fun openFollowingFeed() = nativeOpenPhotoFeed(appHandle, true)
 
-    /** Network feed — kind 20 global (unfiltered; WoT gap pending). */
+    /** Network feed — kind 20 global; Rust applies the active WoT preset per event. */
     fun openNetworkFeed() = nativeOpenPhotoFeed(appHandle, false)
+
+    fun photoPostJson(raw: String, mode: FeedMode): String? =
+        nativeFilterPhotoPostJson(appHandle, raw, mode == FeedMode.FOLLOWING, wotPreset())
+
+    fun profileJson(raw: String): String? = nativeProfileJson(appHandle, raw)
+
+    fun notificationJson(raw: String): String? = nativeNotificationJson(appHandle, raw)
+
+    fun contactListPubkeysJson(raw: String, activePubkey: String): String? =
+        nativeContactListPubkeysJson(appHandle, raw, activePubkey)
+
+    fun defaultRelaysJson(): String = nativeDefaultRelaysJson() ?: "[]"
+
+    fun wotPreset(): String =
+        appContext
+            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.getString(KEY_WOT_PRESET, "balanced")
+            ?: "balanced"
+
+    fun setWotPreset(preset: String) {
+        appContext
+            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(KEY_WOT_PRESET, preset.lowercase())
+            ?.apply()
+    }
 
     fun loadOlderFeed(key: String) = nativeLoadOlderFeed(appHandle, key)
 
@@ -134,10 +185,32 @@ object NMPBridge {
     fun follow(pubkey: String) = dispatchAction("nmp.follow", """{"pubkey":"$pubkey"}""")
     fun unfollow(pubkey: String) = dispatchAction("nmp.unfollow", """{"pubkey":"$pubkey"}""")
 
-    fun claimProfile(pubkey: String, consumerId: String = "olas.profile") =
-        nativeClaimProfile(appHandle, pubkey, consumerId)
-    fun releaseProfile(pubkey: String, consumerId: String = "olas.profile") =
-        nativeReleaseProfile(appHandle, pubkey, consumerId)
+    // --- Post interactions ----------------------------------------------------
+
+    fun reactTo(post: PhotoPost): String? {
+        val input = nativeReactActionJson(post.id, post.authorPubkey) ?: return null
+        return dispatchAction("nmp.nip25.react", input)
+    }
+
+    fun bookmarkEvent(post: PhotoPost, add: Boolean): String? {
+        val account = activeAccountPubkey ?: return null
+        val input = nativeBookmarkEventActionJson(account, post.id) ?: return null
+        val namespace = if (add) "nmp.nip51.add_bookmark" else "nmp.nip51.remove_bookmark"
+        return dispatchAction(namespace, input)
+    }
+
+    fun zapPost(post: PhotoPost, amountSats: Long, comment: String? = null): String? {
+        val input = nativeZapActionJson(
+            post.authorPubkey,
+            post.id,
+            amountSats * 1_000,
+            comment,
+        ) ?: return null
+        return dispatchAction("nmp.nip57.zap", input)
+    }
+
+    fun bolt11AmountSats(bolt11: String): Long? =
+        nativeBolt11AmountSats(bolt11).takeIf { it > 0 }
 
     // --- Relay management -----------------------------------------------------
 
@@ -159,9 +232,14 @@ object NMPBridge {
      * appears in the result array.
      */
     private fun handleSnapshotFrame(frame: ByteArray) {
-        // Decode claimed_profiles on every frame and broadcast to OlasProfileHost.
-        runCatching { nativeDecodeClaimedProfiles(appHandle, frame) }
-            .getOrNull()?.let { _claimedProfilesJson.tryEmit(it) }
+        runCatching { nativeDecodeActiveAccount(appHandle, frame) }
+            .getOrNull()
+            ?.let { raw ->
+                runCatching { JSONObject(raw).optString("pubkey") }
+                    .getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { activeAccountPubkey = it }
+            }
 
         if (actionResultWaiters.isEmpty()) return
         val json = runCatching { nativeDecodeActionResults(appHandle, frame) }
@@ -197,8 +275,17 @@ object NMPBridge {
         nativeBlossomUploadInputJson(filePath, mime, serverUrl)
 
     /** Build the nmp.publish (PublishRaw) kind:20 input JSON in Rust from a Blossom result. */
-    fun picturePostPublishJson(blossomResultJson: String, caption: String?, alt: String?, dim: String?): String? =
-        nativePicturePostPublishJson(blossomResultJson, caption, alt, dim)
+    fun picturePostPublishJson(
+        blossomResultJson: String,
+        caption: String?,
+        alt: String?,
+        dim: String?,
+        geohash: String?,
+    ): String? = nativePicturePostPublishJson(blossomResultJson, caption, alt, dim, geohash)
+
+    /** Native supplies the raw OS location fix; Rust owns geohash precision/encoding. */
+    fun locationGeohash4(latitude: Double, longitude: Double): String? =
+        nativeLocationGeohash4(latitude, longitude)
 
     fun walletConnect(uri: String) = nativeWalletConnect(appHandle, uri)
 
