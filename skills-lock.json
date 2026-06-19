@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "xcode-build-fixer": {
+      "source": "avdlee/xcode-build-optimization-agent-skill",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-build-fixer/SKILL.md",
+      "computedHash": "7d1c68154af030a24b7420c9f9c7805e6009e0012da34b9a16c0cfef3396b608"
+    },
+    "xcode-build-orchestrator": {
+      "source": "avdlee/xcode-build-optimization-agent-skill",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-build-orchestrator/SKILL.md",
+      "computedHash": "d03e65e314a8fbe0ae0cf7469fa1a4280b5d335a7f163fdc7a7a91dbb0fd1b2b"
+    }
+  }
+}
