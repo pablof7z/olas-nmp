@@ -13,10 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.ElectricBolt
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,35 +25,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.remember
 import androidx.navigation.NavController
-import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun SettingsScreen(navController: NavController) {
-    // Settings catalog loaded from Rust; local structure mirrors the canonical Rust catalog.
-    val settingsCatalog = remember { NMPBridge.settingsCatalogJson() }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(OlasColors.Background),
     ) {
-        item {
-            Spacer(Modifier.height(16.dp))
-            SettingsSectionHeader("Account")
-        }
-        item {
-            SettingsRow(icon = Icons.Filled.Person, label = "Edit profile") {}
-            SettingsRow(icon = Icons.Filled.Shield, label = "Account security") {
-                navController.navigate(Routes.ACCOUNT_SECURITY)
-            }
-        }
-        item {
-            Spacer(Modifier.height(16.dp))
-            SettingsSectionHeader("Content & filtering")
-        }
+        item { Spacer(Modifier.height(16.dp)) }
+        item { SettingsSectionHeader("Content & filtering") }
         item {
             SettingsRow(icon = Icons.Filled.Tune, label = "Web of Trust") {
                 navController.navigate(Routes.WOT_SETTINGS)
@@ -72,9 +53,6 @@ fun SettingsScreen(navController: NavController) {
             }
             SettingsRow(icon = Icons.Filled.Dns, label = "Media servers") {
                 navController.navigate(Routes.SERVER_SETTINGS)
-            }
-            SettingsRow(icon = Icons.Filled.ElectricBolt, label = "Wallet & Zaps") {
-                navController.navigate(Routes.WALLET_SETTINGS)
             }
         }
         item { Spacer(Modifier.height(32.dp)) }

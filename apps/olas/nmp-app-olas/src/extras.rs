@@ -25,8 +25,12 @@ pub extern "C" fn olas_seed_default_relays(app: *mut NmpApp) {
             ("wss://purplepag.es", "indexer"),
         ];
         for (url, role) in RELAYS {
-            let Ok(url_c) = CString::new(*url) else { continue };
-            let Ok(role_c) = CString::new(*role) else { continue };
+            let Ok(url_c) = CString::new(*url) else {
+                continue;
+            };
+            let Ok(role_c) = CString::new(*role) else {
+                continue;
+            };
             nmp_ffi::nmp_app_add_relay(app, url_c.as_ptr(), role_c.as_ptr());
         }
     }));
@@ -66,8 +70,12 @@ pub extern "C" fn olas_open_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
+        let Ok(filter_c) = CString::new(filter) else {
+            return;
+        };
+        let Ok(consumer_c) = CString::new(consumer) else {
+            return;
+        };
         nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -105,8 +113,12 @@ pub extern "C" fn olas_close_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
+        let Ok(filter_c) = CString::new(filter) else {
+            return;
+        };
+        let Ok(consumer_c) = CString::new(consumer) else {
+            return;
+        };
         nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -149,14 +161,12 @@ pub extern "C" fn olas_create_account(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(profile_c) = CString::new(profile) else { return };
-        let Ok(relays_c) = CString::new("[]") else { return };
-        nmp_ffi::nmp_app_create_new_account(
-            app,
-            profile_c.as_ptr(),
-            relays_c.as_ptr(),
-            false,
-            1,
-        );
+        let Ok(profile_c) = CString::new(profile) else {
+            return;
+        };
+        let Ok(relays_c) = CString::new("[]") else {
+            return;
+        };
+        nmp_ffi::nmp_app_create_new_account(app, profile_c.as_ptr(), relays_c.as_ptr(), false, 1);
     }));
 }

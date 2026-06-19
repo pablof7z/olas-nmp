@@ -25,10 +25,25 @@ pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *m
             Err(_) => return std::ptr::null_mut(),
         };
 
-        let id = event.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let author = event.get("author").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let created_at = event.get("created_at").and_then(|v| v.as_i64()).unwrap_or(0);
-        let caption = event.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let id = event
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let author = event
+            .get("author")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let created_at = event
+            .get("created_at")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let caption = event
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         let tags = match event.get("tags").and_then(|v| v.as_array()) {
             Some(t) => t,
@@ -41,7 +56,9 @@ pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *m
             .filter_map(|tag| {
                 let arr = tag.as_array()?;
                 if arr.first()?.as_str()? == "t" {
-                    arr.get(1)?.as_str().map(|s| serde_json::Value::String(s.to_string()))
+                    arr.get(1)?
+                        .as_str()
+                        .map(|s| serde_json::Value::String(s.to_string()))
                 } else {
                     None
                 }
@@ -122,7 +139,9 @@ pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *m
         });
 
         match serde_json::to_string(&photo_post) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     }));
@@ -152,8 +171,15 @@ pub extern "C" fn olas_decode_kind0_event_json(event_json: *const c_char) -> *mu
             return std::ptr::null_mut();
         }
 
-        let pubkey = event.get("author").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let content_str = event.get("content").and_then(|v| v.as_str()).unwrap_or("{}");
+        let pubkey = event
+            .get("author")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let content_str = event
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("{}");
         let content: serde_json::Value =
             serde_json::from_str(content_str).unwrap_or(serde_json::json!({}));
 
@@ -175,7 +201,9 @@ pub extern "C" fn olas_decode_kind0_event_json(event_json: *const c_char) -> *mu
         });
 
         match serde_json::to_string(&profile) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     }));
@@ -209,8 +237,9 @@ pub extern "C" fn olas_bolt11_amount_msats(bolt11: *const c_char) -> i64 {
         // hrp = "ln" + currency + amount_with_optional_unit
         let after_ln = &hrp[2..];
         // Currency is lowercase alpha chars at the start (e.g. "bc", "tb")
-        let currency_end =
-            after_ln.find(|c: char| c.is_ascii_digit()).unwrap_or(after_ln.len());
+        let currency_end = after_ln
+            .find(|c: char| c.is_ascii_digit())
+            .unwrap_or(after_ln.len());
         let amount_part = &after_ln[currency_end..];
         if amount_part.is_empty() {
             // No amount encoded — return -1
@@ -221,7 +250,10 @@ pub extern "C" fn olas_bolt11_amount_msats(bolt11: *const c_char) -> i64 {
         let (digits, unit) = if last.is_ascii_digit() {
             (amount_part, None)
         } else {
-            (&amount_part[..amount_part.len() - last.len_utf8()], Some(last))
+            (
+                &amount_part[..amount_part.len() - last.len_utf8()],
+                Some(last),
+            )
         };
         let amount: i64 = match digits.parse() {
             Ok(n) => n,
@@ -301,7 +333,9 @@ pub extern "C" fn olas_compute_geohash(lat: f64, lon: f64, precision: i32) -> *m
             }
         }
 
-        CString::new(hash).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut())
+        CString::new(hash)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(std::ptr::null_mut())
     }));
     result.unwrap_or(std::ptr::null_mut())
 }
@@ -328,194 +362,9 @@ pub extern "C" fn olas_build_zap_action_json(event_id: *const c_char, sats: i64)
             "comment": "",
         });
         match serde_json::to_string(&json) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }));
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-// ─── Config providers ────────────────────────────────────────────────────────
-
-/// Returns a JSON array of available photo filter IDs and display names.
-/// No NmpApp pointer needed. Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_filter_catalog_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let catalog = serde_json::json!([
-            {"id": "original", "name": "Original"},
-            {"id": "daylight",  "name": "Daylight"},
-            {"id": "ember",     "name": "Ember"},
-            {"id": "dusk",      "name": "Dusk"},
-            {"id": "chrome",    "name": "Chrome"},
-            {"id": "fade",      "name": "Fade"},
-        ]);
-        match serde_json::to_string(&catalog) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Returns the upload parameters owned by Rust.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_media_upload_config_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let config = serde_json::json!({
-            "max_dimension": 2048,
-            "jpeg_quality": 0.92,
-            "strip_exif": true,
-        });
-        match serde_json::to_string(&config) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Returns photo picker constraints.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_picker_config_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let config = serde_json::json!({
-            "max_selection": 1,
-            "allowed_types": ["image"],
-        });
-        match serde_json::to_string(&config) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Returns the settings screen navigation catalog matching SettingsView.swift rows.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_settings_catalog_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let catalog = serde_json::json!([
-            {"id": "account",          "label": "Account"},
-            {"id": "notifications",    "label": "Notifications"},
-            {"id": "content_filtering","label": "Content & Filtering"},
-            {"id": "appearance",       "label": "Appearance"},
-            {"id": "help",             "label": "Help"},
-            {"id": "servers",          "label": "Servers"},
-            {"id": "relays",           "label": "Relays"},
-            {"id": "wallet_zaps",      "label": "Wallet & Zaps"},
-            {"id": "account_security", "label": "Account Security"},
-        ]);
-        match serde_json::to_string(&catalog) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Returns the ordered list of onboarding step IDs matching OnboardingView.swift.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_onboarding_steps_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let steps = serde_json::json!([
-            "welcome",
-            "create_account",
-            "sign_in",
-            "media_server",
-            "follow_packs",
-            "complete",
-        ]);
-        match serde_json::to_string(&steps) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Returns the ordered compose step IDs.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_compose_steps_json() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let steps = serde_json::json!(["photo_picker", "edit_photo", "caption"]);
-        match serde_json::to_string(&steps) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
-            Err(_) => std::ptr::null_mut(),
-        }
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-// Note: Blossom URL and feed mode state lives in extras_state.rs.
-
-// ─── Zap notification decoder ─────────────────────────────────────────────────
-
-/// Parses a raw Nostr kind:9735 zap receipt JSON and returns
-/// {"amount_sats":N,"referenced_event_id":"..."} or NULL.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_decode_zap_notification_json(event_json: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> *mut c_char {
-        if event_json.is_null() { return std::ptr::null_mut(); }
-        let input = match unsafe { CStr::from_ptr(event_json) }.to_str() {
-            Ok(s) => s, Err(_) => return std::ptr::null_mut(),
-        };
-        let event: serde_json::Value = match serde_json::from_str(input) {
-            Ok(v) => v, Err(_) => return std::ptr::null_mut(),
-        };
-        // Only handle kind:9735 zap receipts
-        if event["kind"].as_i64() != Some(9735) { return std::ptr::null_mut(); }
-        let tags = match event["tags"].as_array() {
-            Some(t) => t, None => return std::ptr::null_mut(),
-        };
-        // Extract bolt11 tag → msats → sats
-        let bolt11 = tags.iter()
-            .find(|t| t.as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) == Some("bolt11"))
-            .and_then(|t| t.as_array()?.get(1)?.as_str())
-            .unwrap_or("");
-        // Parse bolt11 for msats using the logic from olas_bolt11_amount_msats
-        let amount_msats = if bolt11.is_empty() { 0i64 } else {
-            let b = bolt11.to_lowercase();
-            // Find the separator '1' after the HRP
-            let sep = b.find('1').unwrap_or(0);
-            let hrp = &b[..sep];
-            // Strip "ln" + currency (bc, bcrt, tb, sb)
-            let amount_part = hrp.strip_prefix("ln")
-                .and_then(|s| ["bcrt","bc","tb","sb"].iter().filter_map(|c| s.strip_prefix(c)).next())
-                .unwrap_or("");
-            if amount_part.is_empty() { 0 } else {
-                let last = amount_part.chars().last().unwrap_or('0');
-                let digits: &str = if last.is_ascii_alphabetic() {
-                    &amount_part[..amount_part.len() - last.len_utf8()]
-                } else { amount_part };
-                let n: i64 = digits.parse().unwrap_or(0);
-                match last {
-                    'm' => n * 100_000_000i64,
-                    'u' => n * 100_000i64,
-                    'n' => n * 100i64,
-                    'p' => n / 10i64,
-                    _   => n * 100_000_000_000i64, // whole BTC
-                }
-            }
-        };
-        let amount_sats = if amount_msats > 0 { amount_msats / 1000 } else { 0 };
-        // Extract referenced event id (first "e" tag)
-        let referenced_event_id = tags.iter()
-            .find(|t| t.as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) == Some("e"))
-            .and_then(|t| t.as_array()?.get(1)?.as_str())
-            .unwrap_or("");
-        let output = serde_json::json!({
-            "amount_sats": amount_sats,
-            "referenced_event_id": referenced_event_id,
-        });
-        match CString::new(output.to_string()) {
-            Ok(c) => c.into_raw(),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     }));

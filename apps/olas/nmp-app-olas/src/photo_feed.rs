@@ -48,21 +48,37 @@ fn filter_photo_post_json(
     contact_list_only: bool,
     wot_preset: &str,
 ) -> Option<String> {
+    filter_photo_post_json_with_runtime(event_json, contact_list_only, wot_preset, wot_runtime())
+}
+
+fn filter_photo_post_json_with_runtime(
+    event_json: &str,
+    contact_list_only: bool,
+    wot_preset: &str,
+    runtime: Option<Arc<WotBootstrapRuntime>>,
+) -> Option<String> {
     let event: KernelEvent = serde_json::from_str(event_json).ok()?;
     if event.kind != 20 {
         return None;
     }
-    if !contact_list_only && !network_allows(&event.author, wot_preset) {
+    if !contact_list_only && !network_allows(&event.author, wot_preset, runtime) {
         return None;
     }
     let post = PhotoPost::from_event(&event)?;
     serde_json::to_string(&post).ok()
 }
 
-fn network_allows(candidate: &str, wot_preset: &str) -> bool {
-    let runtime = WOT_RUNTIME
+fn wot_runtime() -> Option<Arc<WotBootstrapRuntime>> {
+    WOT_RUNTIME
         .get()
-        .and_then(|slot| slot.lock().ok().and_then(|guard| guard.clone()));
+        .and_then(|slot| slot.lock().ok().and_then(|guard| guard.clone()))
+}
+
+fn network_allows(
+    candidate: &str,
+    wot_preset: &str,
+    runtime: Option<Arc<WotBootstrapRuntime>>,
+) -> bool {
     let Some(runtime) = runtime else {
         return false;
     };
@@ -212,64 +228,5 @@ fn to_cstring(value: String) -> *mut c_char {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn picture_event(tags: serde_json::Value) -> String {
-        serde_json::json!({
-            "id": "abc",
-            "author": "0101010101010101010101010101010101010101010101010101010101010101",
-            "kind": 20,
-            "created_at": 42,
-            "tags": tags,
-            "content": "hello #olas"
-        })
-        .to_string()
-    }
-
-    #[test]
-    fn following_kind20_event_becomes_photo_post_json() {
-        let raw = picture_event(serde_json::json!([
-            [
-                "imeta",
-                "url https://example.com/p.jpg",
-                "x abc123",
-                "m image/jpeg",
-                "dim 800x600",
-                "alt beach"
-            ],
-            ["t", "photography"]
-        ]));
-
-        let json = filter_photo_post_json(&raw, true, "balanced").expect("post");
-        let value: serde_json::Value = serde_json::from_str(&json).expect("json");
-
-        assert_eq!(value["id"], "abc");
-        assert_eq!(
-            value["authorPubkey"],
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-        assert_eq!(value["images"][0]["url"], "https://example.com/p.jpg");
-        assert_eq!(value["images"][0]["width"], 800);
-        assert_eq!(value["hashtags"][0], "photography");
-        assert_eq!(value["reactionCount"], 0);
-    }
-
-    #[test]
-    fn following_feed_rejects_kind20_without_imeta_url() {
-        let raw = picture_event(serde_json::json!([["imeta", "x abc123"]]));
-
-        assert!(filter_photo_post_json(&raw, true, "balanced").is_none());
-    }
-
-    #[test]
-    fn network_feed_rejects_without_wot_runtime() {
-        clear_wot_runtime();
-        let raw = picture_event(serde_json::json!([[
-            "imeta",
-            "url https://example.com/p.jpg"
-        ]]));
-
-        assert!(filter_photo_post_json(&raw, false, "open").is_none());
-    }
-}
+#[path = "photo_feed_tests.rs"]
+mod tests;

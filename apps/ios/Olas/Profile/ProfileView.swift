@@ -6,8 +6,6 @@ struct ProfileView: View {
 
     @State private var profile = OlasProfile(pubkey: "")
     @State private var posts: [PhotoPost] = []
-    @State private var followingCount = 0
-    @State private var followerCount = 0
     @State private var selectedPost: PhotoPost?
     @State private var showSignIn = false
 
@@ -28,9 +26,7 @@ struct ProfileView: View {
                             Color.clear.frame(height: 44)
                             ProfileHeaderView(
                                 profile: profile,
-                                isOwn: isOwn,
-                                followingCount: followingCount,
-                                followerCount: followerCount
+                                isOwn: isOwn
                             )
                             Rectangle()
                                 .fill(Color.olasBorder)
@@ -165,96 +161,59 @@ struct ProfileView: View {
 
 struct SignInSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var showManualKey = false
-    @State private var nsec = ""
+    @State private var credential = ""
+    @State private var mode: ProfileSignInMode = .nsec
     @State private var isSigningIn = false
 
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: OlasSpacing.xl) {
-                Spacer()
-                NostrLoginBlock(
-                    onSignerSelected: { signer in
-                        // NIP-55 / NIP-46 handshake via signer URL scheme — placeholder
-                        _ = signer
-                    },
-                    onManualKey: {
-                        showManualKey = true
-                    }
-                )
-                .padding(.horizontal, OlasSpacing.xl)
-                Spacer()
-            }
-            .background(Color.olasBackground)
-            .navigationTitle("Sign in to Olas")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.foregroundStyle(Color.olasText2)
-                }
-            }
-            .sheet(isPresented: $showManualKey) {
-                ManualKeySheet()
-            }
-        }
-        .preferredColorScheme(.dark)
+    private enum ProfileSignInMode: String, CaseIterable {
+        case nsec = "Recovery key"
+        case bunker = "Remote signer"
     }
-}
-
-// MARK: - Manual Key Sheet
-
-struct ManualKeySheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var nsec = ""
-    @State private var isSigningIn = false
-    @State private var error: String?
 
     private var canSubmit: Bool {
-        nsec.hasPrefix("nsec1") && nsec.count > 10 && !isSigningIn
+        !credential.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSigningIn
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: OlasSpacing.xl) {
                 Spacer()
+
                 VStack(spacing: OlasSpacing.xxs) {
-                    Text("Enter your key")
+                    Text("Sign in to Olas")
                         .font(OlasFont.title1())
                         .foregroundStyle(Color.olasText1)
-                    Text("Paste your nsec or hex private key.")
+                    Text("Use your recovery key or a remote signer URI.")
                         .font(OlasFont.subheadline())
                         .foregroundStyle(Color.olasText2)
+                        .multilineTextAlignment(.center)
                 }
-                VStack(alignment: .leading, spacing: OlasSpacing.xxs) {
-                    TextField("nsec1...", text: $nsec)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(OlasFont.body())
-                        .foregroundStyle(Color.olasText1)
-                        .padding(OlasSpacing.md)
-                        .background(Color.olasSurface, in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.olasBorder, lineWidth: 1))
-                        .padding(.horizontal, OlasSpacing.xl)
-                        .submitLabel(.go)
-                        .onSubmit {
-                            guard canSubmit else { return }
-                            isSigningIn = true
-                            NMPBridge.shared.signInNsec(nsec)
-                            isSigningIn = false
-                            dismiss()
-                        }
-                    if let error {
-                        Text(error)
-                            .font(OlasFont.caption())
-                            .foregroundStyle(Color.olasDestructive)
-                            .padding(.horizontal, OlasSpacing.xl)
+
+                Picker("Sign-in method", selection: $mode) {
+                    ForEach(ProfileSignInMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, OlasSpacing.xl)
+
+                TextField(mode == .nsec ? "nsec1..." : "bunker://...", text: $credential)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(OlasFont.body())
+                    .foregroundStyle(Color.olasText1)
+                    .padding(OlasSpacing.md)
+                    .background(Color.olasSurface, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.olasBorder, lineWidth: 1))
+                    .padding(.horizontal, OlasSpacing.xl)
+                    .submitLabel(.go)
+                    .onSubmit {
+                        guard canSubmit else { return }
+                        signIn()
+                    }
+
                 Button {
-                    isSigningIn = true
-                    NMPBridge.shared.signInNsec(nsec)
-                    isSigningIn = false
-                    dismiss()
+                    signIn()
                 } label: {
                     Group {
                         if isSigningIn {
@@ -271,18 +230,32 @@ struct ManualKeySheet: View {
                 .buttonStyle(OlasPressedButtonStyle())
                 .disabled(!canSubmit)
                 .padding(.horizontal, OlasSpacing.xl)
-                .accessibilityIdentifier("signInButton")
+
                 Spacer()
             }
             .background(Color.olasBackground)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.foregroundStyle(Color.olasText2)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func signIn() {
+        let value = credential.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        isSigningIn = true
+        switch mode {
+        case .nsec:
+            NMPBridge.shared.signInNsec(value)
+        case .bunker:
+            NMPBridge.shared.signInBunker(value)
+        }
+        isSigningIn = false
+        dismiss()
     }
 }
 

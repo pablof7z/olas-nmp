@@ -29,7 +29,6 @@ struct SuggestedAccountCard: View {
                     } else {
                         bridge.follow(pubkey: profile.pubkey)
                     }
-                    isFollowing = bridge.isFollowing(profile.pubkey)
                 } label: {
                     Text(isFollowing ? "Following" : "Follow")
                         .font(OlasFont.caption())

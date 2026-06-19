@@ -3,8 +3,6 @@ import SwiftUI
 struct ProfileHeaderView: View {
     let profile: OlasProfile
     let isOwn: Bool
-    let followingCount: Int
-    let followerCount: Int
 
     @State private var isFollowing: Bool = false
 
@@ -48,51 +46,33 @@ struct ProfileHeaderView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
-                        HStack(spacing: OlasSpacing.xs) {
-                            Button {
-                                if isFollowing {
-                                    bridge.unfollow(pubkey: profile.pubkey)
-                                    isFollowing = false
-                                } else {
-                                    bridge.follow(pubkey: profile.pubkey)
-                                    isFollowing = true
-                                }
-                            } label: {
-                                Text(isFollowing ? "Following" : "Follow")
-                                    .font(OlasFont.subheadline())
-                                    .foregroundStyle(isFollowing ? Color.olasText1 : Color.olasBackground)
-                                    .padding(.horizontal, OlasSpacing.md)
-                                    .padding(.vertical, OlasSpacing.xs)
-                                    .background(
-                                        isFollowing ? Color.clear : Color.olasText1,
-                                        in: RoundedRectangle(cornerRadius: 12)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(isFollowing ? Color.olasBorder : Color.clear, lineWidth: 1.5)
-                                    )
+                        Button {
+                            if isFollowing {
+                                bridge.unfollow(pubkey: profile.pubkey)
+                            } else {
+                                bridge.follow(pubkey: profile.pubkey)
                             }
-                            .buttonStyle(OlasPressedButtonStyle())
-                            .onAppear {
-                                isFollowing = bridge.isFollowing(profile.pubkey)
-                            }
-                            .onChange(of: bridge.followedPubkeys) { _, _ in
-                                isFollowing = bridge.isFollowing(profile.pubkey)
-                            }
-
-                            Button {
-                                // Zap
-                            } label: {
-                                Image(systemName: "bolt")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(Color.olasText1)
-                                    .frame(width: 36, height: 36)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.olasBorder, lineWidth: 1.5)
-                                    )
-                            }
-                            .buttonStyle(OlasPressedButtonStyle())
+                        } label: {
+                            Text(isFollowing ? "Following" : "Follow")
+                                .font(OlasFont.subheadline())
+                                .foregroundStyle(isFollowing ? Color.olasText1 : Color.olasBackground)
+                                .padding(.horizontal, OlasSpacing.md)
+                                .padding(.vertical, OlasSpacing.xs)
+                                .background(
+                                    isFollowing ? Color.clear : Color.olasText1,
+                                    in: RoundedRectangle(cornerRadius: 12)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(isFollowing ? Color.olasBorder : Color.clear, lineWidth: 1.5)
+                                )
+                        }
+                        .buttonStyle(OlasPressedButtonStyle())
+                        .onAppear {
+                            isFollowing = bridge.isFollowing(profile.pubkey)
+                        }
+                        .onChange(of: bridge.followedPubkeys) { _, _ in
+                            isFollowing = bridge.isFollowing(profile.pubkey)
                         }
                     }
                 }
@@ -125,36 +105,10 @@ struct ProfileHeaderView: View {
                             .padding(.top, 2)
                     }
 
-                    // Trust line (others only)
-                    if !isOwn {
-                        Text("Followed by people you follow")
-                            .font(OlasFont.caption())
-                            .foregroundStyle(Color.olasText2)
-                            .padding(.top, 2)
-                    }
-
-                    // Stats row
-                    HStack(spacing: OlasSpacing.xl) {
-                        statItem(count: followingCount, label: "Following")
-                        statItem(count: followerCount, label: "Followers")
-                    }
-                    .padding(.top, OlasSpacing.xs)
                 }
                 .padding(.horizontal, OlasSpacing.md)
                 .padding(.top, -24) // compensate avatar offset
             }
-        }
-    }
-
-    private func statItem(count: Int, label: String) -> some View {
-        VStack(spacing: 1) {
-            Text("\(count)")
-                .font(OlasFont.headline())
-                .foregroundStyle(Color.olasText1)
-                .monospacedDigit()
-            Text(label)
-                .font(OlasFont.caption())
-                .foregroundStyle(Color.olasText2)
         }
     }
 }

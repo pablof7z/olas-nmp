@@ -1,12 +1,5 @@
 import SwiftUI
 
-// MARK: - WoT gap copy (keep in sync with Android WoTStrings.kt)
-
-/// One-line disclosure shown in the notification list header while the WoT FFI gap is active.
-/// Android mirror: `WOT_GAP_NOTIFICATIONS_NOTE` in core/WoTStrings.kt
-private let wotGapNotificationsNote =
-    "Showing all · Trust scoring updating in the background"
-
 enum NotificationsTab: String, CaseIterable {
     case all = "All"
     case mentions = "Mentions"
@@ -117,7 +110,7 @@ struct NotificationsView: View {
             HStack(spacing: OlasSpacing.xs) {
                 Image(systemName: "clock")
                     .font(.system(size: 11, weight: .medium))
-                Text(wotGapNotificationsNote)
+                Text(wotNotificationsNote)
                     .font(OlasFont.caption())
             }
             .foregroundStyle(Color.olasText2)

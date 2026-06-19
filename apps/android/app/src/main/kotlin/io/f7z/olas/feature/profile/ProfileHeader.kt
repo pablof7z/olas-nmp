@@ -34,10 +34,7 @@ fun ProfileHeader(
     profile: OlasProfile,
     isOwnProfile: Boolean,
     isFollowing: Boolean,
-    followerCount: Int,
-    followingCount: Int,
     onFollow: () -> Unit,
-    onZap: () -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,15 +85,6 @@ fun ProfileHeader(
 
             Spacer(Modifier.height(12.dp))
 
-            // Stats row
-            Row {
-                StatItem(count = followingCount, label = "Following")
-                Spacer(Modifier.width(20.dp))
-                StatItem(count = followerCount,  label = "Followers")
-            }
-
-            Spacer(Modifier.height(12.dp))
-
             // Action buttons
             if (isOwnProfile) {
                 Button(
@@ -121,28 +109,8 @@ fun ProfileHeader(
                     ) {
                         Text(if (isFollowing) "Following" else "Follow", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = onZap,
-                        modifier = Modifier.height(36.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.Transparent,
-                            contentColor   = OlasColors.Zap,
-                        ),
-                    ) {
-                        Text("⚡ Zap", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun StatItem(count: Int, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(count.toString(), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OlasColors.Text1)
-        Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 14.sp, color = OlasColors.Text2)
     }
 }

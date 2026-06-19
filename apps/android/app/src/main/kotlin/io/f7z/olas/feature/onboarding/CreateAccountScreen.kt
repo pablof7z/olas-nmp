@@ -43,8 +43,8 @@ fun CreateAccountScreen(navController: NavController) {
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(state.step) {
-        if (state.step == OnboardingStep.FOLLOW_PACKS) {
-            navController.navigate(Routes.ONBOARDING_FOLLOWS) {
+        if (state.step == OnboardingStep.MEDIA_SERVER) {
+            navController.navigate(Routes.ONBOARDING_SERVER) {
                 popUpTo(Routes.ONBOARDING_CREATE) { inclusive = true }
             }
         }
@@ -57,8 +57,7 @@ fun CreateAccountScreen(navController: NavController) {
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Progress dots (step 1 of 3)
-        ProgressDots(currentStep = 0, totalSteps = 3)
+        ProgressDots(currentStep = 0, totalSteps = 2)
         Spacer(Modifier.height(32.dp))
 
         Text(

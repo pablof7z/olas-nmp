@@ -2,6 +2,7 @@ package io.f7z.olas.feature.feed
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,10 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,26 +27,24 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
-import org.nmp.registry.LocalNostrProfileHost
 
 @Composable
 fun PostCard(
     post: PhotoPost,
     onImageTap: (url: String) -> Unit,
+    onLike: (PhotoPost) -> Unit,
+    onBookmark: (PhotoPost) -> Unit,
+    onZap: (PhotoPost) -> Unit,
+    onShare: (PhotoPost) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var isLiked by remember { mutableStateOf(false) }
-    var isBookmarked by remember { mutableStateOf(false) }
-    val profileHost = LocalNostrProfileHost.current
-    val resolvedProfile = profileHost?.profileForPubkey(post.authorPubkey)
-    val authorDisplay = resolvedProfile?.display ?: post.authorName ?: post.authorPubkey.take(8)
+    val authorDisplay = post.authorName ?: post.authorPubkey.take(8)
 
     Column(modifier = modifier.fillMaxWidth().background(OlasColors.Background)) {
         // Header
-        PostHeader(post = post, onOverflow = {})
+        PostHeader(post = post)
 
         // Image(s) — full bleed, aspect ratio capped at 4:5
         val firstImage = post.images.firstOrNull()
@@ -62,21 +57,15 @@ fun PostCard(
             val displayRatio = nativeRatio.coerceIn(0.8f, 1.5f)
 
             if (post.images.size == 1) {
-                Box(
-                    modifier = Modifier
+                AsyncImage(
+                    model              = firstImage.url,
+                    contentDescription = firstImage.alt ?: "Photo",
+                    modifier           = Modifier
                         .fillMaxWidth()
                         .aspectRatio(displayRatio)
-                        .background(OlasColors.Surface),
-                ) {
-                    AsyncImage(
-                        model              = firstImage.url,
-                        contentDescription = firstImage.alt ?: "Photo",
-                        modifier           = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(displayRatio),
-                        contentScale       = ContentScale.Crop,
-                    )
-                }
+                        .clickable { onImageTap(firstImage.url) },
+                    contentScale = ContentScale.Crop,
+                )
             } else {
                 // Carousel (HorizontalPager) with dot indicator
                 CarouselImages(images = post.images, aspectRatio = displayRatio, onTap = onImageTap)
@@ -85,17 +74,12 @@ fun PostCard(
 
         // Action row
         PostActions(
-            isLiked      = isLiked,
-            isBookmarked = isBookmarked,
-            onLike       = { isLiked = !isLiked },
-            onComment    = {},
-            onZap        = {
-                // Build the zap action JSON in Rust (sats→msats conversion is Rust's responsibility).
-                val zapJson = NMPBridge.buildZapActionJson(post.id, 21L)
-                if (zapJson != null) NMPBridge.dispatchAction("nmp.zap", zapJson)
-            },
-            onShare      = {},
-            onBookmark   = { isBookmarked = !isBookmarked },
+            isLiked      = post.isLiked,
+            isBookmarked = post.isBookmarked,
+            onLike       = { onLike(post) },
+            onZap        = { onZap(post) },
+            onShare      = { onShare(post) },
+            onBookmark   = { onBookmark(post) },
         )
 
         // Reaction count
@@ -163,19 +147,15 @@ private fun CarouselImages(
             state    = pagerState,
             modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio),
         ) { page ->
-            Box(
-                modifier = Modifier
+            AsyncImage(
+                model              = images[page].url,
+                contentDescription = images[page].alt ?: "Photo ${page + 1}",
+                modifier           = Modifier
                     .fillMaxWidth()
                     .aspectRatio(aspectRatio)
-                    .background(OlasColors.Surface),
-            ) {
-                AsyncImage(
-                    model              = images[page].url,
-                    contentDescription = images[page].alt ?: "Photo ${page + 1}",
-                    modifier           = Modifier.fillMaxWidth().aspectRatio(aspectRatio),
-                    contentScale       = ContentScale.Crop,
-                )
-            }
+                    .clickable { onTap(images[page].url) },
+                contentScale       = ContentScale.Crop,
+            )
         }
         // Dot indicator
         if (images.size > 1) {

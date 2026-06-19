@@ -32,7 +32,6 @@ struct PhotoPost: Identifiable, Codable {
     let createdAt: Int64
     var isLiked: Bool = false
     var isBookmarked: Bool = false
-    // WoT score intentionally absent — pending nmp_app_wot_score upstream gap
 }
 
 struct ImageMeta: Codable {
@@ -62,69 +61,15 @@ struct OlasProfile: Codable {
     }
 }
 
-// MARK: - Follow Pack
-
-struct FollowPack: Identifiable {
-    let id: String
-    let name: String
-    let description: String
-    let category: String
-    let accentColor: String
-    let count: Int
-    let previewPubkeys: [String]
-
-    static let defaults: [FollowPack] = [
-        FollowPack(
-            id: "visual-storytellers",
-            name: "Visual Storytellers",
-            description: "Photographers pushing the boundaries of everyday imagery",
-            category: "Photography",
-            accentColor: "#0A84FF",
-            count: 847,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "world-travelers",
-            name: "World Travelers",
-            description: "Explore the globe through stunning travel photography",
-            category: "Travel",
-            accentColor: "#34C759",
-            count: 1203,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "digital-artists",
-            name: "Digital Artists",
-            description: "Cutting-edge digital art and creative visual design",
-            category: "Art",
-            accentColor: "#FF375F",
-            count: 629,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "food-culture",
-            name: "Food & Culture",
-            description: "Culinary photography celebrating food around the world",
-            category: "Food",
-            accentColor: "#FBB131",
-            count: 412,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "nostr-builders",
-            name: "Nostr Builders",
-            description: "Developers and creators building the open social web",
-            category: "Tech",
-            accentColor: "#BF5AF2",
-            count: 2891,
-            previewPubkeys: []
-        )
-    ]
-}
-
 // MARK: - Feed Mode
 
 enum FeedMode { case following, network }
+
+// MARK: - Web of Trust Copy
+
+let wotNotificationsNote = "Filtered by your trust settings"
+let wotSettingsNote =
+    "Network uses your local trust graph. Close is stricter; Open still hides accounts you mute."
 
 // MARK: - Notification
 

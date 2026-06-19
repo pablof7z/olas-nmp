@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +29,9 @@ import androidx.navigation.NavController
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 // Field validation and save policy are enforced by Rust — no local constraints here.
 
@@ -36,9 +40,11 @@ fun EditProfileScreen(navController: NavController, currentProfile: OlasProfile?
     var name        by remember { mutableStateOf(currentProfile?.name        ?: "") }
     var displayName by remember { mutableStateOf(currentProfile?.displayName ?: "") }
     var about       by remember { mutableStateOf(currentProfile?.about       ?: "") }
-    var website     by remember { mutableStateOf("") }
     var lud16       by remember { mutableStateOf(currentProfile?.lud16       ?: "") }
     var nip05       by remember { mutableStateOf(currentProfile?.nip05       ?: "") }
+    var isSaving    by remember { mutableStateOf(false) }
+    var saveError   by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -96,19 +102,40 @@ fun EditProfileScreen(navController: NavController, currentProfile: OlasProfile?
             singleLine    = true,
         )
         Spacer(Modifier.height(24.dp))
+        saveError?.let {
+            Text(it, color = OlasColors.Destructive, fontSize = 13.sp, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+        }
 
         Button(
             onClick = {
-                val profileJson = buildString {
-                    append("""{"name":"$name","display_name":"$displayName","about":"$about"""")
-                    if (lud16.isNotBlank()) append(""","lud16":"$lud16"""")
-                    if (nip05.isNotBlank()) append(""","nip05":"$nip05"""")
-                    append("}")
+                if (isSaving) return@Button
+                val fields = buildJsonObject {
+                    if (name.isNotBlank()) put("name", name)
+                    if (displayName.isNotBlank()) put("display_name", displayName)
+                    if (about.isNotBlank()) put("about", about)
+                    if (lud16.isNotBlank()) put("lud16", lud16)
+                    if (nip05.isNotBlank()) put("nip05", nip05)
+                    currentProfile?.picture?.let { put("picture", it) }
+                    currentProfile?.banner?.let { put("banner", it) }
                 }
-                NMPBridge.dispatchAction("nmp.profile.update", profileJson)
-                navController.popBackStack()
+                val actionJson = buildJsonObject {
+                    put("PublishProfile", buildJsonObject { put("fields", fields) })
+                }.toString()
+                isSaving = true
+                saveError = null
+                scope.launch {
+                    val terminal = NMPBridge.dispatchAndAwaitResult("nmp.publish", actionJson)
+                    isSaving = false
+                    if (terminal?.succeeded == true) {
+                        navController.popBackStack()
+                    } else {
+                        saveError = "Couldn't publish profile update."
+                    }
+                }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
+            enabled  = !isSaving,
             shape    = RoundedCornerShape(12.dp),
             colors   = ButtonDefaults.buttonColors(
                 containerColor = OlasColors.Text1,

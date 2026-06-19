@@ -20,11 +20,9 @@ struct PostCardActionsView: View {
                     } completion: {
                         withAnimation(.olasBouncy) { likeScale = 1.0 }
                     }
-                    vm.toggleLike(postId: post.id)
+                    vm.toggleLike(post: post)
                 }
                 .scaleEffect(likeScale)
-
-                actionButton(icon: "bubble.right", color: .olasText2, label: "Comment") {}
 
                 actionButton(
                     icon: "bolt",
@@ -47,7 +45,7 @@ struct PostCardActionsView: View {
                 color: post.isBookmarked ? .olasText1 : .olasText2,
                 label: "Save"
             ) {
-                vm.toggleBookmark(postId: post.id)
+                vm.toggleBookmark(post: post)
             }
             .padding(.trailing, OlasSpacing.md)
         }

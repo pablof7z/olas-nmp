@@ -1,8 +1,5 @@
 import SwiftUI
 
-private let wotSettingsNote =
-    "Network uses your local trust graph. Close is stricter; Open still hides accounts you mute."
-
 enum WoTPreset: String, CaseIterable, Identifiable {
     case close = "Close"
     case balanced = "Balanced"

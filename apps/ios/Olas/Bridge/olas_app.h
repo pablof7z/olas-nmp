@@ -118,10 +118,6 @@ void olas_app_register(void* app);
 /// consumer_id identifies this subscription; close with nmp_app_close_interest.
 void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* consumer_id);
 
-/// Open a NIP-51 kind:30000 follow pack by NIP-19 address (naddr1... or bare coord).
-/// Used during onboarding to hydrate follow pack contents.
-void olas_open_follow_pack(void* app, const char* pack_addr);
-
 /// Build the Blossom upload action input JSON for nmp_app_dispatch_action.
 ///
 /// file_path  — local path to the blob file (required).
@@ -177,6 +173,7 @@ char* olas_picture_post_publish_json(const char* blossom_result_json, const char
 // Event decoders (caller must free with nmp_free_string)
 char* olas_decode_kind20_event_json(const char* event_json);
 char* olas_decode_kind0_event_json(const char* event_json);
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
 
 // Bolt11 parsing (returns msats or -1 on error; no memory to free)
 long long olas_bolt11_amount_msats(const char* bolt11);
@@ -186,6 +183,8 @@ char* olas_compute_geohash(double lat, double lon, int precision);
 
 // Zap action builder (caller must free with nmp_free_string)
 char* olas_build_zap_action_json(const char* event_id, long long sats);
+char* olas_react_action_json(const char* target_event_id, const char* target_author_pubkey);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
 
 // Zap notification decoder: parses kind:9735 receipt; returns {"amount_sats":N,"referenced_event_id":"..."} or NULL
 char* olas_decode_zap_notification_json(const char* event_json);

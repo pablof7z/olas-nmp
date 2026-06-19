@@ -20,7 +20,8 @@ pub extern "C" fn olas_location_geohash4(latitude: f64, longitude: f64) -> *mut 
     result.unwrap_or(std::ptr::null_mut())
 }
 
-pub(crate) fn is_valid_geohash4(value: &str) -> bool {
+#[cfg(test)]
+fn is_valid_geohash4(value: &str) -> bool {
     value.len() == 4 && value.chars().all(|ch| GEOHASH_ALPHABET.contains(ch))
 }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DiscoverView: View {
     @State private var suggestedProfiles: [OlasProfile] = []
+    @State private var isListening = false
 
     var body: some View {
         ScrollView {
@@ -30,6 +31,7 @@ struct DiscoverView: View {
             .padding(.top, OlasSpacing.md)
             .padding(.bottom, 100)
         }
+        .onAppear { startListening() }
     }
 
     private var suggestedPlaceholders: some View {
@@ -37,7 +39,7 @@ struct DiscoverView: View {
             HStack(spacing: OlasSpacing.sm) {
                 ForEach(0..<4, id: \.self) { i in
                     SuggestedAccountCard(profile: OlasProfile(
-                        pubkey: "placeholder_\(i)",
+                        pubkey: "loading_\(i)",
                         name: "Loading...",
                         picture: nil
                     ))
@@ -46,5 +48,19 @@ struct DiscoverView: View {
             .padding(.horizontal, OlasSpacing.md)
         }
         .redacted(reason: .placeholder)
+    }
+
+    private func startListening() {
+        guard !isListening else { return }
+        isListening = true
+        NMPBridge.shared.addEventHandler { json in
+            Task { @MainActor in
+                guard let profile = NMPBridge.shared.profile(from: json),
+                      !suggestedProfiles.contains(where: { $0.pubkey == profile.pubkey }),
+                      suggestedProfiles.count < 8
+                else { return }
+                suggestedProfiles.append(profile)
+            }
+        }
     }
 }

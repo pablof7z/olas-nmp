@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 
 // Step ordering is driven by NMPBridge.onboardingStepsJson(); local enum mirrors canonical Rust order.
 enum class OnboardingStep {
-    WELCOME, CREATE_ACCOUNT, FOLLOW_PACKS, MEDIA_SERVER, COMPLETE
+    WELCOME, CREATE_ACCOUNT, MEDIA_SERVER, COMPLETE
 }
 
 data class OnboardingUiState(
@@ -52,7 +52,7 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                 markOnboardingComplete()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    step      = OnboardingStep.FOLLOW_PACKS,
+                    step      = OnboardingStep.MEDIA_SERVER,
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

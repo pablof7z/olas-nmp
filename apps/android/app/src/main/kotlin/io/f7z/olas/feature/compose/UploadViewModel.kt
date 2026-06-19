@@ -46,7 +46,13 @@ class UploadViewModel : ViewModel() {
      * event JSON, no signing, no imeta assembly happen here. D8: no polling —
      * each Rust action terminal resolves a suspended awaiter.
      */
-    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>) {
+    fun upload(
+        context: Context,
+        uris: List<Uri>,
+        caption: String,
+        altTexts: Map<Uri, String>,
+        includeLocation: Boolean,
+    ) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
@@ -59,7 +65,7 @@ class UploadViewModel : ViewModel() {
                 val uri = uris.first()
                 _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
                 val publishInput = withContext(Dispatchers.IO) {
-                    uploadOne(appContext, uri, caption, altTexts[uri])
+                    uploadOne(appContext, uri, caption, altTexts[uri], includeLocation)
                 } ?: throw IllegalStateException("Upload failed")
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
@@ -79,7 +85,13 @@ class UploadViewModel : ViewModel() {
      * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
      * JSON (built in Rust). Returns null on any failure.
      */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String? {
+    private suspend fun uploadOne(
+        context: Context,
+        uri: Uri,
+        caption: String,
+        alt: String?,
+        includeLocation: Boolean,
+    ): String? {
         // 1. Load upload config from Rust (max_dimension, jpeg_quality).
         val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
         val config = runCatching { JSONObject(configJson) }.getOrNull()
@@ -102,10 +114,12 @@ class UploadViewModel : ViewModel() {
             val uploadInput = NMPBridge.blossomUploadInputJson(
                 filePath = tmp.absolutePath,
                 mime = "image/jpeg",
-                serverUrl = null, // Rust applies the default server.
+                serverUrl = NMPBridge.primaryBlossomServer(),
             ) ?: return null
             val terminal = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
             if (terminal == null || !terminal.succeeded || terminal.resultJson == "null") return null
+
+            val geohash = if (includeLocation) currentCoarseGeohash(context) else null
 
             // 5. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
             return NMPBridge.picturePostPublishJson(
@@ -113,6 +127,7 @@ class UploadViewModel : ViewModel() {
                 caption = caption,
                 alt = alt,
                 dim = dim,
+                geohash = geohash,
             )
         } finally {
             tmp.delete()

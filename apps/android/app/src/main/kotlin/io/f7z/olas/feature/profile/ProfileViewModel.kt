@@ -29,6 +29,7 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
 
     init {
         observeEvents()
+        observeFollowState()
     }
 
     private fun observeEvents() {
@@ -60,10 +61,17 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
             .launchIn(viewModelScope)
     }
 
+    private fun observeFollowState() {
+        NMPBridge.followedPubkeys
+            .onEach { followed ->
+                val pk = pubkey ?: return@onEach
+                _uiState.value = _uiState.value.copy(isFollowing = followed.contains(pk))
+            }
+            .launchIn(viewModelScope)
+    }
+
     fun toggleFollow() {
-        val following = !_uiState.value.isFollowing
-        _uiState.value = _uiState.value.copy(isFollowing = following)
         val pk = pubkey ?: return
-        if (following) NMPBridge.follow(pk) else NMPBridge.unfollow(pk)
+        if (_uiState.value.isFollowing) NMPBridge.unfollow(pk) else NMPBridge.follow(pk)
     }
 }

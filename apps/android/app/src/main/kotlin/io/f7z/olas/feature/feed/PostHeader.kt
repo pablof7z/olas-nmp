@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,7 +21,7 @@ import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
-fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Modifier) {
+fun PostHeader(post: PhotoPost, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -55,13 +51,6 @@ fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Mod
             fontSize = 13.sp,
             color    = OlasColors.Text2,
         )
-        IconButton(onClick = onOverflow, modifier = Modifier.size(44.dp)) {
-            Icon(
-                imageVector        = Icons.Filled.MoreHoriz,
-                contentDescription = "More options",
-                tint               = OlasColors.Text2,
-            )
-        }
     }
 }
 
