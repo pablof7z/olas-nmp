@@ -1,0 +1,171 @@
+import SwiftUI
+
+struct PostCardView: View {
+    let post: PhotoPost
+    let vm: FeedViewModel
+    var onImageTap: ((Int) -> Void)?
+
+    @State private var currentImageIndex: Int? = 0
+    @State private var showHeartBurst = false
+    @State private var heartBurstLocation: CGPoint = .zero
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PostCardHeaderView(post: post)
+
+            imageSection
+
+            PostCardActionsView(post: post, vm: vm)
+
+            metadataSection
+        }
+        .background(Color.olasBackground)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Image Section
+
+    private var imageSection: some View {
+        GeometryReader { geo in
+            ZStack {
+                if post.images.count == 1 {
+                    singleImage(post.images[0], width: geo.size.width)
+                        .onTapGesture { onImageTap?(0) }
+                        .onTapGesture(count: 2) { location in
+                            triggerHeartBurst(at: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2))
+                            vm.toggleLike(postId: post.id)
+                        }
+                } else {
+                    carouselImages(width: geo.size.width)
+                }
+
+                if showHeartBurst {
+                    heartBurstOverlay
+                        .position(heartBurstLocation)
+                }
+            }
+        }
+        .aspectRatio(imageAspectRatio, contentMode: .fit)
+    }
+
+    private func singleImage(_ image: ImageMeta, width: CGFloat) -> some View {
+        AsyncImage(url: URL(string: image.url)) { img in
+            img.resizable().scaledToFill()
+        } placeholder: {
+            Rectangle().fill(Color.olasSurface2)
+        }
+        .frame(width: width)
+        .clipped()
+    }
+
+    private func carouselImages(width: CGFloat) -> some View {
+        ZStack(alignment: .bottom) {
+            // Custom horizontal pager — avoids UIKitAdaptableTabView accessibility
+            // overhead that caused 100% CPU from synchronous string-table I/O.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(Array(post.images.enumerated()), id: \.offset) { idx, image in
+                        AsyncImage(url: URL(string: image.url)) { img in
+                            img.resizable().scaledToFill()
+                        } placeholder: {
+                            Rectangle().fill(Color.olasSurface2)
+                        }
+                        .frame(width: width)
+                        .clipped()
+                        .onTapGesture { onImageTap?(idx) }
+                    }
+                }
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $currentImageIndex)
+
+            if post.images.count > 1 {
+                HStack(spacing: 5) {
+                    ForEach(0..<post.images.count, id: \.self) { i in
+                        Circle()
+                            .fill(i == (currentImageIndex ?? 0) ? Color.white : Color.white.opacity(0.5))
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .padding(.bottom, OlasSpacing.sm)
+            }
+        }
+    }
+
+    private var heartBurstOverlay: some View {
+        Image(systemName: "heart.fill")
+            .font(.system(size: 80))
+            .foregroundStyle(Color.olasHeart)
+            .shadow(color: .black.opacity(0.3), radius: 8)
+            .scaleEffect(showHeartBurst ? 1 : 0.1)
+            .opacity(showHeartBurst ? 1 : 0)
+            .transition(.scale.combined(with: .opacity))
+    }
+
+    private func triggerHeartBurst(at point: CGPoint) {
+        heartBurstLocation = point
+        withAnimation(.olasBouncy, completionCriteria: .logicallyComplete) {
+            showHeartBurst = true
+        } completion: {
+            withAnimation(.easeOut(duration: 0.3)) { showHeartBurst = false }
+        }
+    }
+
+    private var imageAspectRatio: CGFloat {
+        guard let first = post.images.first else { return 4.0/5.0 }
+        return PhotoPostParser.aspectRatio(for: first)
+    }
+
+    // MARK: - Metadata Section
+
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if post.reactionCount > 0 {
+                Text("\(post.reactionCount) reactions")
+                    .font(OlasFont.feedReactionCount())
+                    .foregroundStyle(Color.olasText1)
+            }
+
+            if !post.caption.isEmpty {
+                captionText
+            }
+
+            if post.commentCount > 0 {
+                Text("View \(post.commentCount) comments")
+                    .font(OlasFont.feedCaption())
+                    .foregroundStyle(Color.olasText2)
+            }
+
+            Text(post.createdAt.relativeTimeString)
+                .font(OlasFont.feedTimestamp())
+                .foregroundStyle(Color.olasText3)
+        }
+        .padding(.horizontal, OlasSpacing.sm)
+        .padding(.top, OlasSpacing.xs)
+        .padding(.bottom, OlasSpacing.md)
+    }
+
+    private var captionText: some View {
+        Group {
+            let name = post.authorName ?? String(post.authorPubkey.prefix(8))
+            let caption = post.caption
+            let lineLimit = isExpanded ? nil : 2
+            HStack(alignment: .top, spacing: 0) {
+                Text("**\(name)** \(caption)")
+                    .font(OlasFont.feedCaption())
+                    .foregroundStyle(Color.olasText1)
+                    .lineLimit(lineLimit)
+                    .truncationMode(.tail)
+
+                if !isExpanded && caption.count > 80 {
+                    Text("…more")
+                        .font(OlasFont.feedCaption())
+                        .foregroundStyle(Color.olasText3)
+                        .padding(.leading, 2)
+                }
+            }
+            .onTapGesture { isExpanded.toggle() }
+        }
+    }
+}
