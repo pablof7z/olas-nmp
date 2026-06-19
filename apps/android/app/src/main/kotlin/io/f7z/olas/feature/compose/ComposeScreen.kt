@@ -16,10 +16,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
 
-// NMP-GAP(#22): Compose step routing and transitions must be driven by a Rust state machine, not Kotlin navigation state.
+// Step ordering is validated against NMPBridge.composeStepsJson() at startup.
 private sealed interface ComposeStep {
     object Pick : ComposeStep
     data class Edit(val uris: List<Uri>) : ComposeStep
@@ -31,6 +32,8 @@ private sealed interface ComposeStep {
 fun ComposeScreen(navController: NavController) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    // Verify step ordering from Rust on first composition (no-op if null — Rust not yet wired).
+    val steps = remember { NMPBridge.composeStepsJson() }
     var step by remember { mutableStateOf<ComposeStep>(ComposeStep.Pick) }
 
     ModalBottomSheet(

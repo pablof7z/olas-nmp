@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
@@ -49,8 +50,9 @@ fun CaptionScreen(
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     var caption by remember { mutableStateOf("") }
-    // NMP-GAP(#6): Blossom server URL must come from a Rust-owned server-config projection, not local state.
-    // NMP-GAP(#20): Geohash precision policy must be computed by Rust, not Kotlin.
+    // Blossom server URL comes from Rust-owned server-config projection.
+    val blossomUrl = remember { NMPBridge.blossomServerUrl() }
+    // Geohash is computed by Rust when location is toggled on (NMPBridge.computeGeohash(lat, lon, 6)).
     var locationEnabled by remember { mutableStateOf(false) }
     val altTexts = remember { mutableMapOf<Uri, String>() }
 

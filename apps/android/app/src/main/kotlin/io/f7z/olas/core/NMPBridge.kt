@@ -65,6 +65,21 @@ object NMPBridge {
     private external fun nativeLifecycleBackground(handle: Long)
     private external fun nativeWalletConnect(handle: Long, uri: String)
     private external fun nativeSetStoragePath(handle: Long, path: String): Int
+    private external fun nativeDecodeKind20EventJson(handle: Long, eventJson: String): String?
+    private external fun nativeDecodeKind0EventJson(handle: Long, eventJson: String): String?
+    private external fun nativeBolt11AmountMsats(bolt11: String): Long
+    private external fun nativeComputeGeohash(lat: Double, lon: Double, precision: Int): String?
+    private external fun nativeBuildZapActionJson(eventId: String, sats: Long): String?
+    private external fun nativeFilterCatalogJson(): String?
+    private external fun nativeMediaUploadConfigJson(): String?
+    private external fun nativePickerConfigJson(): String?
+    private external fun nativeSettingsCatalogJson(): String?
+    private external fun nativeOnboardingStepsJson(): String?
+    private external fun nativeComposeStepsJson(): String?
+    private external fun nativeBlossomServerUrlGet(handle: Long): String?
+    private external fun nativeBlossomServerUrlSet(handle: Long, url: String)
+    private external fun nativeFeedModeGet(handle: Long): String?
+    private external fun nativeFeedModeSet(handle: Long, mode: String)
 
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
@@ -204,4 +219,22 @@ object NMPBridge {
 
     fun lifecycleForeground() = nativeLifecycleForeground(appHandle)
     fun lifecycleBackground() = nativeLifecycleBackground(appHandle)
+
+    // --- New FFI helpers ------------------------------------------------------
+
+    fun decodeKind20EventJson(eventJson: String): String? = nativeDecodeKind20EventJson(appHandle, eventJson)
+    fun decodeKind0EventJson(eventJson: String): String? = nativeDecodeKind0EventJson(appHandle, eventJson)
+    fun bolt11AmountMsats(bolt11: String): Long = nativeBolt11AmountMsats(bolt11)
+    fun computeGeohash(lat: Double, lon: Double, precision: Int = 6): String? = nativeComputeGeohash(lat, lon, precision)
+    fun buildZapActionJson(eventId: String, sats: Long): String? = nativeBuildZapActionJson(eventId, sats)
+    fun filterCatalogJson(): String? = nativeFilterCatalogJson()
+    fun mediaUploadConfigJson(): String? = nativeMediaUploadConfigJson()
+    fun pickerConfigJson(): String? = nativePickerConfigJson()
+    fun settingsCatalogJson(): String? = nativeSettingsCatalogJson()
+    fun onboardingStepsJson(): String? = nativeOnboardingStepsJson()
+    fun composeStepsJson(): String? = nativeComposeStepsJson()
+    fun blossomServerUrl(): String = nativeBlossomServerUrlGet(appHandle) ?: ""
+    fun setBlossomServerUrl(url: String) = nativeBlossomServerUrlSet(appHandle, url)
+    fun feedMode(): String = nativeFeedModeGet(appHandle) ?: "network"
+    fun setFeedMode(mode: String) = nativeFeedModeSet(appHandle, mode)
 }

@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import io.f7z.olas.core.NMPBridge
+import org.json.JSONObject
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -39,9 +41,13 @@ import io.f7z.olas.ui.theme.OlasColors
 fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
     var selectedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
-    // NMP-GAP(#23): Picker constraints (max selection, ingestion policy) must come from Rust config.
+    // Load picker constraints from Rust (max_selection, etc.).
+    val maxSelection = remember {
+        val configJson = NMPBridge.pickerConfigJson() ?: """{"max_selection":10}"""
+        runCatching { JSONObject(configJson).optInt("max_selection", 10) }.getOrElse { 10 }
+    }
     val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(10),
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxSelection),
     ) { uris ->
         if (uris.isNotEmpty()) {
             selectedUris = uris
@@ -68,7 +74,7 @@ fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
             color      = OlasColors.Text1,
         )
         Text(
-            text     = "Tap to select up to 10.",
+            text     = "Tap to select up to $maxSelection.",
             fontSize = 13.sp,
             color    = OlasColors.Text2,
         )

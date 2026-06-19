@@ -3,42 +3,65 @@ import SwiftUI
 struct SettingsView: View {
     @State private var showAdvanced = false
 
+    private struct SettingItem: Decodable { let id: String; let label: String }
+
+    private var settingsItems: [SettingItem] {
+        guard let catalogJSON = NMPBridge.shared.settingsCatalogJSON(),
+              let data = catalogJSON.data(using: .utf8),
+              let items = try? JSONDecoder().decode([SettingItem].self, from: data) else {
+            return []
+        }
+        return items
+    }
+
+    @ViewBuilder
+    private func destination(for id: String) -> some View {
+        switch id {
+        case "account":       AccountSettingsView()
+        case "notifications": notificationsSettings
+        case "content":       WoTSettingsView()
+        case "appearance":    appearanceSettings
+        case "help":          helpSettings
+        case "servers":       ServerSettingsView()
+        case "relays":        RelaySettingsView()
+        case "wallet":        walletSettings
+        case "security":      securitySettings
+        default:              Text(id).foregroundStyle(Color.olasText1)
+        }
+    }
+
     var body: some View {
-        // NMP-GAP(#31): Settings rows must come from Rust-owned capability config, not a hardcoded Swift array.
-        List {
-            // Tier 1
+        let items = settingsItems
+        let tier1Ids = ["account", "notifications", "content", "appearance", "help"]
+        let tier2Ids = ["servers", "relays", "wallet", "security"]
+        let tier1 = items.filter { tier1Ids.contains($0.id) }
+        let tier2 = items.filter { tier2Ids.contains($0.id) }
+        let fallbackTier1: [SettingItem] = [
+            .init(id: "account", label: "Account"),
+            .init(id: "notifications", label: "Notifications"),
+            .init(id: "content", label: "Content & Filtering"),
+            .init(id: "appearance", label: "Appearance"),
+            .init(id: "help", label: "Help")
+        ]
+        let fallbackTier2: [SettingItem] = [
+            .init(id: "servers", label: "Servers"),
+            .init(id: "relays", label: "Relays"),
+            .init(id: "wallet", label: "Wallet & Zaps"),
+            .init(id: "security", label: "Account Security")
+        ]
+        let displayTier1 = tier1.isEmpty ? fallbackTier1 : tier1
+        let displayTier2 = tier2.isEmpty ? fallbackTier2 : tier2
+
+        return List {
             Section {
-                NavigationLink("Account") {
-                    AccountSettingsView()
-                }
-                NavigationLink("Notifications") {
-                    notificationsSettings
-                }
-                NavigationLink("Content & Filtering") {
-                    WoTSettingsView()
-                }
-                NavigationLink("Appearance") {
-                    appearanceSettings
-                }
-                NavigationLink("Help") {
-                    helpSettings
+                ForEach(displayTier1, id: \.id) { item in
+                    NavigationLink(item.label) { destination(for: item.id) }
                 }
             }
-
-            // Advanced (Tier 2)
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
-                    NavigationLink("Servers") {
-                        ServerSettingsView()
-                    }
-                    NavigationLink("Relays") {
-                        RelaySettingsView()
-                    }
-                    NavigationLink("Wallet & Zaps") {
-                        walletSettings
-                    }
-                    NavigationLink("Account Security") {
-                        securitySettings
+                    ForEach(displayTier2, id: \.id) { item in
+                        NavigationLink(item.label) { destination(for: item.id) }
                     }
                 }
             }

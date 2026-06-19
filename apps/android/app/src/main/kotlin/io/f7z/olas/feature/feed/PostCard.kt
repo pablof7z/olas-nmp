@@ -30,6 +30,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
 import org.nmp.registry.LocalNostrProfileHost
@@ -88,7 +89,11 @@ fun PostCard(
             isBookmarked = isBookmarked,
             onLike       = { isLiked = !isLiked },
             onComment    = {},
-            onZap        = {},
+            onZap        = {
+                // Build the zap action JSON in Rust (sats→msats conversion is Rust's responsibility).
+                val zapJson = NMPBridge.buildZapActionJson(post.id, 21L)
+                if (zapJson != null) NMPBridge.dispatchAction("nmp.zap", zapJson)
+            },
             onShare      = {},
             onBookmark   = { isBookmarked = !isBookmarked },
         )

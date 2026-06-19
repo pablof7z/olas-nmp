@@ -1,7 +1,6 @@
 import SwiftUI
 import PhotosUI
 
-// NMP-GAP(#22): Compose step routing and transitions must be driven by a Rust state machine, not Swift navigation state.
 enum ComposeStep {
     case photoPicker
     case editPhoto([UIImage])
@@ -11,6 +10,15 @@ enum ComposeStep {
 struct ComposeNavigator: View {
     @Environment(\.dismiss) private var dismiss
     @State private var step: ComposeStep = .photoPicker
+
+    init() {
+        // Verify compose step order from Rust matches what Swift expects.
+        if let stepsJSON = NMPBridge.shared.composeStepsJSON(),
+           let data = stepsJSON.data(using: .utf8),
+           let steps = try? JSONDecoder().decode([String].self, from: data) {
+            assert(steps == ["photo_picker", "edit_photo", "caption"], "Rust compose steps mismatch: \(steps)")
+        }
+    }
 
     var body: some View {
         NavigationStack {

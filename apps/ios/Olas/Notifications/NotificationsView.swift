@@ -25,6 +25,8 @@ final class NotificationsViewModel {
         }
     }
 
+    private struct ZapInfo: Decodable { let amount_sats: Int64; let referenced_event_id: String }
+
     private func handleEvent(_ json: String) {
         guard let data = json.data(using: .utf8),
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
@@ -38,11 +40,13 @@ final class NotificationsViewModel {
                 createdAt: event.createdAt
             )
             notifications.insert(n, at: 0)
-        case 9735: // zap
-            let amount = zapAmount(from: event)
+        case 9735: // zap — decoded entirely in Rust
+            guard let zapJSON = NMPBridge.shared.decodeZapNotification(json),
+                  let zapData = zapJSON.data(using: .utf8),
+                  let zap = try? JSONDecoder().decode(ZapInfo.self, from: zapData) else { return }
             let n = OlasNotification(
-                id: event.id, type: .zap(amount), actorPubkey: event.author,
-                postId: event.tags.first(where: { $0.first == "e" })?[safe: 1],
+                id: event.id, type: .zap(zap.amount_sats), actorPubkey: event.author,
+                postId: zap.referenced_event_id.isEmpty ? nil : zap.referenced_event_id,
                 createdAt: event.createdAt
             )
             notifications.insert(n, at: 0)
@@ -64,14 +68,6 @@ final class NotificationsViewModel {
         default:
             break
         }
-    }
-
-    // NMP-GAP(#8): Zap amount must be delivered by a Rust notification projection, not computed from raw event tags in Swift.
-    private func zapAmount(from event: NostrEvent) -> Int64 {
-        guard let bolt11 = event.tags.first(where: { $0.first == "bolt11" })?[safe: 1] else { return 0 }
-        // Amount encoded in bolt11; simplified: return 21 sats as default
-        _ = bolt11
-        return 21
     }
 
     func filtered(by tab: NotificationsTab) -> [OlasNotification] {

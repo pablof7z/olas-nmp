@@ -30,15 +30,11 @@ struct EditProfileView: View {
 
             Section("About") {
                 ZStack(alignment: .topLeading) {
-                    // NMP-GAP(#25): Profile field validation and save policy must be enforced by Rust, not Swift.
                     TextEditor(text: $about)
                         .font(OlasFont.body())
                         .foregroundStyle(Color.olasText1)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 80)
-                        .onChange(of: about) { _, new in
-                            if new.count > 300 { about = String(new.prefix(300)) }
-                        }
                     if about.isEmpty {
                         Text("Bio")
                             .font(OlasFont.body())
@@ -47,12 +43,6 @@ struct EditProfileView: View {
                             .padding(.leading, 5)
                             .allowsHitTesting(false)
                     }
-                }
-                HStack {
-                    Spacer()
-                    Text("\(about.count)/300")
-                        .font(OlasFont.caption())
-                        .foregroundStyle(about.count >= 300 ? Color.olasDestructive : Color.olasText3)
                 }
             }
 

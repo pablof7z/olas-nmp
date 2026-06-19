@@ -46,10 +46,11 @@ final class FeedViewModel {
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
         switch event.kind {
         case 20:
-            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
-            guard !seenIds.contains(event.id),
-                  var post = PhotoPostParser.parse(event) else { return }
-            seenIds.insert(event.id)
+            guard let postJSON = NMPBridge.shared.decodeKind20Event(json),
+                  let postData = postJSON.data(using: .utf8),
+                  var post = try? JSONDecoder().decode(PhotoPost.self, from: postData) else { return }
+            guard !seenIds.contains(post.id) else { return }
+            seenIds.insert(post.id)
             isLoading = false
             // Apply any already-cached profile for this author immediately.
             if let cached = NMPBridge.shared.profileCache[event.author] {
@@ -65,10 +66,11 @@ final class FeedViewModel {
                 pendingNewCount = pendingPosts.count
             }
         case 0:
-            // Profile metadata arrived — update any posts in feed from this author.
-            guard let meta = try? JSONDecoder().decode(ProfileMeta.self, from: Data(event.content.utf8)) else { return }
-            let name = meta.displayName ?? meta.name
-            let avatar = meta.picture
+            guard let profileJSON = NMPBridge.shared.decodeKind0Event(json),
+                  let profileData = profileJSON.data(using: .utf8),
+                  let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) else { return }
+            let name = parsed.displayName ?? parsed.name
+            let avatar = parsed.picture
             guard name != nil || avatar != nil else { return }
             func apply(to post: inout PhotoPost) {
                 if let n = name { post.authorName = n }
@@ -78,18 +80,6 @@ final class FeedViewModel {
             for i in pendingPosts.indices where pendingPosts[i].authorPubkey == event.author { apply(to: &pendingPosts[i]) }
         default:
             break
-        }
-    }
-
-    // Minimal subset of NIP-01 kind:0 content.
-    private struct ProfileMeta: Codable {
-        let name: String?
-        let displayName: String?
-        let picture: String?
-        enum CodingKeys: String, CodingKey {
-            case name
-            case displayName = "display_name"
-            case picture
         }
     }
 

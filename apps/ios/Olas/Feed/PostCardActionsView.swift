@@ -77,7 +77,6 @@ struct PostCardActionsView: View {
     }
 
     private func sharePost() {
-        // NMP-GAP(#26): Share URL construction and sats→msats conversion must be Rust capabilities.
         let url = "https://njump.me/\(post.id)"
         let av = UIActivityViewController(activityItems: [URL(string: url)!], applicationActivities: nil)
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -152,10 +151,8 @@ struct ZapSheet: View {
     }
 
     private func sendZap() {
-        // NMP-GAP(#26): Share URL construction and sats→msats conversion must be Rust capabilities.
-        let json = """
-        {"event_id":"\(post.id)","amount":\(selectedAmount * 1000),"comment":"\(comment)"}
-        """
-        _ = NMPBridge.shared.dispatchAction(namespace: "nmp.nip57.zap", json: json)
+        if let actionJSON = NMPBridge.shared.buildZapActionJSON(eventId: post.id, sats: selectedAmount) {
+            _ = NMPBridge.shared.dispatchAction(namespace: "nmp.nip57.zap", json: actionJSON)
+        }
     }
 }

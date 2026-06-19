@@ -6,7 +6,6 @@ import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.core.PhotoPost
-import io.f7z.olas.core.PhotoPostParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,12 +40,14 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
                     0 -> {
                         // Profile metadata — filter by pubkey if specified
                         if (pubkey != null && event.author != pubkey) return@onEach
-                        val profile = parseProfile(event) ?: return@onEach
+                        val profileJson = NMPBridge.decodeKind0EventJson(raw) ?: return@onEach
+                        val profile = runCatching { json.decodeFromString<OlasProfile>(profileJson) }.getOrNull() ?: return@onEach
                         _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
                     }
                     20 -> {
                         if (pubkey != null && event.author != pubkey) return@onEach
-                        val post = PhotoPostParser.parseKind20(event) ?: return@onEach
+                        val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
+                        val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
                         val current = _uiState.value
                         _uiState.value = current.copy(
                             posts     = (current.posts + post).distinctBy { it.id }
@@ -57,22 +58,6 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
                 }
             }
             .launchIn(viewModelScope)
-    }
-
-    private fun parseProfile(event: NostrEvent): OlasProfile? {
-        val content = runCatching {
-            json.decodeFromString<kotlinx.serialization.json.JsonObject>(event.content)
-        }.getOrNull() ?: return null
-        return OlasProfile(
-            pubkey      = event.author,
-            name        = content["name"]?.toString()?.trim('"'),
-            displayName = content["display_name"]?.toString()?.trim('"'),
-            about       = content["about"]?.toString()?.trim('"'),
-            picture     = content["picture"]?.toString()?.trim('"'),
-            banner      = content["banner"]?.toString()?.trim('"'),
-            nip05       = content["nip05"]?.toString()?.trim('"'),
-            lud16       = content["lud16"]?.toString()?.trim('"'),
-        )
     }
 
     fun toggleFollow() {

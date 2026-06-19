@@ -79,29 +79,20 @@ enum SearchResultTab: String, CaseIterable {
     private func handleSearchEvent(_ json: String) {
         guard !query.isEmpty,
               let data = json.data(using: .utf8),
-              // NMP-GAP(#11): Raw event decoding must be replaced by a typed Rust search projection.
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
 
         switch event.kind {
         case 0:
-            if let profileData = event.content.data(using: .utf8),
-               var parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
-                parsed = OlasProfile(
-                    pubkey: event.author,
-                    name: parsed.name,
-                    displayName: parsed.displayName,
-                    about: parsed.about,
-                    picture: parsed.picture,
-                    banner: parsed.banner,
-                    nip05: parsed.nip05,
-                    lud16: parsed.lud16
-                )
-                collectedProfiles[event.author] = parsed
+            if let profileJSON = NMPBridge.shared.decodeKind0Event(json),
+               let profileData = profileJSON.data(using: .utf8),
+               let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
+                collectedProfiles[parsed.pubkey] = parsed
             }
         case 20:
-            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
-            if let post = PhotoPostParser.parse(event) {
-                collectedPosts[event.id] = post
+            if let postJSON = NMPBridge.shared.decodeKind20Event(json),
+               let postData = postJSON.data(using: .utf8),
+               let post = try? JSONDecoder().decode(PhotoPost.self, from: postData) {
+                collectedPosts[post.id] = post
             }
         default:
             break

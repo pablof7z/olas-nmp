@@ -29,8 +29,7 @@ import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
 
-// NMP-GAP(#25): Profile field validation and save policy must be enforced by Rust, not Kotlin.
-private const val BIO_MAX_CHARS = 300
+// Field validation and save policy are enforced by Rust — no local constraints here.
 
 @Composable
 fun EditProfileScreen(navController: NavController, currentProfile: OlasProfile?) {
@@ -72,17 +71,11 @@ fun EditProfileScreen(navController: NavController, currentProfile: OlasProfile?
 
         OutlinedTextField(
             value         = about,
-            onValueChange = { if (it.length <= BIO_MAX_CHARS) about = it },
+            onValueChange = { about = it },
             label         = { Text("Bio") },
             modifier      = Modifier.fillMaxWidth(),
             minLines      = 3,
             maxLines      = 6,
-            supportingText = {
-                Text(
-                    text  = "${about.length}/$BIO_MAX_CHARS",
-                    color = if (about.length >= BIO_MAX_CHARS) OlasColors.Destructive else OlasColors.Text3,
-                )
-            },
         )
         Spacer(Modifier.height(12.dp))
 

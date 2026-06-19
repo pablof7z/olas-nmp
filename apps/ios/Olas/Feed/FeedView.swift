@@ -2,9 +2,11 @@ import SwiftUI
 
 struct FeedView: View {
     @State private var vm = FeedViewModel()
-    // NMP-GAP(#28): Feed mode state must be owned by a Rust projection, not native @State.
-    @State private var selectedMode: FeedMode = .network
     @State private var showFullscreen: (post: PhotoPost, index: Int)?
+
+    private var currentMode: FeedMode {
+        NMPBridge.shared.feedMode == "following" ? .following : .network
+    }
 
     var body: some View {
         NavigationStack {
@@ -72,7 +74,7 @@ struct FeedView: View {
             }
         }
         .task {
-            vm.start(mode: selectedMode)
+            vm.start(mode: currentMode)
             // If NMP was already running when the view appeared (e.g. tab revisit),
             // open the feed immediately.
             if NMPBridge.shared.isRunning { vm.openFeed() }
@@ -86,14 +88,14 @@ struct FeedView: View {
     private var feedPickerMenu: some View {
         Menu {
             Button { switchMode(.following) } label: {
-                Label("Following", systemImage: selectedMode == .following ? "checkmark" : "")
+                Label("Following", systemImage: currentMode == .following ? "checkmark" : "")
             }
             Button { switchMode(.network) } label: {
-                Label("Your extended network", systemImage: selectedMode == .network ? "checkmark" : "")
+                Label("Your extended network", systemImage: currentMode == .network ? "checkmark" : "")
             }
         } label: {
             HStack(spacing: 4) {
-                Text(selectedMode == .following ? "Following" : "Network")
+                Text(currentMode == .following ? "Following" : "Network")
                     .font(OlasFont.subheadline())
                     .foregroundStyle(Color.olasText2)
                 Image(systemName: "chevron.down")
@@ -104,8 +106,8 @@ struct FeedView: View {
     }
 
     private func switchMode(_ mode: FeedMode) {
-        guard mode != selectedMode else { return }
-        selectedMode = mode
+        guard mode != currentMode else { return }
+        NMPBridge.shared.setFeedMode(mode == .following ? "following" : "network")
         vm.start(mode: mode)
         // NMP is always running when the user can interact with the mode picker.
         vm.openFeed()

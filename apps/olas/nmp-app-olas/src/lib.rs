@@ -179,16 +179,32 @@ pub extern "C" fn olas_decode_snapshot_active_account_json(
 // Re-export nmp-ffi's NmpApp type so this staticlib contains all needed symbols.
 pub use nmp_ffi::NmpApp;
 
-// Android JNI shim — gated to android targets only.
+// Android JNI shims — gated to android targets only.
 #[cfg(target_os = "android")]
 mod jni;
+#[cfg(target_os = "android")]
+mod jni_extras;
 
-
-// Relay seeding, search feed, and account creation helpers — kept in extras.rs
-// to stay within the 500-line file-size ceiling.
+// Relay seeding, search feed, and account creation helpers.
 mod extras;
 pub use extras::{
     olas_close_search_feed, olas_create_account, olas_open_search_feed, olas_seed_default_relays,
+};
+
+// New event-decoder, BOLT11, geohash and config FFI helpers.
+mod extras_ffi;
+pub use extras_ffi::{
+    olas_bolt11_amount_msats, olas_build_zap_action_json, olas_compose_steps_json,
+    olas_compute_geohash, olas_decode_kind0_event_json, olas_decode_kind20_event_json,
+    olas_filter_catalog_json, olas_media_upload_config_json, olas_onboarding_steps_json,
+    olas_picker_config_json, olas_settings_catalog_json,
+};
+
+// Mutable app-state: Blossom server URL and feed mode (OnceLock<Mutex<String>>).
+mod extras_state;
+pub use extras_state::{
+    olas_blossom_server_url_get, olas_blossom_server_url_set, olas_feed_mode_get,
+    olas_feed_mode_set,
 };
 
 

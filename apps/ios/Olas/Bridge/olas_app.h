@@ -171,3 +171,37 @@ char* olas_decode_snapshot_action_results_json(const uint8_t* frame, size_t len)
 /// stripped in the native encoding step; this tag is added only when the user
 /// explicitly enables location in the composer.
 char* olas_picture_post_publish_json(const char* blossom_result_json, const char* caption, const char* alt, const char* dim, const char* geohash);
+
+// ── New Olas FFI helpers ──────────────────────────────────────────────────────
+
+// Event decoders (caller must free with nmp_free_string)
+char* olas_decode_kind20_event_json(const char* event_json);
+char* olas_decode_kind0_event_json(const char* event_json);
+
+// Bolt11 parsing (returns msats or -1 on error; no memory to free)
+long long olas_bolt11_amount_msats(const char* bolt11);
+
+// Geohash (caller must free with nmp_free_string)
+char* olas_compute_geohash(double lat, double lon, int precision);
+
+// Zap action builder (caller must free with nmp_free_string)
+char* olas_build_zap_action_json(const char* event_id, long long sats);
+
+// Zap notification decoder: parses kind:9735 receipt; returns {"amount_sats":N,"referenced_event_id":"..."} or NULL
+char* olas_decode_zap_notification_json(const char* event_json);
+
+// Config providers (caller must free with nmp_free_string)
+char* olas_filter_catalog_json(void);
+char* olas_media_upload_config_json(void);
+char* olas_picker_config_json(void);
+char* olas_settings_catalog_json(void);
+char* olas_onboarding_steps_json(void);
+char* olas_compose_steps_json(void);
+
+// Blossom server URL (caller must free get result with nmp_free_string)
+char* olas_blossom_server_url_get(void* app);
+void  olas_blossom_server_url_set(void* app, const char* url);
+
+// Feed mode (caller must free get result with nmp_free_string)
+char* olas_feed_mode_get(void* app);
+void  olas_feed_mode_set(void* app, const char* mode);

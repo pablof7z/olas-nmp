@@ -12,11 +12,7 @@ struct SignInView: View {
     }
 
     private var canSubmit: Bool {
-        // NMP-GAP(#27): Secret format validation must be performed by Rust, not Swift.
-        switch selectedMode {
-        case .nsec:   return nsec.hasPrefix("nsec1") && !vm.isSigningIn
-        case .bunker: return nsec.hasPrefix("bunker://") && !vm.isSigningIn
-        }
+        !nsec.isEmpty && !vm.isSigningIn
     }
 
     var body: some View {

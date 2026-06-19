@@ -26,9 +26,17 @@ final class UploadQueue {
     }
 
     private func run(image: UIImage, caption: String, altText: String?, geohash: String?) async {
-        // Encode + strip EXIF
+        // Encode + strip EXIF — load config from Rust.
         setStep(.encoding)
-        guard let jpeg = await ImageEncoder.encodeStrippingEXIF(image) else {
+        struct MediaConfig: Decodable { let max_dimension: Int; let jpeg_quality: Double }
+        guard let configJSON = NMPBridge.shared.mediaUploadConfigJSON(),
+              let configData = configJSON.data(using: .utf8),
+              let config = try? JSONDecoder().decode(MediaConfig.self, from: configData) else {
+            setStep(.error("Media config unavailable.")); return
+        }
+        let maxDimension = CGFloat(config.max_dimension)
+        let jpegQuality = CGFloat(config.jpeg_quality)
+        guard let jpeg = await ImageEncoder.encodeStrippingEXIF(image, maxDimension: maxDimension, quality: jpegQuality) else {
             setStep(.error("Couldn't encode image.")); return
         }
         let tmpURL: URL
@@ -38,8 +46,7 @@ final class UploadQueue {
 
         setStep(.uploading(0))
 
-        let serverURL = UserDefaults.standard.string(forKey: "primaryBlossomServer")
-            ?? "https://blossom.primal.net"
+        let serverURL = NMPBridge.shared.blossomServerURL
         guard let uploadInput = NMPBridge.shared.blossomUploadInputJSON(
             filePath: tmpURL.path, mime: "image/jpeg", serverURL: serverURL
         ) else { setStep(.error("Upload failed.")); return }
@@ -52,7 +59,7 @@ final class UploadQueue {
 
         setStep(.publishing)
 
-        let dim = ImageEncoder.dim(image)
+        let dim = ImageEncoder.dim(image, maxDimension: maxDimension)
         guard let publishInput = NMPBridge.shared.picturePostPublishJSON(
             blossomResultJSON: terminal.resultJSON,
             caption: caption,

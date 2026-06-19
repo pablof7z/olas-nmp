@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -79,20 +80,25 @@ class UploadViewModel : ViewModel() {
      * JSON (built in Rust). Returns null on any failure.
      */
     private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String? {
-        // 1. Decode + downsample (render).
+        // 1. Load upload config from Rust (max_dimension, jpeg_quality).
+        val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
+        val config = runCatching { JSONObject(configJson) }.getOrNull()
+        val maxDimension = config?.optInt("max_dimension", 2048) ?: 2048
+        val jpegQuality = ((config?.optDouble("jpeg_quality", 0.92) ?: 0.92) * 100).toInt().coerceIn(1, 100)
+
+        // 2. Decode + downsample (render).
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
         } ?: return null
-        val resized = downsample(bitmap, 2048)
+        val resized = downsample(bitmap, maxDimension)
         val dim = "${resized.width}x${resized.height}"
 
-        // 2. Write JPEG to a temp file (capability).
+        // 3. Write JPEG to a temp file (capability).
         val tmp = File.createTempFile("olas_upload_", ".jpg", context.cacheDir)
         try {
-            // NMP-GAP(#21): JPEG quality, EXIF strip policy, and downsample dimensions must be Rust-owned capability config.
-            tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, 92, out) }
+            tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out) }
 
-            // 3. Dispatch the Blossom upload action and await the descriptor.
+            // 4. Dispatch the Blossom upload action and await the descriptor.
             val uploadInput = NMPBridge.blossomUploadInputJson(
                 filePath = tmp.absolutePath,
                 mime = "image/jpeg",
@@ -101,7 +107,7 @@ class UploadViewModel : ViewModel() {
             val terminal = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
             if (terminal == null || !terminal.succeeded || terminal.resultJson == "null") return null
 
-            // 4. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
+            // 5. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
             return NMPBridge.picturePostPublishJson(
                 blossomResultJson = terminal.resultJson,
                 caption = caption,

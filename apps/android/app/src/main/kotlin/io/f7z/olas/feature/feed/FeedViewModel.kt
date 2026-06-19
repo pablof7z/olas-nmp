@@ -4,17 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
-import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.PhotoPost
-import io.f7z.olas.core.PhotoPostParser
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
-// NMP-GAP(#28): Feed mode state must be owned by a Rust projection, not native ViewModel state.
 data class FeedUiState(
     val posts: List<PhotoPost> = emptyList(),
     val pendingPosts: List<PhotoPost> = emptyList(),
@@ -31,17 +30,31 @@ class FeedViewModel : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
-        NMPBridge.openNetworkFeed()
+        // Restore feed mode from Rust (persisted across restarts).
+        val persistedMode = when (NMPBridge.feedMode()) {
+            "following" -> FeedMode.FOLLOWING
+            else -> FeedMode.NETWORK
+        }
+        _uiState.value = _uiState.value.copy(feedMode = persistedMode)
+        if (persistedMode == FeedMode.FOLLOWING) NMPBridge.openFollowingFeed() else NMPBridge.openNetworkFeed()
         observeEvents()
+        // On cold restart, relay WebSocket connections establish asynchronously.
+        // Re-open the subscription after 6s and 18s if no events have arrived yet.
+        viewModelScope.launch {
+            for (delayMs in listOf(6_000L, 18_000L)) {
+                delay(delayMs)
+                if (_uiState.value.isLoading && _uiState.value.posts.isEmpty()) {
+                    NMPBridge.openNetworkFeed()
+                }
+            }
+        }
     }
 
     private fun observeEvents() {
         NMPBridge.nostrEvents
             .onEach { raw ->
-                val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
-                    ?: return@onEach
-                // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Kotlin. Must be replaced by a typed Rust snapshot projection.
-                val post = PhotoPostParser.parseKind20(event) ?: return@onEach
+                val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
+                val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
                 val current = _uiState.value
                 if (current.posts.isEmpty()) {
                     // First batch — show immediately
@@ -66,8 +79,14 @@ class FeedViewModel : ViewModel() {
         if (_uiState.value.feedMode == mode) return
         _uiState.value = FeedUiState(isLoading = true, feedMode = mode)
         when (mode) {
-            FeedMode.FOLLOWING -> NMPBridge.openFollowingFeed()
-            FeedMode.NETWORK   -> NMPBridge.openNetworkFeed()
+            FeedMode.FOLLOWING -> {
+                NMPBridge.setFeedMode("following")
+                NMPBridge.openFollowingFeed()
+            }
+            FeedMode.NETWORK   -> {
+                NMPBridge.setFeedMode("network")
+                NMPBridge.openNetworkFeed()
+            }
         }
     }
 

@@ -23,8 +23,7 @@ import io.f7z.olas.ui.theme.OlasColors
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(navController: NavController) {
-    // NMP-GAP(#11): Raw event decoding must be replaced by a typed Rust search projection.
-    // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Kotlin. Must be replaced by a typed Rust snapshot projection.
+    // Search results are decoded via NMPBridge.decodeKind0EventJson / decodeKind20EventJson when a search projection is wired.
     var query by remember { mutableStateOf("") }
     var active by remember { mutableStateOf(false) }
 

@@ -16,8 +16,7 @@ struct CaptionView: View {
     @State private var locationManager = LocationOnce()
 
     private var serverURL: String {
-        // NMP-GAP(#6): Blossom server URL must come from a Rust-owned server-config projection, not UserDefaults.
-        UserDefaults.standard.string(forKey: "primaryBlossomServer") ?? "https://blossom.primal.net"
+        NMPBridge.shared.blossomServerURL
     }
 
     private var serverName: String {
@@ -186,31 +185,9 @@ final class LocationOnce: NSObject, CLLocationManagerDelegate {
         let lon = loc.coordinate.longitude
         m.stopUpdatingLocation()  // called on delegate thread
         Task { @MainActor in
-            // NMP-GAP(#20): Geohash precision policy must be computed by Rust, not Swift.
-            geohash = Self.encodeGeohash(lat: lat, lon: lon, precision: 4)
+            geohash = NMPBridge.shared.computeGeohash(lat: lat, lon: lon, precision: 6)
         }
     }
 
     nonisolated func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {}
-
-    // Simple geohash encoder — 4 chars ≈ 39km × 20km precision.
-    private static func encodeGeohash(lat: Double, lon: Double, precision: Int) -> String {
-        let chars = Array("0123456789bcdefghjkmnpqrstuvwxyz")
-        var minLat = -90.0, maxLat = 90.0, minLon = -180.0, maxLon = 180.0
-        var result = "", bits = 0, bitCount = 0
-        var isEven = true
-        while result.count < precision {
-            if isEven {
-                let mid = (minLon + maxLon) / 2
-                if lon >= mid { bits = (bits << 1) | 1; minLon = mid } else { bits <<= 1; maxLon = mid }
-            } else {
-                let mid = (minLat + maxLat) / 2
-                if lat >= mid { bits = (bits << 1) | 1; minLat = mid } else { bits <<= 1; maxLat = mid }
-            }
-            isEven.toggle()
-            bitCount += 1
-            if bitCount == 5 { result.append(chars[bits]); bits = 0; bitCount = 0 }
-        }
-        return result
-    }
 }

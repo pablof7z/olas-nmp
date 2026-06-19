@@ -14,11 +14,10 @@ enum ImageEncoder {
     /// We always strip EXIF regardless of whether the user enabled location.
     /// Location is communicated only via the NIP-52 "g" Nostr tag, which the
     /// caller computes at 4-char geohash precision.
-    // NMP-GAP(#21): JPEG quality, EXIF strip policy, and downsample dimensions must be Rust-owned capability config.
     static func encodeStrippingEXIF(
         _ image: UIImage,
-        maxDimension: CGFloat = 2048,
-        quality: CGFloat = 0.92
+        maxDimension: CGFloat,
+        quality: CGFloat
     ) async -> Data? {
         await Task.detached(priority: .utility) {
             // 1. Downsample to a fresh CGImage (strips metadata by redrawing).
@@ -67,7 +66,7 @@ enum ImageEncoder {
     }
 
     /// Pixel dimensions of `image` as "WxH" after downsampling.
-    static func dim(_ image: UIImage, maxDimension: CGFloat = 2048) -> String {
+    static func dim(_ image: UIImage, maxDimension: CGFloat) -> String {
         let size = image.size
         let maxSide = max(size.width, size.height)
         let scale = maxSide > maxDimension ? maxDimension / maxSide : 1.0

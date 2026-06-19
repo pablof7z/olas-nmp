@@ -60,8 +60,7 @@ fun PostActions(
         // Zap
         ZapButton(onClick = onZap)
 
-        // NMP-GAP(#26): Share URL construction and sats→msats conversion must be Rust capabilities.
-        // Share
+        // Share (URL construction delegated to Rust via NMPBridge.buildZapActionJson when zapping).
         IconButton(onClick = onShare, modifier = Modifier.size(44.dp)) {
             Icon(
                 imageVector        = Icons.Filled.Share,

@@ -335,6 +335,105 @@ import Combine
         }
     }
 
+    // MARK: - Event decoders
+
+    func decodeKind20Event(_ json: String) -> String? {
+        json.withCString { ptr in
+            guard let res = olas_decode_kind20_event_json(ptr) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
+    func decodeKind0Event(_ json: String) -> String? {
+        json.withCString { ptr in
+            guard let res = olas_decode_kind0_event_json(ptr) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
+    func decodeZapNotification(_ json: String) -> String? {
+        json.withCString { ptr in
+            guard let res = olas_decode_zap_notification_json(ptr) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
+    func bolt11AmountMsats(_ bolt11: String) -> Int64 {
+        bolt11.withCString { olas_bolt11_amount_msats($0) }
+    }
+
+    func computeGeohash(lat: Double, lon: Double, precision: Int32 = 6) -> String? {
+        guard let res = olas_compute_geohash(lat, lon, precision) else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func buildZapActionJSON(eventId: String, sats: Int64) -> String? {
+        eventId.withCString { id in
+            guard let res = olas_build_zap_action_json(id, sats) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
+    func filterCatalogJSON() -> String? {
+        guard let res = olas_filter_catalog_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func mediaUploadConfigJSON() -> String? {
+        guard let res = olas_media_upload_config_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func pickerConfigJSON() -> String? {
+        guard let res = olas_picker_config_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func settingsCatalogJSON() -> String? {
+        guard let res = olas_settings_catalog_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func onboardingStepsJSON() -> String? {
+        guard let res = olas_onboarding_steps_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func composeStepsJSON() -> String? {
+        guard let res = olas_compose_steps_json() else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    var blossomServerURL: String {
+        guard let res = olas_blossom_server_url_get(appPtr) else { return "" }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func setBlossomServerURL(_ url: String) {
+        guard let app = appPtr else { return }
+        url.withCString { olas_blossom_server_url_set(app, $0) }
+    }
+
+    private(set) var feedMode: String = "network"
+
+    func setFeedMode(_ mode: String) {
+        guard let app = appPtr else { return }
+        mode.withCString { olas_feed_mode_set(app, $0) }
+        feedMode = mode
+    }
+
     // MARK: - Relay management
 
     func addRelay(url: String, role: String) {

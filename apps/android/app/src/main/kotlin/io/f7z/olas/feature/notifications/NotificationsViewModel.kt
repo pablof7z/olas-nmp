@@ -56,14 +56,15 @@ class NotificationsViewModel(app: Application) : AndroidViewModel(app) {
             }
             9735 -> {
                 // kind 9735 — zap receipt
-                // NMP-GAP(#8): Zap amount must be delivered by a Rust notification projection, not computed from raw event tags in Kotlin.
-                // bolt11 amount decoding is non-trivial; default to 21 sats like iOS.
+                val bolt11 = event.tags.firstOrNull { it.firstOrNull() == "bolt11" }?.getOrNull(1) ?: ""
+                val msats = if (bolt11.isNotEmpty()) NMPBridge.bolt11AmountMsats(bolt11) else 0L
+                val sats = msats / 1000
                 NotificationItem(
                     id           = event.id,
                     type         = NotificationType.ZAP,
                     actorName    = event.author.take(8),
                     actorAvatar  = null,
-                    body         = "zapped you 21 sats.",
+                    body         = "zapped you $sats sats.",
                     thumbnailUrl = null,
                     createdAt    = event.created_at,
                 )

@@ -9,6 +9,14 @@ struct PhotoSelectionScreen: View {
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var isLoading = false
 
+    private var maxSelection: Int {
+        guard let configJSON = NMPBridge.shared.pickerConfigJSON(),
+              let data = configJSON.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let limit = obj["max_selection"] as? Int else { return 0 }
+        return limit
+    }
+
     var body: some View {
         ZStack {
             Color.olasBackground.ignoresSafeArea()
@@ -16,11 +24,10 @@ struct PhotoSelectionScreen: View {
                 ProgressView().tint(Color.olasText1)
             }
         }
-        // NMP-GAP(#23): Picker constraints (max selection, ingestion policy) must come from Rust config.
         .photosPicker(
             isPresented: $isPresented,
             selection: $selectedItems,
-            maxSelectionCount: 10,
+            maxSelectionCount: maxSelection,
             matching: .images
         )
         .onChange(of: isPresented) { _, newValue in

@@ -35,26 +35,43 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.ui.theme.OlasColors
+import org.json.JSONArray
 
 data class PhotoFilter(val name: String, val matrix: FloatArray)
 
-// NMP-GAP(#19): Photo filter catalog must come from a Rust-owned capability registry, not a hardcoded Kotlin list.
-val FILTERS: List<PhotoFilter> = listOf(
-    PhotoFilter("Original", identityMatrix()),
-    PhotoFilter("Daylight", warmMatrix(0.15f)),
-    PhotoFilter("Ember",    warmMatrix(0.30f)),
-    PhotoFilter("Dusk",     coolMatrix(0.2f)),
-    PhotoFilter("Mist",     fadeMatrix(0.15f)),
-    PhotoFilter("Chrome",   contrastMatrix(1.4f)),
-    PhotoFilter("Film",     filmMatrix()),
-    PhotoFilter("Fade",     fadeMatrix(0.25f)),
-    PhotoFilter("Grain",    desaturateMatrix(0.3f)),
-    PhotoFilter("Arctic",   coolMatrix(0.35f)),
-    PhotoFilter("Copper",   copperMatrix()),
-    PhotoFilter("Veil",     veilMatrix()),
-    PhotoFilter("Bloom",    bloomMatrix()),
+/** Local registry mapping filter IDs (from Rust catalog) to CIEffect-equivalent matrices. */
+private val FILTER_REGISTRY: Map<String, PhotoFilter> = mapOf(
+    "original" to PhotoFilter("Original", identityMatrix()),
+    "daylight" to PhotoFilter("Daylight", warmMatrix(0.15f)),
+    "ember"    to PhotoFilter("Ember",    warmMatrix(0.30f)),
+    "dusk"     to PhotoFilter("Dusk",     coolMatrix(0.2f)),
+    "mist"     to PhotoFilter("Mist",     fadeMatrix(0.15f)),
+    "chrome"   to PhotoFilter("Chrome",   contrastMatrix(1.4f)),
+    "film"     to PhotoFilter("Film",     filmMatrix()),
+    "fade"     to PhotoFilter("Fade",     fadeMatrix(0.25f)),
+    "grain"    to PhotoFilter("Grain",    desaturateMatrix(0.3f)),
+    "arctic"   to PhotoFilter("Arctic",   coolMatrix(0.35f)),
+    "copper"   to PhotoFilter("Copper",   copperMatrix()),
+    "veil"     to PhotoFilter("Veil",     veilMatrix()),
+    "bloom"    to PhotoFilter("Bloom",    bloomMatrix()),
 )
+
+/** Load the ordered filter catalog from Rust; fall back to the full local registry if unavailable. */
+fun loadFilterCatalog(): List<PhotoFilter> {
+    val catalogJson = NMPBridge.filterCatalogJson() ?: return FILTER_REGISTRY.values.toList()
+    return runCatching {
+        val arr = JSONArray(catalogJson)
+        (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = obj.optString("id").lowercase()
+            FILTER_REGISTRY[id]
+        }.ifEmpty { FILTER_REGISTRY.values.toList() }
+    }.getOrElse { FILTER_REGISTRY.values.toList() }
+}
+
+val FILTERS: List<PhotoFilter> get() = loadFilterCatalog()
 
 @Composable
 fun FilterCarousel(

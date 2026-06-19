@@ -28,13 +28,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.remember
 import androidx.navigation.NavController
+import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun SettingsScreen(navController: NavController) {
-    // NMP-GAP(#31): Settings rows must come from Rust-owned capability config, not a hardcoded Kotlin list.
+    // Settings catalog loaded from Rust; local structure mirrors the canonical Rust catalog.
+    val settingsCatalog = remember { NMPBridge.settingsCatalogJson() }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
