@@ -1,0 +1,10 @@
+[
+  [
+    "user",
+    "this will be an nmp app (../nostr-multi-platform) -- start setting up the basics -- we'll start with an ios and android app (that MUST be kept in feature-parity at all times) -- add an AGENTS.md rule like the one in nmp repo about 300/500 LOC soft/hard limit per source code file"
+  ],
+  [
+    "assistant",
+    "Set up the project basics, including an AGENTS.md with the 300/500 LOC rule and iOS/Android feature parity requirement, and created the initial project structure."
+  ]
+]

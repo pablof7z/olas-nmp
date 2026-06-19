@@ -1,0 +1,10 @@
+[
+  [
+    "user",
+    "this will be an nmp app (../nostr-multi-platform) -- start setting up the basics -- we'll start with an ios and android app (that MUST be kept in feature-parity at all times) -- add an AGENTS.md rule like the one in nmp repo about 300/500 LOC soft/hard limit per source code file"
+  ],
+  [
+    "assistant",
+    "Done. Here's what was set up:\n\n**`AGENTS.md`** — contains the 300/500 LOC file-size rule (soft/hard), plus a **non-negotiable iOS/Android feature parity** section: every PR that touches one platform must ship the equivalent change on the other in the same PR, no stubs allowed.\n\n**Project structure:**\n```\nOlas/\n├── AGENTS.md / CLAUDE.md / WIP.md (gitignored)\n├── Cargo.toml          — workspace, NMP crates pinned at v0.8.0 rev\n├── justfile            — just rust-ios-sim, build-ios-sim, build-android, relay-run\n├── apps/olas/\n│   └── nmp-app-olas/   — app Rust crate (staticlib FFI for iOS/Android)\n├── ios/Olas/\n│   ├── project.yml     — XcodeGen, bundle io.f7z.olas, team 456SHKPP26\n│   └── Olas/           — SwiftUI app shell (App/, Features/, Bridge/, etc.)\n├── android/\n│   └── app/            — Kotlin/Compose app (io.f7z.olas), cargo-ndk wired into preBuild\n└── relay/\n    ├── go.mod          — module github.com/pablof7z/olas/relay\n    ├── main.go         — minimal HTTP/Nostr scaffold\n    └── AGENTS.md       — relay-specific contributor notes\n```\n\nThe `Cargo.toml` has the `[patch]` block for `../nostr-multi-platform` commented in ready to uncomment for local NMP development. Run `just gen-ios` to generate the Xcode project once `xcodegen` is available."
+  ]
+]

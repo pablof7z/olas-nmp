@@ -7,10 +7,10 @@ WIP.md
 Cargo.lock
 
 # Xcode
-ios/*/DerivedData/
-ios/*/*.xcodeproj/
-ios/*/*.xcworkspace/
-ios/*/build/
+apps/ios/DerivedData/
+apps/ios/*.xcodeproj/
+apps/ios/*.xcworkspace/
+apps/ios/build/
 *.xcuserstate
 *.xcuserdata/
 *.moved-aside
@@ -22,15 +22,15 @@ timeline.xctimeline
 playground.xcworkspace
 
 # Android
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-android/app/src/main/jniLibs/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
+apps/android/app/src/main/jniLibs/
 
 # Go
-relay/vendor/
-relay/*.test
+apps/relay/vendor/
+apps/relay/*.test
 
 # Node / npm
 node_modules/

@@ -51,15 +51,16 @@ dependencies {
 }
 
 // Cross-compile the JNI shim. Output lands in jniLibs for both shipped ABIs.
+// rootProject.projectDir = apps/android/ → .parentFile.parentFile = repo root.
 val cargoNdk by tasks.registering(Exec::class) {
-    workingDir = rootProject.projectDir.parentFile // repo root
+    workingDir = rootProject.projectDir.parentFile.parentFile // repo root
     val cargo = "${System.getProperty("user.home")}/.cargo/bin/cargo"
     val bin = if (OperatingSystem.current().isWindows) "$cargo.exe" else cargo
     commandLine(
         bin, "ndk",
         "--manifest-path", "apps/olas/nmp-app-olas/Cargo.toml",
         "-t", "arm64-v8a", "-t", "x86_64",
-        "-o", "android/app/src/main/jniLibs",
+        "-o", "apps/android/app/src/main/jniLibs",
         "build", "--release",
     )
 }
