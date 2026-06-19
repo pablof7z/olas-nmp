@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
-import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.PhotoPost
-import io.f7z.olas.core.PhotoPostParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +12,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
 
-// NMP-GAP(#28): Feed mode state must be owned by a Rust projection, not native ViewModel state.
 data class FeedUiState(
     val posts: List<PhotoPost> = emptyList(),
     val pendingPosts: List<PhotoPost> = emptyList(),
@@ -38,10 +35,10 @@ class FeedViewModel : ViewModel() {
     private fun observeEvents() {
         NMPBridge.nostrEvents
             .onEach { raw ->
-                val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
+                val postJson = NMPBridge.photoPostJson(raw, _uiState.value.feedMode)
                     ?: return@onEach
-                // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Kotlin. Must be replaced by a typed Rust snapshot projection.
-                val post = PhotoPostParser.parseKind20(event) ?: return@onEach
+                val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull()
+                    ?: return@onEach
                 val current = _uiState.value
                 if (current.posts.isEmpty()) {
                     // First batch — show immediately
@@ -84,5 +81,19 @@ class FeedViewModel : ViewModel() {
 
     fun loadOlderPosts() {
         NMPBridge.loadOlderFeed("photo_feed")
+    }
+
+    fun react(post: PhotoPost) {
+        if (post.isLiked) return
+        NMPBridge.reactTo(post)
+    }
+
+    fun bookmark(post: PhotoPost) {
+        val shouldAdd = !post.isBookmarked
+        NMPBridge.bookmarkEvent(post, add = shouldAdd)
+    }
+
+    fun zap(post: PhotoPost, amountSats: Long = 21) {
+        NMPBridge.zapPost(post, amountSats)
     }
 }

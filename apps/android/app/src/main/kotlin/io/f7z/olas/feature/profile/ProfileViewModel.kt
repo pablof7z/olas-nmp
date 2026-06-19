@@ -2,11 +2,10 @@ package io.f7z.olas.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
-import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.core.PhotoPost
-import io.f7z.olas.core.PhotoPostParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,18 +34,17 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
     private fun observeEvents() {
         NMPBridge.nostrEvents
             .onEach { raw ->
-                val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
-                    ?: return@onEach
-                when (event.kind) {
-                    0 -> {
-                        // Profile metadata — filter by pubkey if specified
-                        if (pubkey != null && event.author != pubkey) return@onEach
-                        val profile = parseProfile(event) ?: return@onEach
+                NMPBridge.profileJson(raw)
+                    ?.let { runCatching { json.decodeFromString<OlasProfile>(it) }.getOrNull() }
+                    ?.takeIf { pubkey == null || it.pubkey == pubkey }
+                    ?.let { profile ->
                         _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
                     }
-                    20 -> {
-                        if (pubkey != null && event.author != pubkey) return@onEach
-                        val post = PhotoPostParser.parseKind20(event) ?: return@onEach
+
+                NMPBridge.photoPostJson(raw, FeedMode.FOLLOWING)
+                    ?.let { runCatching { json.decodeFromString<PhotoPost>(it) }.getOrNull() }
+                    ?.takeIf { pubkey == null || it.authorPubkey == pubkey }
+                    ?.let { post ->
                         val current = _uiState.value
                         _uiState.value = current.copy(
                             posts     = (current.posts + post).distinctBy { it.id }
@@ -54,31 +52,12 @@ class ProfileViewModel(val pubkey: String?) : ViewModel() {
                             isLoading = false,
                         )
                     }
-                }
             }
             .launchIn(viewModelScope)
     }
 
-    private fun parseProfile(event: NostrEvent): OlasProfile? {
-        val content = runCatching {
-            json.decodeFromString<kotlinx.serialization.json.JsonObject>(event.content)
-        }.getOrNull() ?: return null
-        return OlasProfile(
-            pubkey      = event.author,
-            name        = content["name"]?.toString()?.trim('"'),
-            displayName = content["display_name"]?.toString()?.trim('"'),
-            about       = content["about"]?.toString()?.trim('"'),
-            picture     = content["picture"]?.toString()?.trim('"'),
-            banner      = content["banner"]?.toString()?.trim('"'),
-            nip05       = content["nip05"]?.toString()?.trim('"'),
-            lud16       = content["lud16"]?.toString()?.trim('"'),
-        )
-    }
-
     fun toggleFollow() {
-        val following = !_uiState.value.isFollowing
-        _uiState.value = _uiState.value.copy(isFollowing = following)
         val pk = pubkey ?: return
-        if (following) NMPBridge.follow(pk) else NMPBridge.unfollow(pk)
+        if (_uiState.value.isFollowing) NMPBridge.unfollow(pk) else NMPBridge.follow(pk)
     }
 }

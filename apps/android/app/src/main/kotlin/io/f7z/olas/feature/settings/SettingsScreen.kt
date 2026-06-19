@@ -34,7 +34,6 @@ import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun SettingsScreen(navController: NavController) {
-    // NMP-GAP(#31): Settings rows must come from Rust-owned capability config, not a hardcoded Kotlin list.
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()

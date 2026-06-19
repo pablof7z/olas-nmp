@@ -4,7 +4,7 @@ date: 2026-06-19
 session: 2aff77b8-e8ba-493a-b944-1fea0ecd124d
 transcript: /Users/pablofernandez/.claude/projects/-Users-pablofernandez-Work-Olas/2aff77b8-e8ba-493a-b944-1fea0ecd124d.jsonl
 salience: architecture
-status: active
+status: superseded
 subjects:
   - olas
   - cross-platform-parity

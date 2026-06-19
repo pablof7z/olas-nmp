@@ -29,6 +29,16 @@ build-ios-sim: rust-ios-sim gen-ios
         -scheme Olas \
         -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
         -derivedDataPath apps/ios/DerivedData \
+        RUST_TARGET=aarch64-apple-ios-sim \
+        build
+
+build-ios-device: rust-ios-device gen-ios
+    xcodebuild \
+        -project apps/ios/Olas.xcodeproj \
+        -scheme Olas \
+        -destination 'platform=iOS,id=3C438D9B-2021-5A30-93DB-910F7754F9A2' \
+        -derivedDataPath apps/ios/DerivedData \
+        RUST_TARGET=aarch64-apple-ios \
         build
 
 # ── Android ───────────────────────────────────────────────────────────────────

@@ -107,7 +107,12 @@ fun MediaServerScreen(navController: NavController) {
                 contentColor   = OlasColors.Background,
             ),
         ) {
-            Text("Continue", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Continue",
+                color = OlasColors.Background,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }

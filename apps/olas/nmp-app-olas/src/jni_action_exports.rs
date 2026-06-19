@@ -1,0 +1,187 @@
+#![cfg(target_os = "android")]
+
+use jni::objects::{JClass, JString};
+use jni::sys::{jdouble, jint, jlong, jstring};
+use jni::JNIEnv;
+use nmp_ffi::nmp_app_set_storage_path;
+
+use crate::{
+    olas_blossom_upload_input_json, olas_bolt11_amount_sats, olas_bookmark_event_action_json,
+    olas_location_geohash4, olas_picture_post_publish_json, olas_react_action_json,
+    olas_zap_action_json,
+};
+
+use super::{cstring_into_jstring, jstring_to_cstring, unpack};
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeBlossomUploadInputJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    file_path: JString,
+    content_type: JString,
+    server_url: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(path) = jstring_to_cstring(&mut env, &file_path) else {
+            return std::ptr::null_mut();
+        };
+        let mime = jstring_to_cstring(&mut env, &content_type);
+        let server = jstring_to_cstring(&mut env, &server_url);
+        let mime_ptr = mime.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let server_ptr = server.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let raw = olas_blossom_upload_input_json(path.as_ptr(), mime_ptr, server_ptr);
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeReactActionJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    target_event_id: JString,
+    target_author_pubkey: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(event_id) = jstring_to_cstring(&mut env, &target_event_id) else {
+            return std::ptr::null_mut();
+        };
+        let author = jstring_to_cstring(&mut env, &target_author_pubkey);
+        let author_ptr = author.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let raw = olas_react_action_json(event_id.as_ptr(), author_ptr);
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeZapActionJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    recipient_pubkey: JString,
+    target_event_id: JString,
+    amount_msats: jlong,
+    comment: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(recipient) = jstring_to_cstring(&mut env, &recipient_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let target = jstring_to_cstring(&mut env, &target_event_id);
+        let comment = jstring_to_cstring(&mut env, &comment);
+        let target_ptr = target.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let comment_ptr = comment.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let amount = if amount_msats > 0 {
+            amount_msats as u64
+        } else {
+            0
+        };
+        let raw = olas_zap_action_json(recipient.as_ptr(), target_ptr, amount, comment_ptr);
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeBolt11AmountSats(
+    mut env: JNIEnv,
+    _class: JClass,
+    bolt11: JString,
+) -> jlong {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let Some(invoice) = jstring_to_cstring(&mut env, &bolt11) else {
+            return 0_i64;
+        };
+        let amount = olas_bolt11_amount_sats(invoice.as_ptr());
+        amount.min(i64::MAX as u64) as i64
+    }));
+    result.unwrap_or(0) as jlong
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeBookmarkEventActionJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    account_pubkey: JString,
+    event_id: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(account) = jstring_to_cstring(&mut env, &account_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let Some(event_id) = jstring_to_cstring(&mut env, &event_id) else {
+            return std::ptr::null_mut();
+        };
+        let raw = olas_bookmark_event_action_json(account.as_ptr(), event_id.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeLocationGeohash4(
+    mut env: JNIEnv,
+    _class: JClass,
+    latitude: jdouble,
+    longitude: jdouble,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let raw = olas_location_geohash4(latitude as f64, longitude as f64);
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativePicturePostPublishJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    blossom_result_json: JString,
+    caption: JString,
+    alt: JString,
+    dim: JString,
+    geohash: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(descriptor) = jstring_to_cstring(&mut env, &blossom_result_json) else {
+            return std::ptr::null_mut();
+        };
+        let caption_c = jstring_to_cstring(&mut env, &caption);
+        let alt_c = jstring_to_cstring(&mut env, &alt);
+        let dim_c = jstring_to_cstring(&mut env, &dim);
+        let geohash_c = jstring_to_cstring(&mut env, &geohash);
+        let caption_ptr = caption_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let alt_ptr = alt_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let dim_ptr = dim_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let geohash_ptr = geohash_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let raw = olas_picture_post_publish_json(
+            descriptor.as_ptr(),
+            caption_ptr,
+            alt_ptr,
+            dim_ptr,
+            geohash_ptr,
+        );
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeSetStoragePath(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    path: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(path_c) = jstring_to_cstring(&mut env, &path) else {
+            return -1_i32;
+        };
+        nmp_app_set_storage_path(app, path_c.as_ptr()) as i32
+    }));
+    result.unwrap_or(-1)
+}

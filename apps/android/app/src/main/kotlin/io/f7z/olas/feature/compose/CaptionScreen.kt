@@ -1,6 +1,9 @@
 package io.f7z.olas.feature.compose
 
+import android.Manifest
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,10 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,10 +49,15 @@ fun CaptionScreen(
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     var caption by remember { mutableStateOf("") }
-    // NMP-GAP(#6): Blossom server URL must come from a Rust-owned server-config projection, not local state.
-    // NMP-GAP(#20): Geohash precision policy must be computed by Rust, not Kotlin.
     var locationEnabled by remember { mutableStateOf(false) }
+    var geohash by remember { mutableStateOf<String?>(null) }
     val altTexts = remember { mutableMapOf<Uri, String>() }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        locationEnabled = granted
+        geohash = if (granted) currentCoarseGeohash4(context) else null
+    }
 
     Column(
         modifier = Modifier
@@ -60,21 +65,6 @@ fun CaptionScreen(
             .background(OlasColors.Background)
             .padding(horizontal = 16.dp, vertical = 16.dp),
     ) {
-        // Hashtag-colored caption field
-        val annotated = buildAnnotatedString {
-            val words = caption.split(" ")
-            words.forEachIndexed { i, word ->
-                if (word.startsWith("#")) {
-                    withStyle(SpanStyle(color = OlasColors.Blue, fontWeight = FontWeight.SemiBold)) {
-                        append(word)
-                    }
-                } else {
-                    append(word)
-                }
-                if (i < words.size - 1) append(" ")
-            }
-        }
-
         TextField(
             value         = caption,
             onValueChange = { caption = it },
@@ -94,7 +84,7 @@ fun CaptionScreen(
         HorizontalDivider(color = OlasColors.Border)
 
         // Alt text chips per image
-        uris.forEachIndexed { index, uri ->
+        uris.forEachIndexed { index, _ ->
             Row(
                 modifier          = Modifier.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -120,12 +110,27 @@ fun CaptionScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Location", color = OlasColors.Text1, fontSize = 16.sp)
                 if (locationEnabled) {
-                    Text("Privacy note: your location will be public.", color = OlasColors.Text2, fontSize = 12.sp)
+                    Text(
+                        text = geohash?.let { "Approximate area · $it" }
+                            ?: "Location will be added if available.",
+                        color = OlasColors.Text2,
+                        fontSize = 12.sp,
+                    )
                 }
             }
             Switch(
                 checked         = locationEnabled,
-                onCheckedChange = { locationEnabled = it },
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        locationEnabled = false
+                        geohash = null
+                    } else if (hasCoarseLocationPermission(context)) {
+                        locationEnabled = true
+                        geohash = currentCoarseGeohash4(context)
+                    } else {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    }
+                },
                 colors          = SwitchDefaults.colors(
                     checkedThumbColor   = OlasColors.Background,
                     checkedTrackColor   = OlasColors.Text1,
@@ -143,7 +148,7 @@ fun CaptionScreen(
 
         Button(
             onClick  = {
-                vm.upload(context, uris, caption, altTexts)
+                vm.upload(context, uris, caption, altTexts, if (locationEnabled) geohash else null)
                 onShare()
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -157,7 +162,12 @@ fun CaptionScreen(
             if (state.step != UploadStep.IDLE && state.step != UploadStep.ERROR && state.step != UploadStep.DONE) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = OlasColors.Background)
             } else {
-                Text("Share", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Share",
+                    color = OlasColors.Background,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }

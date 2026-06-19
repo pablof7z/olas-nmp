@@ -41,13 +41,25 @@ struct UploadMiniPlayer: View {
             // Done checkmark or spinner
             Group {
                 if case .done = upload.step {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.olasSuccess)
-                        .font(.system(size: 18))
+                    Button {
+                        UploadQueue.shared.clearTerminal()
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.olasSuccess)
+                            .font(.system(size: 18))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
                 } else if case .error = upload.step {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Color.olasDestructive)
-                        .font(.system(size: 18))
+                    Button {
+                        UploadQueue.shared.clearTerminal()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color.olasDestructive)
+                            .font(.system(size: 18))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
                 } else {
                     ProgressView()
                         .tint(Color.olasText2)
@@ -79,7 +91,7 @@ struct UploadMiniPlayer: View {
         case .idle:             return "Preparing…"
         case .encoding:         return "Preparing photo…"
         case .uploading:        return "Uploading…"
-        case .publishing:       return "Publishing to Nostr…"
+        case .publishing:       return "Publishing…"
         case .done:             return "Posted!"
         case .error(let msg):   return msg
         }

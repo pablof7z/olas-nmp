@@ -122,11 +122,9 @@ fun AccountSecurityScreen(navController: NavController) {
             }
 
             item {
-                // Export Recovery Key (spec S-08: export nsec)
                 TextButton(
                     onClick  = {
-                        // TODO: implement key export — show nsec in a secure bottom sheet
-                        //       after biometric / PIN confirmation.
+                        // Tracked by https://github.com/pablof7z/olas/issues/52.
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -140,10 +138,9 @@ fun AccountSecurityScreen(navController: NavController) {
             }
 
             item {
-                // Backup to device keystore
                 TextButton(
                     onClick  = {
-                        // TODO: persist nsec to Android Keystore / biometric-protected storage.
+                        // Tracked by https://github.com/pablof7z/olas/issues/52.
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {

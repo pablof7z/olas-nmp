@@ -11,7 +11,6 @@ enum OnboardingStep: Hashable {
 
 @Observable @MainActor
 final class OnboardingViewModel {
-    // NMP-GAP(#32): Onboarding step routing and completion state must be driven by a Rust state machine.
     var step: OnboardingStep = .welcome
     var createdName: String = ""
     var createdUsername: String = ""

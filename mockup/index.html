@@ -1,0 +1,2525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#090909">
+<title>Olas</title>
+<style>
+:root {
+  --bg: #090909;
+  --surface: #141414;
+  --surface2: #1C1C1E;
+  --border: #2C2C2E;
+  --border-s: #18181A;
+  --text1: #f5f5f5;
+  --text2: #98989E;
+  --text3: #48484A;
+  --zap: #fbb131;
+  --heart: #ff375f;
+  --success: #34c759;
+  --blue: #0a84ff;
+  --tab-h: 58px;
+  --status-h: 50px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;user-select:none;font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif}
+html,body{width:100%;height:100%;background:#111;overflow:hidden;display:flex;align-items:center;justify-content:center}
+@media(min-width:500px){
+  body{background:#0d0d0d}
+  .app{width:393px;height:852px;border-radius:52px;overflow:hidden;position:relative;
+    border:1.5px solid #444;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 0 0 9px #1c1c1c,0 0 0 10.5px #3a3a3a,0 60px 140px rgba(0,0,0,.95),0 30px 70px rgba(0,0,0,.7)}
+  .app::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:400;border-radius:52px;
+    background:radial-gradient(120% 80% at 12% 6%,rgba(255,255,255,.05),rgba(255,255,255,0) 45%)}
+  .dyn-island{display:block}
+  .notch{display:none}
+  /* leave room for the Dynamic Island above the status bar content */
+  .status-bar{padding-top:42px;height:calc(var(--status-h) + 42px)}
+}
+@media(max-width:499px){
+  body{background:var(--bg);align-items:flex-start}
+  .app{width:100%;height:100dvh;border-radius:0}
+  .notch,.dyn-island{display:none!important}
+  .status-bar{padding-top:env(safe-area-inset-top,14px)}
+}
+.app{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;position:relative}
+.dyn-island{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;z-index:401}
+
+/* STATUS BAR */
+.status-bar{height:var(--status-h);background:var(--bg);display:flex;align-items:center;padding:0 26px 0;justify-content:space-between;flex-shrink:0;position:relative;z-index:100}
+.notch{display:none}
+.s-time{font-size:16px;font-weight:600;color:var(--text1);letter-spacing:-.2px;min-width:54px}
+.s-icons{display:flex;align-items:center;gap:6px;min-width:54px;justify-content:flex-end}
+.s-icons svg{fill:var(--text1)}
+
+/* SCREENS */
+.screens{flex:1;position:relative;overflow:hidden;min-height:0}
+.screen{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.25,.46,.45,.94);will-change:transform;overflow:hidden}
+.screen.active{transform:translateX(0)}
+.screen.behind{transform:translateX(-28%)}
+/* iOS-style background scale+shift while a modal is open */
+.screen.modal-behind{transform:scale(.94) translateX(-8%);transition:transform .42s cubic-bezier(.25,.46,.45,.94);border-radius:18px;overflow:hidden}
+/* vignette overlay on background screen while modal open */
+.screen-vignette{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .42s ease;z-index:150}
+.screen.modal-behind .screen-vignette{opacity:1}
+
+/* MODALS (push nav) */
+.modal{position:absolute;inset:0;background:var(--bg);transform:translateX(100%);transition:transform .42s cubic-bezier(.25,.46,.45,.94);z-index:200;display:flex;flex-direction:column;overflow:hidden;will-change:transform}
+.modal.open{transform:translateX(0)}
+.modal.dragging{transition:none}
+
+/* SHEETS (bottom) */
+.sheet{position:absolute;inset:0;z-index:300;display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;opacity:0;transition:opacity .3s}
+.sheet.open{pointer-events:all;opacity:1}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);transition:backdrop-filter .3s ease,-webkit-backdrop-filter .3s ease}
+.sheet.open .sheet-bg{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.sheet-body{position:relative;background:#1C1C1E;border-radius:24px 24px 0 0;padding-bottom:max(24px,env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .42s cubic-bezier(.32,.72,0,1);will-change:transform}
+.sheet.open .sheet-body{animation:sheetIn .42s cubic-bezier(.32,.72,0,1) forwards}
+@keyframes sheetIn{0%{transform:translateY(100%)}82%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+.sheet-pill{width:36px;height:4px;background:#48484A;border-radius:3px;margin:12px auto 4px}
+
+/* NAV HEADERS */
+.nav{height:44px;display:flex;align-items:center;padding:0 8px 0 4px;flex-shrink:0;border-bottom:1px solid var(--border-s)}
+.nav-title{flex:1;text-align:center;font-size:17px;font-weight:600;color:var(--text1)}
+.btn-text{background:none;border:none;color:var(--text1);font-size:17px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:4px;min-width:44px;min-height:44px}
+.btn-text-blue{color:var(--blue);font-weight:600}
+.btn-icon{background:none;border:none;color:var(--text2);cursor:pointer;padding:8px;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px}
+
+/* FEED SCREEN */
+.feed-top{padding:8px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;overflow:hidden;transition:max-height .3s cubic-bezier(.25,.46,.45,.94),padding .3s cubic-bezier(.25,.46,.45,.94),opacity .3s ease;max-height:62px}
+.feed-top.compressed{max-height:0;padding-top:0;padding-bottom:0;opacity:0}
+.feed-logo{font-size:26px;font-weight:900;color:#F0F0F0;letter-spacing:-2px;font-family:-apple-system,sans-serif;transition:opacity .3s ease,transform .3s ease;transform-origin:left center;cursor:pointer}
+.feed-top-r{display:flex;gap:4px}
+.bell-wrap{position:relative}
+.bell-dot{position:absolute;top:7px;right:9px;width:8px;height:8px;border-radius:50%;background:var(--heart);border:1.5px solid var(--bg)}
+.toggle-row{padding:0 14px 10px;flex-shrink:0}
+.toggle{display:flex;background:var(--surface);border-radius:100px;padding:3px}
+.tog{flex:1;background:transparent;border:none;color:var(--text2);font-size:14px;font-weight:500;padding:9px 0;border-radius:100px;cursor:pointer;transition:all .2s}
+.tog.on{background:var(--surface2);color:var(--text1);font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.feed-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;position:relative;transform:translateZ(0);touch-action:pan-y}
+.feed-scr::-webkit-scrollbar{display:none}
+
+/* NEW POSTS PILL */
+.new-pill{position:sticky;top:8px;left:50%;transform:translateX(-50%) translateY(-80px) scale(.85);width:fit-content;margin:0 auto;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px 8px 12px;font-size:13px;color:var(--text1);font-weight:500;cursor:pointer;transition:transform .5s cubic-bezier(.34,1.56,.64,1);z-index:10;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5);display:flex;align-items:center;gap:7px}
+.new-pill.show{transform:translateX(-50%) translateY(0) scale(1)}
+.new-pill::before{content:'';width:6px;height:6px;background:#34c759;border-radius:50%;flex-shrink:0;animation:pillPulse 1.6s ease-in-out infinite}
+@keyframes pillPulse{0%,100%{box-shadow:0 0 0 0 rgba(52,199,89,.5);opacity:1}50%{box-shadow:0 0 0 5px rgba(52,199,89,0);opacity:.8}}
+
+/* POST CARD */
+.post{background:var(--bg);border-bottom:1px solid var(--border-s)}
+.post-hdr{display:flex;align-items:center;padding:12px 14px;gap:10px}
+.av{border-radius:50%;object-fit:cover;background:var(--surface);cursor:pointer;flex-shrink:0}
+.post-info{flex:1}
+.post-name{font-size:14.5px;font-weight:600;color:var(--text1);letter-spacing:-.3px;cursor:pointer}
+.post-sub{font-size:11px;color:#666;margin-top:1px}
+.post-t{font-size:12px;color:#555}
+.more-btn{background:none;border:none;color:#666;font-size:18px;letter-spacing:2px;cursor:pointer;padding:4px 6px;line-height:.9}
+
+/* POST IMAGE */
+.img-wrap{position:relative;width:100%;overflow:hidden;background:var(--surface);cursor:pointer}
+.img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.img-4-5{aspect-ratio:4/5}
+.img-1-1{aspect-ratio:1/1}
+.img-3-2{aspect-ratio:3/2}
+.heart-pop{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:88px;pointer-events:none;opacity:0;z-index:5;filter:drop-shadow(0 4px 14px rgba(0,0,0,.4))}
+.heart-pop.go{animation:hpop .7s ease-out forwards}
+@keyframes hpop{0%{transform:translate(-50%,-50%) scale(0);opacity:1}45%{transform:translate(-50%,-50%) scale(1.15);opacity:1}100%{transform:translate(-50%,-50%) scale(.85);opacity:0}}
+/* heart burst particles */
+.heart-particle{position:absolute;font-size:18px;color:var(--heart);pointer-events:none;z-index:6;will-change:transform,opacity;transform:translate(-50%,-50%)}
+.heart-particle.fly{animation:hparticle .8s cubic-bezier(.2,.6,.4,1) forwards}
+@keyframes hparticle{0%{opacity:1;transform:translate(-50%,-50%) scale(.4)}25%{opacity:1;transform:translate(calc(-50% + var(--hx)*.45),calc(-50% + var(--hy)*.45)) scale(1.1)}100%{opacity:0;transform:translate(calc(-50% + var(--hx)),calc(-50% + var(--hy))) scale(.7)}}
+
+/* CAROUSEL */
+.dots{display:flex;justify-content:center;gap:5px;padding:7px 0 3px}
+.dot{width:6px;height:6px;border-radius:3px;background:var(--text3);transition:all .2s}
+.dot.on{width:14px;background:var(--text1)}
+.carousel-strip{display:flex;width:100%;height:100%;overflow-x:scroll;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x}
+.carousel-strip::-webkit-scrollbar{display:none}
+.carousel-slide{flex-shrink:0;width:100%;height:100%;scroll-snap-align:start;position:relative}
+.carousel-slide img{width:100%;height:100%;object-fit:cover;display:block}
+.carousel-count{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.5);color:#fff;font-size:12px;padding:4px 8px;border-radius:100px;z-index:3;pointer-events:none;font-weight:500}
+
+/* ACTIONS */
+.actions{display:flex;align-items:center;padding:0 10px;height:50px;gap:4px}
+.act{background:none;border:none;display:flex;align-items:center;gap:5px;padding:7px;cursor:pointer;border-radius:10px;color:var(--text2);transition:transform .12s}
+.act:active{transform:scale(.85)}
+.act-ico{font-size:23px;line-height:1;transition:transform .2s;display:flex;align-items:center}
+.act-ico svg{width:24px;height:24px;display:block}
+.act-ico svg.act-svg{fill:none;stroke:var(--text1);stroke-width:1.9}
+.act.liked-state .act-svg-heart{fill:var(--heart);stroke:var(--heart)}
+.act-svg-zap{fill:none;stroke:var(--zap);stroke-width:1.9}
+.act-n{font-size:13px;font-weight:500;color:var(--text2);transition:color .2s}
+.sp{flex:1}
+/* like SVG spring 0→1.5→1 */
+.act.like-on .act-ico{animation:lsprOn .45s cubic-bezier(.34,1.56,.64,1)}
+@keyframes lsprOn{0%{transform:scale(0)}55%{transform:scale(1.5)}100%{transform:scale(1)}}
+/* unlike gentle 1→0.7→1, no spring */
+.act.like-off .act-ico{animation:lsprOff .3s ease-out}
+@keyframes lsprOff{0%{transform:scale(1)}45%{transform:scale(.7)}100%{transform:scale(1)}}
+/* red glow ring pulse on like */
+.act .act-ico{position:relative}
+.act.like-on .act-svg-heart{animation:heartGlow .4s ease-out}
+@keyframes heartGlow{0%{filter:drop-shadow(0 0 0px rgba(255,55,95,.7))}100%{filter:drop-shadow(0 0 9px rgba(255,55,95,0))}}
+.like-glow{position:absolute;top:50%;left:50%;width:24px;height:24px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 0px rgba(255,55,95,.4)}
+.like-glow.go{animation:likeRing .4s ease-out forwards}
+@keyframes likeRing{0%{box-shadow:0 0 0 0px rgba(255,55,95,.4)}100%{box-shadow:0 0 0 12px rgba(255,55,95,0)}}
+/* zap count bump with color flash */
+.zap-count-bump{animation:zapBump .6s ease-out}
+@keyframes zapBump{0%{transform:scale(1);color:var(--text2)}30%{transform:scale(1.4);color:#fbb131}100%{transform:scale(1);color:var(--text2)}}
+
+/* POST META */
+.meta{padding:2px 14px 12px}
+.meta-react{font-size:13px;font-weight:600;color:var(--text1);margin-bottom:6px}
+.meta-cap{font-size:14px;color:var(--text1);line-height:1.45;margin-bottom:3px}
+.cap-name{font-weight:600}
+.meta-cmts{font-size:14px;color:#555;margin-bottom:3px;cursor:pointer}
+.meta-time{font-size:11px;color:#444;letter-spacing:.1px}
+
+/* TAB BAR */
+.tabbar{height:var(--tab-h);background:rgba(8,8,8,.95);backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-around;padding-bottom:max(0px,env(safe-area-inset-bottom));flex-shrink:0;z-index:100}
+.tab{background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:0;flex:1;height:100%}
+.tab svg{transition:fill .2s;fill:var(--text3);width:26px;height:26px}
+.tab.on svg{fill:var(--text1)}
+.tab.tab-bounce svg{animation:tabBounce .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes tabBounce{0%{transform:scale(1)}50%{transform:scale(1.2)}100%{transform:scale(1)}}
+.tab.tab-deselect svg{animation:tabDeselect .3s ease-out}
+@keyframes tabDeselect{0%{transform:scale(1)}50%{transform:scale(.9)}100%{transform:scale(1)}}
+.tab-lbl{font-size:10px;color:var(--text3);font-weight:500;letter-spacing:.1px;transition:color .2s}
+.tab.on .tab-lbl{color:var(--text1)}
+.compose-btn{width:48px;height:48px;background:var(--text1);border:none;border-radius:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.15);will-change:transform}
+.compose-btn svg{fill:var(--bg)!important;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+.compose-btn.sheet-open svg{transform:rotate(135deg)}
+
+/* SEARCH SCREEN */
+.srch-bar-wrap{padding:10px 14px 4px;flex-shrink:0}
+.srch-bar{background:rgba(118,118,128,.12);border-radius:12px;height:40px;display:flex;align-items:center;padding:0 12px;gap:8px;color:var(--text2);font-size:16px}
+.sec-lbl{font-size:13px;font-weight:600;color:var(--text2);text-transform:none;letter-spacing:0;padding:14px 14px 8px}
+.h-scroll{overflow-x:auto;display:flex;gap:10px;padding:0 14px 14px;-webkit-overflow-scrolling:touch}
+.h-scroll::-webkit-scrollbar{display:none}
+.sug-card{flex-shrink:0;width:118px;background:var(--surface);border-radius:16px;overflow:hidden;cursor:pointer}
+.sug-photo{height:76px;overflow:hidden}
+.sug-photo img{width:100%;height:100%;object-fit:cover}
+.sug-info{padding:8px 10px 10px}
+.sug-av-row{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.sug-name{font-size:13px;font-weight:600;color:var(--text1);line-height:1.2}
+.sug-mutual{font-size:11px;color:var(--text3);margin-top:1px}
+.sug-follow{margin-top:7px;background:var(--text1);color:#000;border:none;border-radius:8px;padding:6px 0;width:100%;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
+.sug-follow.on{background:transparent;color:var(--text1);border:1px solid var(--border)}
+.mag-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 14px 14px}
+.mag-tile{border-radius:12px;overflow:hidden;position:relative;cursor:pointer;background:var(--surface)}
+.mag-tile:first-child{grid-column:span 2;height:148px}
+.mag-tile:not(:first-child){height:96px}
+.mag-tile img{width:100%;height:100%;object-fit:cover}
+.mag-lbl{position:absolute;bottom:0;inset-x:0;padding:24px 10px 10px;background:linear-gradient(transparent,rgba(0,0,0,.72))}
+.mag-name{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.9)}
+.mag-cnt{font-size:11px;color:rgba(255,255,255,.55)}
+
+/* NOTIFICATIONS */
+.notif-tabs{display:flex;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.ntab{padding:12px 16px;font-size:15px;color:var(--text3);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ntab.on{color:var(--text1);border-bottom-color:var(--text1);font-weight:600}
+.n-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.n-scr::-webkit-scrollbar{display:none}
+.ni{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border-s);cursor:pointer}
+.ni:active{background:var(--surface)}
+.ni-av{position:relative;flex-shrink:0}
+.ni-badge{position:absolute;bottom:-2px;right:-4px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid var(--bg)}
+.ni-text{flex:1;font-size:14px;color:var(--text1);line-height:1.42}
+.ni-text b{font-weight:600}
+.ni-time{color:var(--text3);font-size:13px}
+.ni-img{width:42px;height:42px;border-radius:6px;object-fit:cover;background:var(--surface);flex-shrink:0}
+
+/* OWN PROFILE */
+.prof-banner{height:110px;background:var(--surface);flex-shrink:0;overflow:hidden}
+.prof-banner img{width:100%;height:100%;object-fit:cover}
+.prof-hdr{padding:0 14px;display:flex;justify-content:space-between;align-items:flex-end;margin-top:-32px;flex-shrink:0}
+.prof-av{width:80px;height:80px;border-radius:50%;border:3px solid var(--bg);object-fit:cover}
+.prof-edit{background:transparent;border:1px solid var(--border);border-radius:10px;padding:8px 18px;font-size:14px;font-weight:600;color:var(--text1);cursor:pointer}
+.prof-info{padding:10px 14px 12px;flex-shrink:0}
+.prof-name{font-size:18px;font-weight:700;color:var(--text1);letter-spacing:-.5px}
+.prof-handle{font-size:14px;color:var(--text3);margin-top:1px}
+.prof-bio{font-size:14px;color:var(--text1);line-height:1.4;margin-top:7px}
+.prof-stats{display:flex;gap:0;margin-top:12px;border-top:1px solid var(--border-s);padding-top:12px}
+.ps{flex:1;text-align:center}
+.ps-n{font-size:17px;font-weight:700;color:var(--text1)}
+.ps-l{font-size:12px;color:var(--text3);margin-top:2px}
+.prof-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.prof-grid::-webkit-scrollbar{display:none}
+/* own profile grid scrolls with the page (parent .scr-scr), so footer stays reachable */
+#own-grid{flex:none;overflow:visible}
+.pg-item{aspect-ratio:1;overflow:hidden;background:var(--surface);cursor:pointer}
+.pg-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}
+.pg-item:active img{transform:scale(.95)}
+
+/* USER PROFILE MODAL */
+.user-prof-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.user-prof-scr::-webkit-scrollbar{display:none}
+.uprof-actions{display:flex;gap:10px;padding:12px 14px;flex-shrink:0}
+.uprof-follow{flex:1;background:var(--text1);color:#000;border:none;border-radius:11px;padding:11px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+.uprof-follow.on{background:transparent;color:var(--text1);border:1px solid var(--border)}
+.uprof-zap{background:rgba(251,177,49,.15);color:var(--zap);border:1px solid rgba(251,177,49,.3);border-radius:11px;padding:11px 18px;font-size:15px;font-weight:600;cursor:pointer}
+.wot-line{font-size:13px;color:var(--text3);padding:0 14px 10px;display:flex;align-items:center;gap:6px}
+.wot-dot{width:7px;height:7px;background:var(--success);border-radius:50%;flex-shrink:0}
+
+/* POST DETAIL */
+.pd-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.pd-scr::-webkit-scrollbar{display:none}
+.cmts-lbl{font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding:12px 12px 6px}
+.cmt{display:flex;gap:10px;padding:8px 12px}
+.cmt-body{flex:1}
+.cmt-text{font-size:14px;color:var(--text1);line-height:1.4}
+.cmt-name{font-weight:600}
+.cmt-t{font-size:12px;color:var(--text3);margin-top:2px}
+.cmt-div{height:1px;background:var(--border-s);margin:0 12px}
+.reply-bar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0}
+.reply-in{flex:1;background:var(--surface);border:none;border-radius:20px;padding:9px 14px;font-size:15px;color:var(--text1);outline:none;-webkit-appearance:none}
+.reply-in::placeholder{color:var(--text3)}
+.reply-send{background:none;border:none;color:var(--blue);font-size:15px;font-weight:600;cursor:pointer;padding:8px}
+
+/* COMPOSE SHEET */
+.cs-hdr{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border)}
+.cs-ttl{flex:1;text-align:center;font-size:17px;font-weight:600;color:var(--text1)}
+.cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5px;max-height:380px;overflow-y:auto}
+.cs-grid::-webkit-scrollbar{display:none}
+.cs-item{aspect-ratio:1;overflow:hidden;background:var(--surface);cursor:pointer;position:relative}
+.cs-item img{width:100%;height:100%;object-fit:cover;display:block}
+.cs-item.sel::after{content:'✓';position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.cs-edit{padding:14px}
+.cs-edit-prev{width:100%;height:200px;object-fit:cover;border-radius:12px;display:block;margin-bottom:12px}
+.cs-caption{width:100%;background:var(--surface);border:none;border-radius:12px;padding:12px;font-size:15px;color:var(--text1);resize:none;outline:none;line-height:1.4;height:80px}
+.cs-caption::placeholder{color:var(--text3)}
+.cs-share{width:100%;margin-top:10px;background:var(--text1);color:#000;border:none;border-radius:12px;padding:14px;font-size:17px;font-weight:700;cursor:pointer;transition:opacity .2s}
+.cs-share:active{opacity:.8}
+
+/* ZAP SHEET */
+.zap-row{display:flex;gap:8px;padding:16px 14px;justify-content:center}
+.zchip{flex:1;background:var(--surface);border:1.5px solid var(--border);border-radius:11px;padding:11px 4px;font-size:14px;font-weight:600;color:var(--text1);cursor:pointer;text-align:center;transition:all .2s}
+.zchip.on{background:rgba(251,177,49,.15);border-color:var(--zap);color:var(--zap)}
+.zap-confirm{width:calc(100% - 28px);margin:0 14px 14px;background:var(--zap);color:#000;border:none;border-radius:12px;padding:14px;font-size:17px;font-weight:700;cursor:pointer;transition:transform .15s}
+.zap-confirm:active{transform:scale(.97)}
+
+/* TOAST */
+.toast{position:absolute;bottom:calc(var(--tab-h) + 20px);left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:10px 20px;font-size:14px;font-weight:500;color:var(--text1);pointer-events:none;opacity:0;transition:opacity .3s ease,transform .45s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;z-index:500;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+.toast.show{opacity:1;animation:toastIn .5s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes toastIn{0%{transform:translateX(-50%) translateY(60px) scaleX(1)}60%{transform:translateX(-50%) translateY(0) scaleX(1.03)}100%{transform:translateX(-50%) translateY(0) scaleX(1)}}
+.toast.hide{opacity:0;transform:translateX(-50%) translateY(60px);transition:opacity .3s ease,transform .35s cubic-bezier(.4,0,1,1)}
+
+/* CONTENT WARNING */
+.cw-img{filter:blur(28px);transform:scale(1.1)}
+.cw-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;z-index:4;text-align:center;padding:0 24px}
+.cw-emoji{font-size:48px;line-height:1;margin-bottom:6px;filter:drop-shadow(0 2px 10px rgba(0,0,0,.5))}
+.cw-title{color:#f5f5f5;font-size:15px;font-weight:600}
+.cw-sub{color:#98989E;font-size:13px}
+
+/* FILTERS STRIP (compose edit) */
+.filters{display:flex;gap:10px;overflow-x:auto;padding:8px 14px;-webkit-overflow-scrolling:touch}
+.filters::-webkit-scrollbar{display:none}
+.filter-item{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer}
+.filter-thumb{width:60px;height:60px;border-radius:10px;overflow:hidden;border:2px solid transparent;transition:border-color .2s}
+.filter-thumb img{width:100%;height:100%;object-fit:cover}
+.filter-item.on .filter-thumb{border-color:var(--text1)}
+.filter-name{font-size:11px;color:var(--text2);font-weight:500}
+.filter-item.on .filter-name{color:var(--text1)}
+
+/* NOTIF ENHANCEMENTS */
+.ni-zapsum{background:linear-gradient(90deg,rgba(251,177,49,.12),rgba(251,177,49,.04));border-bottom:1px solid var(--border-s)}
+.ni-zapsum .ni-text{color:var(--text1)}
+.ni-zapsum-ico{width:44px;height:44px;border-radius:50%;background:rgba(251,177,49,.2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;border:1px solid rgba(251,177,49,.3)}
+.ni-stack{position:relative;width:44px;height:44px;flex-shrink:0}
+.ni-stack img{position:absolute;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--bg);object-fit:cover}
+.ni-stack img:nth-child(1){top:0;left:0;z-index:3}
+.ni-stack img:nth-child(2){top:7px;left:10px;z-index:2}
+.ni-stack img:nth-child(3){top:14px;left:0;z-index:1}
+.ni-stack .ni-badge{z-index:5}
+.ni-sep{font-size:13px;color:#48484A;text-align:center;padding:10px}
+
+/* SUGGESTED CARD GRID */
+.sug-photo-grid{display:flex;flex-wrap:wrap;height:80px;overflow:hidden}
+.sug-photo-grid img{width:50%;height:40px;object-fit:cover;display:block}
+
+/* MAGAZINE EDITORIAL */
+.mag-cnt{display:flex;align-items:center;gap:5px}
+.mag-live-dot{width:7px;height:7px;border-radius:50%;background:#34c759;display:inline-block;animation:pillPulse 1.6s ease-in-out infinite}
+.mag-tile:first-child .mag-lbl{padding:36px 12px 12px;background:linear-gradient(transparent,rgba(0,0,0,.75))}
+.mag-tile:first-child .mag-name{font-size:15px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#fff}
+.mag-desc{font-size:12px;color:rgba(255,255,255,.6);margin-top:2px}
+
+/* RELAY VIEW MODAL */
+.relay-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.relay-grid::-webkit-scrollbar{display:none}
+.relay-grid .pg-item{aspect-ratio:1;overflow:hidden;background:var(--surface)}
+.relay-grid img{width:100%;height:100%;object-fit:cover;display:block}
+.relay-hero{height:120px;overflow:hidden;flex-shrink:0;position:relative}
+.relay-hero img{width:100%;height:100%;object-fit:cover}
+.relay-hero-lbl{position:absolute;bottom:0;inset-x:0;padding:24px 14px 10px;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.relay-hero-name{font-size:16px;font-weight:700;color:#fff}
+.relay-hero-cnt{font-size:12px;color:rgba(255,255,255,.7);display:flex;align-items:center;gap:5px;margin-top:2px}
+
+/* PROFILE NIP-05 + 3 STATS */
+.prof-nip05{font-size:13px;color:#48484A;margin-top:3px}
+.prof-stats-3{display:flex;margin-top:14px;border-top:1px solid var(--border-s);padding-top:12px}
+.prof-stats-3 .ps{flex:1;text-align:center}
+.pg-item{position:relative}
+.pg-multi{position:absolute;top:5px;right:5px;color:#fff;font-size:14px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));pointer-events:none;z-index:2}
+
+/* NETWORK FEED HEADER */
+.net-header{font-size:12px;color:#48484A;text-align:center;border-top:1px solid #18181A;padding:10px 0}
+
+/* PULL TO REFRESH */
+.ptr{height:0;overflow:hidden;transition:height .2s;display:flex;align-items:center;justify-content:center;gap:10px}
+.ptr-spin{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--text1);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ptr-text{font-size:13px;color:var(--text2);font-weight:500}
+
+/* MISC */
+.scr-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scr-scr::-webkit-scrollbar{display:none}
+.sep{height:1px;background:var(--border-s);margin:0 14px}
+
+/* IMAGE SKELETON → PHOTO CROSSFADE */
+.img-wrap{position:relative}
+.img-wrap::before{content:'';position:absolute;inset:0;background:linear-gradient(100deg,#161616 30%,#222 50%,#161616 70%);background-size:200% 100%;animation:shimmer 1.4s linear infinite;z-index:0}
+.img-wrap.loaded-wrap::before{opacity:0;animation:none;transition:opacity .3s}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.img-wrap img{opacity:0;transition:opacity .35s ease;position:relative;z-index:1}
+.img-wrap img.loaded{opacity:1}
+
+/* FLYING ZAP COIN */
+.zap-fly{position:fixed;font-size:30px;pointer-events:none;z-index:600;will-change:transform,opacity;filter:drop-shadow(0 2px 8px rgba(251,177,49,.5))}
+.zap-fly.go{animation:zapFly .9s cubic-bezier(.3,.1,.3,1) forwards}
+@keyframes zapFly{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}100%{opacity:0;transform:translate(-50%,calc(-50% - 160px)) scale(.9)}}
+
+/* SPRING PRESS (JS-driven) */
+.spring-press{transform:scale(.92)!important;transition:transform .08s ease-out!important}
+.spring-back{transition:transform .4s cubic-bezier(.34,1.56,.64,1)!important}
+
+/* FOLLOW BUTTON checkmark pop */
+.btn-check{display:inline-block;animation:btnCheck .5s ease}
+@keyframes btnCheck{0%{transform:scale(0);opacity:0}40%{transform:scale(1.3);opacity:1}100%{transform:scale(1);opacity:1}}
+.follow-bump{animation:followBump .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes followBump{0%{transform:scale(1)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
+
+/* ── HASHTAG ───────────────────────────────────────────────────────────────── */
+.hashtag{color:var(--blue);cursor:pointer}
+
+/* ── ONBOARDING ────────────────────────────────────────────────────────────── */
+.onb{position:absolute;inset:0;z-index:500;background:#090909;overflow:hidden;transition:opacity .4s cubic-bezier(.4,0,.2,1),transform .4s cubic-bezier(.4,0,.2,1)}
+.onb.gone{opacity:0;transform:scale(1.02);pointer-events:none}
+.onb-step{position:absolute;inset:0;display:flex;flex-direction:column;padding:0 28px max(24px,env(safe-area-inset-bottom));opacity:0;transform:translateX(30px);transition:opacity .4s ease,transform .4s cubic-bezier(.25,.46,.45,.94);pointer-events:none;overflow:hidden}
+.onb-step.on{opacity:1;transform:translateX(0);pointer-events:all}
+.onb-spacer{flex:1}
+.onb-wordmark{font-weight:900;letter-spacing:-3px;color:#F5F5F5;text-align:center}
+
+/* STEP 0 — SPLASH */
+#onb-step-0{padding:0;align-items:center;justify-content:center}
+.onb-splash-mark{font-size:52px;font-weight:900;letter-spacing:-3px;color:#F5F5F5;opacity:0;animation:splashFade 1.4s ease forwards}
+@keyframes splashFade{0%{opacity:0;transform:scale(.96)}40%{opacity:1;transform:scale(1)}100%{opacity:1;transform:scale(1)}}
+
+/* STEP 1 — WELCOME */
+#onb-step-1{padding:0}
+.onb-mosaic{position:absolute;inset:-12% -12% -12% -12%;z-index:0;filter:blur(2px) brightness(.55);overflow:hidden}
+.onb-mosaic-col{position:absolute;top:-30%;display:flex;flex-direction:column;gap:18px;width:33%}
+.onb-mosaic-col img{width:100%;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.06)}
+.onb-mosaic-col.c1{left:2%;animation:mosaicUp 26s linear infinite}
+.onb-mosaic-col.c2{left:35%;animation:mosaicDown 32s linear infinite}
+.onb-mosaic-col.c3{left:68%;animation:mosaicUp 29s linear infinite}
+@keyframes mosaicUp{0%{transform:translateY(0)}100%{transform:translateY(-22%)}}
+@keyframes mosaicDown{0%{transform:translateY(-22%)}100%{transform:translateY(0)}}
+.onb-welcome-veil{position:absolute;inset:0;z-index:1;background:radial-gradient(120% 90% at 50% 60%,rgba(9,9,9,.4),rgba(9,9,9,.86) 70%,rgba(9,9,9,.96))}
+.onb-welcome-card{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 28px max(24px,env(safe-area-inset-bottom))}
+.onb-welcome-card .onb-wordmark{font-size:38px}
+.onb-welcome-tag{font-size:20px;font-weight:400;color:#98989E;text-align:center;max-width:240px;line-height:1.35;margin:14px auto 0}
+.onb-primary{width:100%;height:50px;background:#F5F5F5;color:#000;border:none;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;transition:transform .15s}
+.onb-primary:active{transform:scale(.97)}
+.onb-primary:disabled{opacity:.4;pointer-events:none}
+.onb-outline{width:100%;height:50px;background:transparent;color:#F5F5F5;border:1.5px solid #F5F5F5;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;margin-top:12px;transition:transform .15s}
+.onb-outline:active{transform:scale(.97)}
+.onb-fineprint{font-size:12px;color:#48484A;text-align:center;margin-top:18px}
+
+/* SHARED NAV */
+.onb-nav{display:flex;align-items:center;justify-content:space-between;height:48px;flex-shrink:0;margin:0 -8px;padding-top:max(6px,env(safe-area-inset-top))}
+.onb-back{background:none;border:none;color:#F5F5F5;cursor:pointer;padding:10px;display:flex;align-items:center;min-width:44px;min-height:44px}
+.onb-nav-title{font-size:17px;font-weight:600;color:#F5F5F5}
+.onb-skip{background:none;border:none;color:#98989E;font-size:16px;cursor:pointer;padding:10px;min-width:44px;min-height:44px}
+.onb-dots{display:flex;justify-content:center;gap:7px;padding:6px 0 14px;flex-shrink:0}
+.onb-pdot{width:7px;height:7px;border-radius:50%;background:#2C2C2E;transition:all .3s}
+.onb-pdot.on{width:20px;border-radius:4px;background:#F5F5F5}
+
+/* STEP 2 — CREATE ACCOUNT */
+.onb-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:0 -28px;padding:0 28px}
+.onb-scroll::-webkit-scrollbar{display:none}
+.onb-h{font-size:22px;font-weight:700;color:#F5F5F5;margin-top:8px}
+.onb-h-c{text-align:center}
+.onb-sub{font-size:15px;color:#98989E;margin-top:6px;line-height:1.4}
+.onb-av-ph{width:88px;height:88px;border-radius:50%;border:2px dashed #2C2C2E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;margin:24px auto;cursor:pointer;background:#141414}
+.onb-av-ph svg{width:26px;height:26px;fill:#48484A}
+.onb-av-ph span{font-size:12px;color:#48484A}
+.onb-field{background:#141414;border:1px solid #2C2C2E;border-radius:12px;padding:14px;font-size:16px;color:#F5F5F5;width:100%;height:50px;outline:none;-webkit-appearance:none;margin-bottom:12px}
+.onb-field::placeholder{color:#48484A}
+.onb-field:focus{border-color:#48484A}
+.onb-uname{display:flex;align-items:center;background:#141414;border:1px solid #2C2C2E;border-radius:12px;height:50px;padding:0 14px;margin-bottom:12px}
+.onb-uname:focus-within{border-color:#48484A}
+.onb-uname-pre{font-size:16px;color:#98989E;flex-shrink:0}
+.onb-uname-in{flex:1;min-width:0;background:none;border:none;outline:none;font-size:16px;color:#F5F5F5;padding:0 1px}
+.onb-uname-in::placeholder{color:#48484A}
+.onb-uname-suf{font-size:16px;color:#48484A;flex-shrink:0}
+.onb-note{font-size:12px;color:#48484A;text-align:center;margin-top:14px;line-height:1.4}
+.onb-spin{width:22px;height:22px;border:2.5px solid rgba(245,245,245,.2);border-top-color:#000;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+
+/* STEP 3 — FOLLOW PACKS */
+.onb-pack-list{flex:1;overflow-y:auto;margin:6px -28px 0;padding:6px 28px 4px;-webkit-overflow-scrolling:touch}
+.onb-pack-list::-webkit-scrollbar{display:none}
+.onb-pack{position:relative;display:flex;align-items:center;gap:12px;background:#1C1C1E;border:1.5px solid #2C2C2E;border-radius:16px;padding:14px 14px 14px 18px;margin-bottom:12px;cursor:pointer;overflow:hidden;transition:border-color .2s}
+.onb-pack.on{border-color:#3A3A3C}
+.onb-pack-accent{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+.onb-pack-body{flex:1;min-width:0}
+.onb-pack-badge{position:absolute;top:14px;right:14px;font-size:10px;font-weight:600;letter-spacing:.3px;padding:3px 8px;border-radius:100px;background:rgba(255,255,255,.06);color:#98989E}
+.onb-pack-title{font-size:17px;font-weight:700;color:#F5F5F5;padding-right:78px}
+.onb-pack-desc{font-size:13px;color:#98989E;margin-top:3px;line-height:1.35}
+.onb-pack-avs{display:flex;margin-top:10px;align-items:center}
+.onb-pack-avs img{width:24px;height:24px;border-radius:50%;object-fit:cover;border:1.5px solid #1C1C1E;margin-left:-8px;background:#2C2C2E}
+.onb-pack-avs img:first-child{margin-left:0}
+.onb-pack-count{font-size:12px;color:#48484A;margin-top:8px}
+.onb-pack-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.onb-switch{width:34px;height:20px;border-radius:100px;background:#2C2C2E;flex-shrink:0;position:relative;transition:background .22s;margin-left:8px}
+.onb-switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .22s cubic-bezier(.34,1.56,.64,1);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.onb-pack.on .onb-switch{background:#34C759}
+.onb-pack.on .onb-switch::after{transform:translateX(14px)}
+.onb-pack-counter{font-size:13px;font-weight:600;color:#F5F5F5;text-align:center;padding:8px 0 12px;flex-shrink:0}
+.onb-cta-sub{font-size:12px;color:#48484A;text-align:center;margin-top:10px}
+
+/* STEP 4 — MEDIA SERVER */
+.onb-srv{display:flex;align-items:center;gap:12px;min-height:60px;border:1.5px solid #2C2C2E;border-radius:14px;padding:0 16px;margin-bottom:10px;cursor:pointer;transition:border-color .2s}
+.onb-srv.on{border-color:#F5F5F5}
+.onb-srv-ico{font-size:22px;flex-shrink:0}
+.onb-srv-body{flex:1;min-width:0;padding:10px 0}
+.onb-srv-name{font-size:16px;font-weight:600;color:#F5F5F5}
+.onb-srv-desc{font-size:13px;color:#98989E;margin-top:1px}
+.onb-radio{width:22px;height:22px;border-radius:50%;border:2px solid #48484A;flex-shrink:0;position:relative;transition:border-color .2s}
+.onb-srv.on .onb-radio{border-color:#F5F5F5}
+.onb-srv.on .onb-radio::after{content:'';position:absolute;inset:4px;border-radius:50%;background:#F5F5F5}
+.onb-srv-input{margin:-2px 0 6px;display:none}
+.onb-srv-input.show{display:block}
+
+/* STEP 5 — DONE */
+#onb-step-5{align-items:center;justify-content:center;text-align:center}
+.onb-check-wrap{width:96px;height:96px;margin-bottom:24px}
+.onb-check-circle{fill:none;stroke:#34C759;stroke-width:4;stroke-dasharray:283;stroke-dashoffset:283;animation:drawCircle .6s cubic-bezier(.65,0,.45,1) forwards}
+.onb-check-tick{fill:none;stroke:#34C759;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:48;stroke-dashoffset:48;animation:drawTick .35s cubic-bezier(.65,0,.45,1) .55s forwards}
+@keyframes drawCircle{to{stroke-dashoffset:0}}
+@keyframes drawTick{to{stroke-dashoffset:0}}
+.onb-done-h{font-size:28px;font-weight:700;color:#F5F5F5}
+.onb-done-sub{font-size:15px;color:#98989E;margin-top:8px;max-width:260px;line-height:1.4}
+.onb-social{font-size:13px;color:#48484A;margin-top:18px}
+
+/* ── FULL-SCREEN IMAGE VIEWER ──────────────────────────────────────────────── */
+.fullimg{position:absolute;inset:0;background:#000;z-index:250;display:none;flex-direction:column}
+.fullimg.open{display:flex}
+.fullimg-nav{position:absolute;top:0;inset-x:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 6px;z-index:3;background:linear-gradient(rgba(0,0,0,.45),transparent)}
+.fullimg-nav button{background:none;border:none;color:#fff;font-size:16px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:5px;min-height:44px}
+.fullimg-stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.fullimg-stage img{max-width:100%;max-height:100%;object-fit:contain;display:block;transform-origin:center center;transition:transform .25s cubic-bezier(.25,.46,.45,.94);will-change:transform}
+.fullimg-stage img.no-anim{transition:none}
+.fullimg-exif{position:absolute;bottom:max(28px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(12px);background:rgba(28,28,30,.7);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.1);border-radius:100px;padding:9px 18px;font-size:12px;color:#fff;white-space:nowrap;opacity:0;transition:opacity .3s ease,transform .3s ease;pointer-events:none;z-index:3;font-variant-numeric:tabular-nums}
+.fullimg-exif.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── iOS SETTINGS ROWS ─────────────────────────────────────────────────────── */
+.set-scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.set-scr::-webkit-scrollbar{display:none}
+.set-row{height:52px;border-bottom:1px solid #18181A;padding:0 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.set-row:active{background:#222}
+.set-row-l{font-size:16px;color:var(--text1);display:flex;align-items:center;gap:10px}
+.set-row-r{font-size:15px;color:var(--text2);display:flex;align-items:center;gap:7px}
+.set-chev{color:#48484A;font-size:18px}
+.set-sec{font-size:11px;font-weight:700;color:#48484A;text-transform:uppercase;letter-spacing:1px;padding:20px 16px 8px}
+.set-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block}
+.set-signout{height:52px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:#FF375F;cursor:pointer;margin-top:10px;border-top:1px solid #18181A}
+
+/* ── WoT FILTER CARDS ──────────────────────────────────────────────────────── */
+.wot-card{display:flex;align-items:center;gap:14px;height:64px;border:1.5px solid #2C2C2E;border-radius:12px;margin-bottom:8px;padding:0 16px;cursor:pointer;transition:border-color .2s}
+.wot-card.on{border-color:#F5F5F5}
+.wot-radio{width:22px;height:22px;border-radius:50%;border:2px solid #48484A;flex-shrink:0;position:relative;transition:border-color .2s}
+.wot-card.on .wot-radio{border-color:#F5F5F5}
+.wot-card.on .wot-radio::after{content:'';position:absolute;inset:4px;border-radius:50%;background:#F5F5F5}
+.wot-card-ttl{font-size:16px;font-weight:600;color:var(--text1)}
+.wot-card-sub{font-size:13px;color:var(--text2);margin-top:2px}
+
+/* ── MORE MENU / GENERIC ACTION SHEET ROWS ─────────────────────────────────── */
+.mm-row{font-size:17px;color:var(--text1);padding:15px 18px;cursor:pointer;border-bottom:1px solid var(--border-s)}
+.mm-row:active{background:#222}
+.mm-row.destructive{color:#FF375F}
+.mm-cancel{font-size:17px;font-weight:600;color:var(--text1);text-align:center;padding:16px;cursor:pointer;border-top:1px solid #2C2C2E}
+.why-list{padding:4px 18px 8px}
+.why-item{display:flex;align-items:center;gap:10px;padding:8px 0}
+.why-item img{width:34px;height:34px;border-radius:50%;object-fit:cover}
+.why-name{font-size:15px;color:var(--text1);font-weight:500}
+
+/* ── ZAP WALLET CONNECT STATE ──────────────────────────────────────────────── */
+.zap-connect{padding:8px 22px 18px;text-align:center}
+.zap-connect-body{font-size:14px;color:var(--text2);line-height:1.45;margin:8px 0 18px}
+.zap-connect-btn{width:100%;background:var(--zap);color:#000;border:none;border-radius:12px;padding:14px;font-size:17px;font-weight:700;cursor:pointer;transition:transform .15s}
+.zap-connect-btn:active{transform:scale(.97)}
+.zap-skip{display:block;width:100%;text-align:center;color:var(--text2);font-size:15px;background:none;border:none;cursor:pointer;margin-top:16px}
+
+/* generic sheet button */
+.sh-btn{width:calc(100% - 28px);margin:6px 14px 14px;background:var(--text1);color:#000;border:none;border-radius:12px;padding:14px;font-size:17px;font-weight:700;cursor:pointer;transition:transform .15s}
+.sh-btn:active{transform:scale(.97)}
+.sh-ttl{text-align:center;font-size:19px;font-weight:700;color:var(--text1);padding:10px 14px 4px}
+.sh-sub{text-align:center;font-size:13px;color:var(--text2);padding:0 24px 12px}
+
+/* ── DELIGHT: outside-network tag ─────────────────────────────────────────────── */
+.post-ext-tag{color:#48484A;font-size:11px;margin-left:5px}
+
+/* ── DELIGHT: WoT avatar badges (shield / verified) ───────────────────────────── */
+.av-wrap{position:relative;flex-shrink:0;display:inline-flex}
+.wot-badge{position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;background:rgba(255,255,255,.1);border:1.5px solid var(--bg);pointer-events:none}
+.wot-badge.verified{background:var(--success);color:#fff}
+
+/* ── DELIGHT: ambient musical note on profile banner ──────────────────────────── */
+.prof-banner{position:relative}
+.note-float{position:absolute;bottom:8px;left:12px;font-size:18px;color:rgba(255,255,255,.9);pointer-events:none;z-index:2;opacity:0;animation:floatNote 4s ease-in-out infinite}
+@keyframes floatNote{0%{opacity:0;transform:translateY(0) rotate(-15deg)}50%{opacity:.6}100%{opacity:0;transform:translateY(-40px) rotate(10deg)}}
+
+/* ── DELIGHT: image-loaded subtle pulse ───────────────────────────────────────── */
+.img-wrap img.loaded{animation:imgPulse .4s ease-out}
+.carousel-slide img.loaded{animation:imgPulse .4s ease-out}
+@keyframes imgPulse{0%{transform:scale(1.005)}100%{transform:scale(1)}}
+
+/* ── DELIGHT: live typing indicator in comments ───────────────────────────────── */
+.typing-row{display:flex;align-items:center;gap:10px;padding:8px 12px 14px;opacity:0;transition:opacity .3s ease}
+.typing-row.show{opacity:1}
+.typing-bubble{display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:14px;padding:9px 12px}
+.typing-bubble span{width:6px;height:6px;border-radius:50%;background:var(--text2);display:inline-block;animation:typingDot 1.2s infinite}
+.typing-bubble span:nth-child(2){animation-delay:.2s}
+.typing-bubble span:nth-child(3){animation-delay:.4s}
+@keyframes typingDot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+
+/* ── DELIGHT: profile footer watermark ────────────────────────────────────────── */
+.prof-footer{font-size:11px;color:#2C2C2E;padding:20px;text-align:center}
+
+/* ── ADD-TO-HOME-SCREEN SHEET ─────────────────────────────────────────────────── */
+.a2hs-card{padding:8px 20px 4px;text-align:center}
+.a2hs-icon{width:64px;height:64px;border-radius:16px;background:linear-gradient(160deg,#1c1c1e,#101012);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:6px auto 14px;position:relative}
+.a2hs-icon svg{fill:var(--blue)}
+.a2hs-arrow{position:absolute;top:-9px;right:-9px;width:26px;height:26px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;animation:a2hsBob 1.4s ease-in-out infinite}
+.a2hs-arrow svg{fill:#fff}
+@keyframes a2hsBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.a2hs-ttl{font-size:16px;font-weight:600;color:var(--text1)}
+.a2hs-sub{font-size:13px;color:#98989E;line-height:1.45;margin-top:6px;padding:0 6px}
+.a2hs-actions{display:flex;gap:10px;padding:16px 14px 6px}
+.a2hs-dismiss{flex:1;background:transparent;border:1px solid var(--border);border-radius:12px;padding:13px;font-size:15px;font-weight:600;color:var(--text2);cursor:pointer}
+.a2hs-got{flex:1;background:var(--text1);color:#000;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .15s}
+.a2hs-got:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- DYNAMIC ISLAND (desktop frame only) -->
+  <div class="dyn-island"></div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span class="s-time" id="clk">9:41</span>
+    <div class="s-icons">
+      <!-- signal bars (3 of increasing height) -->
+      <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3.4" height="5" rx="1"/><rect x="5" y="4.5" width="3.4" height="7.5" rx="1"/><rect x="10" y="2" width="3.4" height="10" rx="1"/><rect x="15" y="0" width="3.4" height="12" rx="1" opacity=".32"/></svg>
+      <!-- wifi arc -->
+      <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.4C5.4 2.4 3.1 3.5 1.5 5.3L0 3.8C2 1.5 4.8 0 8 0s6 1.5 8 3.8L14.5 5.3C12.9 3.5 10.6 2.4 8 2.4z"/><path d="M8 5.5c-1.8 0-3.4.8-4.5 2L2 6C3.5 4.2 5.6 3 8 3s4.5 1.2 6 3l-1.5 1.5C11.4 6.3 9.8 5.5 8 5.5z"/><circle cx="8" cy="11" r="1.5"/></svg>
+      <!-- battery ~85% with green fill -->
+      <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="1" width="21" height="10" rx="3" stroke="var(--text1)" stroke-width="1" fill="none" opacity=".35"/><rect x="2" y="2.5" width="15.3" height="7" rx="1.8" fill="#34c759"/><rect x="23" y="4" width="2" height="4" rx="1" fill="var(--text1)" opacity=".4"/></svg>
+    </div>
+  </div>
+
+  <!-- SCREENS -->
+  <div class="screens">
+
+    <!-- HOME / FEED -->
+    <div class="screen active" id="s-home">
+      <div class="screen-vignette"></div>
+      <div class="feed-top">
+        <span class="feed-logo" onclick="tapLogo()">olas</span>
+        <div class="feed-top-r">
+          <button class="btn-icon" onclick="openSheet('sh-wot')" aria-label="Feed filters">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--text2)"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="var(--bg)"/><circle cx="15" cy="12" r="2.4" fill="var(--bg)"/><circle cx="8" cy="17" r="2.4" fill="var(--bg)"/></svg>
+          </button>
+          <button class="btn-icon bell-wrap" onclick="switchTab('notifs')">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+            <span class="bell-dot"></span>
+          </button>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle">
+          <button class="tog on" onclick="switchFeed('following',this)">Following</button>
+          <button class="tog" onclick="switchFeed('network',this)">Network</button>
+        </div>
+      </div>
+      <div class="feed-scr" id="feed-scr">
+        <div class="ptr" id="ptr"><div class="ptr-spin"></div><span class="ptr-text" id="ptr-text">Pull to refresh</span></div>
+        <div class="new-pill" id="new-pill" onclick="dismissNewPill()">3 new posts</div>
+        <div id="feed-following"><!-- following posts --></div>
+        <div id="feed-network" style="display:none"><!-- network posts --></div>
+      </div>
+    </div>
+
+    <!-- SEARCH / DISCOVER -->
+    <div class="screen" id="s-search">
+      <div class="screen-vignette"></div>
+      <div class="nav" style="border-bottom:none">
+        <div class="nav-title" style="text-align:left;padding-left:6px;font-size:28px;font-weight:800;letter-spacing:-.8px">Discover</div>
+      </div>
+      <div class="srch-bar-wrap">
+        <div class="srch-bar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#555"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <span>Search people, photos, tags</span>
+        </div>
+      </div>
+      <div class="scr-scr">
+        <div class="sec-lbl">Suggested for you</div>
+        <div class="h-scroll" id="suggested-row"></div>
+        <div class="sec-lbl">Browse relays</div>
+        <div class="mag-grid" id="mag-grid"></div>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="screen" id="s-notifs">
+      <div class="screen-vignette"></div>
+      <div class="nav" style="border-bottom:none">
+        <div class="nav-title" style="text-align:left;padding-left:6px;font-size:22px;font-weight:800;letter-spacing:-.6px">Activity</div>
+      </div>
+      <div class="notif-tabs">
+        <button class="ntab on" onclick="switchNotifTab('all',this)">All</button>
+        <button class="ntab" onclick="switchNotifTab('mentions',this)">Mentions</button>
+        <button class="ntab" onclick="switchNotifTab('zaps',this)">Zaps ⚡</button>
+      </div>
+      <div class="n-scr" id="notifs-list"></div>
+    </div>
+
+    <!-- OWN PROFILE -->
+    <div class="screen" id="s-profile">
+      <div class="screen-vignette"></div>
+      <div class="nav">
+        <div style="flex:1"></div>
+        <div class="nav-title">pablo</div>
+        <button class="btn-icon" style="color:var(--text2)" onclick="openSheet('sh-settings')">
+          <svg width="22" height="22" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        </button>
+      </div>
+      <div class="scr-scr">
+        <div class="prof-banner"><img src="https://picsum.photos/seed/olas-banner/800/200" loading="lazy" decoding="async"><span class="note-float">♪</span></div>
+        <div class="prof-hdr">
+          <img class="prof-av" src="https://i.pravatar.cc/160?img=68" loading="lazy" decoding="async">
+          <button class="prof-edit">Edit profile</button>
+        </div>
+        <div class="prof-info">
+          <div class="prof-name">Pablo Fernández</div>
+          <div class="prof-handle">pablo</div>
+          <div class="prof-nip05">✓ pablo@olas.app</div>
+          <div class="prof-bio">Building Olas ✦ Nostr dev · Barcelona 🇪🇸</div>
+          <div class="prof-stats-3">
+            <div class="ps"><div class="ps-n">84</div><div class="ps-l">Following</div></div>
+            <div class="ps"><div class="ps-n">1.2k</div><div class="ps-l">Followers</div></div>
+            <div class="ps"><div class="ps-n">47</div><div class="ps-l">Posts</div></div>
+          </div>
+        </div>
+        <div class="prof-grid" id="own-grid"></div>
+        <div class="prof-footer">Made with ♡ on Nostr</div>
+      </div>
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- USER PROFILE MODAL -->
+    <div class="modal" id="m-uprof">
+      <div class="nav">
+        <button class="btn-text" onclick="closeModal('m-uprof')">
+          <svg width="10" height="17" viewBox="0 0 10 17" fill="var(--text1)"><path d="M9 1L1 8.5 9 16"/></svg>
+          Back
+        </button>
+        <div class="nav-title" id="uprof-handle">@user</div>
+        <div style="min-width:44px"></div>
+      </div>
+      <div class="user-prof-scr">
+        <div class="prof-banner"><img id="uprof-banner" src="" loading="lazy" decoding="async"></div>
+        <div class="prof-hdr">
+          <img class="prof-av" id="uprof-av" src="" loading="lazy" decoding="async">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="uprof-zap" onclick="openZap('uprof')">⚡</button>
+            <button class="uprof-follow" id="uprof-follow-btn" onclick="toggleFollowModal()">Follow</button>
+          </div>
+        </div>
+        <div class="prof-info">
+          <div class="prof-name" id="uprof-name"></div>
+          <div class="prof-handle" id="uprof-nip05"></div>
+          <div class="prof-bio" id="uprof-bio"></div>
+          <div class="prof-stats">
+            <div class="ps"><div class="ps-n" id="uprof-following">—</div><div class="ps-l">Following</div></div>
+            <div class="ps"><div class="ps-n" id="uprof-followers">—</div><div class="ps-l">Followers</div></div>
+          </div>
+        </div>
+        <div class="wot-line" id="uprof-wot">
+          <span class="wot-dot"></span><span id="uprof-wot-text"></span>
+        </div>
+        <div class="sep"></div>
+        <div class="prof-grid" id="uprof-grid"></div>
+      </div>
+    </div>
+
+    <!-- POST DETAIL MODAL -->
+    <div class="modal" id="m-post">
+      <div class="nav">
+        <button class="btn-text" onclick="closeModal('m-post')">
+          <svg width="10" height="17" viewBox="0 0 10 17" fill="var(--text1)"><path d="M9 1L1 8.5 9 16"/></svg>
+          Back
+        </button>
+        <div class="nav-title">Post</div>
+        <div style="min-width:44px"></div>
+      </div>
+      <div class="pd-scr" id="pd-content"></div>
+      <div class="reply-bar">
+        <img class="av" width="28" height="28" decoding="async" src="https://i.pravatar.cc/56?img=68">
+        <input class="reply-in" id="reply-input" placeholder="Add a comment…" type="text">
+        <button class="reply-send" onclick="sendReply()">Post</button>
+      </div>
+    </div>
+
+    <!-- RELAY VIEW MODAL -->
+    <div class="modal" id="m-relay">
+      <div class="nav">
+        <button class="btn-text" onclick="closeModal('m-relay')">
+          <svg width="10" height="17" viewBox="0 0 10 17" fill="var(--text1)"><path d="M9 1L1 8.5 9 16"/></svg>
+          Back
+        </button>
+        <div class="nav-title" id="relay-title">Relay</div>
+        <div style="min-width:44px"></div>
+      </div>
+      <div class="relay-hero">
+        <img id="relay-hero-img" src="" loading="lazy" decoding="async">
+        <div class="relay-hero-lbl">
+          <div class="relay-hero-name" id="relay-hero-name"></div>
+          <div class="relay-hero-cnt"><span class="mag-live-dot"></span><span id="relay-hero-cnt"></span></div>
+        </div>
+      </div>
+      <div class="relay-grid" id="relay-grid"></div>
+    </div>
+
+    <!-- FULL-SCREEN IMAGE VIEWER -->
+    <div class="fullimg" id="m-fullimg">
+      <div class="fullimg-nav">
+        <button onclick="closeFullImg()">
+          <svg width="10" height="17" viewBox="0 0 10 17" fill="#fff"><path d="M9 1L1 8.5 9 16"/></svg>
+          Back
+        </button>
+        <button onclick="toast('Link copied to clipboard')">↗ Share</button>
+      </div>
+      <div class="fullimg-stage" id="fullimg-stage">
+        <img id="fullimg-img" src="" alt="" decoding="async">
+      </div>
+      <div class="fullimg-exif" id="fullimg-exif">f/2.8 · 1/250s · ISO 400 · 50mm</div>
+    </div>
+
+  </div><!-- /screens -->
+
+  <!-- SHEETS -->
+
+  <!-- COMPOSE SHEET -->
+  <div class="sheet" id="sh-compose">
+    <div class="sheet-bg" onclick="closeSheet('sh-compose')"></div>
+    <div class="sheet-body" style="max-height:88vh">
+      <div class="sheet-pill"></div>
+      <div class="cs-hdr">
+        <button class="btn-text" onclick="closeSheet('sh-compose')">Cancel</button>
+        <span class="cs-ttl" id="cs-ttl-txt">New Post</span>
+        <button class="btn-text btn-text-blue" id="cs-next-btn" onclick="composeNext()" style="justify-content:flex-end">Next</button>
+      </div>
+      <div id="cs-picker">
+        <div class="cs-grid" id="cs-grid"></div>
+      </div>
+      <div id="cs-editor" style="display:none">
+        <div style="padding:12px 14px 0">
+          <img id="cs-preview" class="cs-edit-prev" src="" loading="lazy" decoding="async">
+        </div>
+        <div class="filters" id="filter-strip"></div>
+        <div style="padding:0 14px 14px">
+          <textarea class="cs-caption" id="cs-caption" placeholder="Write a caption…"></textarea>
+          <button class="cs-share" onclick="submitPost()">Share</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZAP SHEET -->
+  <div class="sheet" id="sh-zap">
+    <div class="sheet-bg" onclick="closeSheet('sh-zap')"></div>
+    <div class="sheet-body">
+      <div class="sheet-pill"></div>
+      <div id="zap-amount-view">
+      <div style="text-align:center;padding:12px 14px 4px">
+        <div style="font-size:20px;font-weight:700;color:var(--text1)">⚡ Send a Zap</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:4px">Real Bitcoin tips, instantly</div>
+      </div>
+      <div class="zap-row" id="zap-chips">
+        <button class="zchip" onclick="pickZap(21,this)">21</button>
+        <button class="zchip on" onclick="pickZap(100,this)">100</button>
+        <button class="zchip" onclick="pickZap(500,this)">500</button>
+        <button class="zchip" onclick="pickZap(1000,this)">1k</button>
+      </div>
+      <div style="padding:0 14px 4px;font-size:13px;color:var(--text2);text-align:center" id="zap-total">≈ 100 sats</div>
+      <button class="zap-confirm" onclick="confirmZap()">Zap ⚡ 100 sats</button>
+      </div>
+      <!-- wallet-not-connected view -->
+      <div id="zap-connect-view" style="display:none">
+        <div class="zap-connect">
+          <div style="font-size:20px;font-weight:700;color:var(--text1)">⚡ Connect a wallet</div>
+          <div class="zap-connect-body">Zaps are real Bitcoin tips, sent instantly.</div>
+          <button class="zap-connect-btn" onclick="toast('NWC wallet setup coming soon')">Connect Wallet</button>
+          <button class="zap-skip" onclick="zapSkipConnect()">Skip for now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS SHEET -->
+  <div class="sheet" id="sh-settings">
+    <div class="sheet-bg" onclick="closeSheet('sh-settings')"></div>
+    <div class="sheet-body" style="max-height:92vh;display:flex;flex-direction:column">
+      <div class="sheet-pill"></div>
+      <div class="sh-ttl">Settings</div>
+      <div class="set-scr">
+        <div class="set-row" onclick="settingTap('Account')"><span class="set-row-l">Account</span><span class="set-row-r">pablo<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Notifications')"><span class="set-row-l">Notifications</span><span class="set-row-r">All<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Content & filtering')"><span class="set-row-l">Content &amp; filtering</span><span class="set-row-r" id="set-preset">Balanced<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Appearance')"><span class="set-row-l">Appearance</span><span class="set-row-r">🌙 Dark<span class="set-chev">›</span></span></div>
+        <div class="set-sec">Advanced</div>
+        <div class="set-row" onclick="settingTap('Servers')"><span class="set-row-l">Servers</span><span class="set-row-r"><span class="set-dot"></span>blossom.primal.net<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Relays')"><span class="set-row-l">Relays</span><span class="set-row-r"><span class="set-dot"></span>4 connected<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Wallet')"><span class="set-row-l">Wallet</span><span class="set-row-r">Not connected<span class="set-chev">›</span></span></div>
+        <div class="set-row" onclick="settingTap('Recovery Key')"><span class="set-row-l">Recovery Key</span><span class="set-row-r" style="color:#34c759">Backed up ✓<span class="set-chev">›</span></span></div>
+        <div class="set-signout" onclick="signOut()">Sign out</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WoT FILTER SHEET -->
+  <div class="sheet" id="sh-wot">
+    <div class="sheet-bg" onclick="closeSheet('sh-wot')"></div>
+    <div class="sheet-body">
+      <div class="sheet-pill"></div>
+      <div class="sh-ttl">Who shows up in your feed</div>
+      <div style="padding:8px 14px 0">
+        <div class="wot-card" data-wot="Close" onclick="pickWot(this)">
+          <span class="wot-radio"></span>
+          <div><div class="wot-card-ttl">Close</div><div class="wot-card-sub">Just people you follow closely</div></div>
+        </div>
+        <div class="wot-card on" data-wot="Balanced" onclick="pickWot(this)">
+          <span class="wot-radio"></span>
+          <div><div class="wot-card-ttl">Balanced</div><div class="wot-card-sub">Your broader network</div></div>
+        </div>
+        <div class="wot-card" data-wot="Open" onclick="pickWot(this)">
+          <span class="wot-radio"></span>
+          <div><div class="wot-card-ttl">Open</div><div class="wot-card-sub">Everyone</div></div>
+        </div>
+      </div>
+      <button class="sh-btn" onclick="applyWot()">Apply</button>
+    </div>
+  </div>
+
+  <!-- POST MORE MENU SHEET -->
+  <div class="sheet" id="sh-more-menu">
+    <div class="sheet-bg" onclick="closeSheet('sh-more-menu')"></div>
+    <div class="sheet-body">
+      <div class="sheet-pill"></div>
+      <div class="mm-row" onclick="moreAction('save')">Save to photos</div>
+      <div class="mm-row" onclick="moreAction('why')">Why am I seeing this?</div>
+      <div class="mm-row" onclick="moreAction('mute')" id="mm-mute">Mute @username</div>
+      <div class="mm-row destructive" onclick="moreAction('report')">Report</div>
+      <div class="mm-cancel" onclick="closeSheet('sh-more-menu')">Cancel</div>
+    </div>
+  </div>
+
+  <!-- WHY AM I SEEING THIS SHEET -->
+  <div class="sheet" id="sh-why">
+    <div class="sheet-bg" onclick="closeSheet('sh-why')"></div>
+    <div class="sheet-body">
+      <div class="sheet-pill"></div>
+      <div class="sh-ttl" id="why-title">Followed by Ana + 2 others</div>
+      <div class="sh-sub">This post reached you through people in your network.</div>
+      <div class="why-list" id="why-list"></div>
+      <button class="sh-btn" onclick="closeSheet('sh-why')">Got it</button>
+    </div>
+  </div>
+
+  <!-- ADD TO HOME SCREEN SHEET -->
+  <div class="sheet" id="sh-a2hs">
+    <div class="sheet-bg" onclick="dismissA2HS()"></div>
+    <div class="sheet-body">
+      <div class="sheet-pill"></div>
+      <div class="a2hs-card">
+        <div class="a2hs-icon">
+          <svg width="30" height="30" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#0a84ff" opacity=".25"/><path d="M12 7l8.66 5L12 17 3.34 12 12 7z" fill="#0a84ff"/></svg>
+          <span class="a2hs-arrow">
+            <svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 4l-6 6h4v8h4v-8h4z"/></svg>
+          </span>
+        </div>
+        <div class="a2hs-ttl">Add Olas to your Home Screen</div>
+        <div class="a2hs-sub">Tap <b>Share</b> <svg width="13" height="13" viewBox="0 0 24 24" style="fill:#98989E;vertical-align:-2px"><path d="M12 3l-4 4h3v8h2V7h3l-4-4zM5 11v9h14v-9h-2v7H7v-7H5z"/></svg> then “Add to Home Screen” for the full experience</div>
+      </div>
+      <div class="a2hs-actions">
+        <button class="a2hs-dismiss" onclick="dismissA2HS()">Dismiss</button>
+        <button class="a2hs-got" onclick="dismissA2HS()">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <nav class="tabbar">
+    <button class="tab on" id="tab-home" onclick="switchTab('home')">
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <span class="tab-lbl">Home</span>
+    </button>
+    <button class="tab" id="tab-search" onclick="switchTab('search')">
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <span class="tab-lbl">Search</span>
+    </button>
+    <button class="compose-btn" id="compose-btn" onclick="openSheet('sh-compose')">
+      <svg width="22" height="22" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    </button>
+    <button class="tab" id="tab-notifs" onclick="switchTab('notifs')">
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <span class="tab-lbl">Activity</span>
+    </button>
+    <button class="tab" id="tab-profile" onclick="switchTab('profile')">
+      <svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      <span class="tab-lbl">Profile</span>
+    </button>
+  </nav>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ONBOARDING OVERLAY -->
+  <div class="onb" id="onb">
+
+    <!-- STEP 0 — SPLASH -->
+    <div class="onb-step on" id="onb-step-0">
+      <div class="onb-splash-mark">olas</div>
+    </div>
+
+    <!-- STEP 1 — WELCOME -->
+    <div class="onb-step" id="onb-step-1">
+      <div class="onb-mosaic" id="onb-mosaic"></div>
+      <div class="onb-welcome-veil"></div>
+      <div class="onb-welcome-card">
+        <div class="onb-spacer"></div>
+        <div class="onb-wordmark">olas</div>
+        <div class="onb-welcome-tag">Your photos. Your network.</div>
+        <div class="onb-spacer"></div>
+        <button class="onb-primary" onclick="nextOnb(2)">Create account</button>
+        <button class="onb-outline" onclick="toast('Sign in coming soon')">Sign in</button>
+        <div class="onb-fineprint">No algorithm. No ads. Your keys.</div>
+      </div>
+    </div>
+
+    <!-- STEP 2 — CREATE ACCOUNT -->
+    <div class="onb-step" id="onb-step-2">
+      <div class="onb-nav">
+        <button class="onb-back" onclick="prevOnb(1)" aria-label="Back">
+          <svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="#F5F5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1L1.5 9l8 8"/></svg>
+        </button>
+        <div></div>
+        <button class="onb-skip" onclick="nextOnb(3)">Skip</button>
+      </div>
+      <div class="onb-dots"><span class="onb-pdot on"></span><span class="onb-pdot"></span><span class="onb-pdot"></span><span class="onb-pdot"></span></div>
+      <div class="onb-scroll">
+        <div class="onb-h">Create your account</div>
+        <div class="onb-sub">Pick a name and we'll set everything up.</div>
+        <div class="onb-av-ph" onclick="toast('Photo picker coming soon')">
+          <svg viewBox="0 0 24 24"><path d="M9 3L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2h-3.2L15 3H9zm3 5a5 5 0 110 10 5 5 0 010-10zm0 2a3 3 0 100 6 3 3 0 000-6z"/></svg>
+          <span>Add photo</span>
+        </div>
+        <input class="onb-field" id="onb-name" placeholder="Your name" type="text" autocomplete="off">
+        <div class="onb-uname">
+          <span class="onb-uname-pre">@</span>
+          <input class="onb-uname-in" id="onb-uname" placeholder="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <span class="onb-uname-suf">.olas.app</span>
+        </div>
+        <div class="onb-note">Your account is secured by a cryptographic key — saved automatically to your keychain.</div>
+      </div>
+      <button class="onb-primary" id="onb-create-btn" disabled onclick="submitCreate()">Continue</button>
+    </div>
+
+    <!-- STEP 3 — FOLLOW PACKS -->
+    <div class="onb-step" id="onb-step-3">
+      <div class="onb-nav">
+        <button class="onb-back" onclick="prevOnb(2)" aria-label="Back">
+          <svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="#F5F5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1L1.5 9l8 8"/></svg>
+        </button>
+        <div class="onb-nav-title">Follow creators</div>
+        <button class="onb-skip" onclick="nextOnb(4)">Skip</button>
+      </div>
+      <div class="onb-dots"><span class="onb-pdot"></span><span class="onb-pdot on"></span><span class="onb-pdot"></span><span class="onb-pdot"></span></div>
+      <div class="onb-sub" style="font-size:13px;margin-top:0">Follow packs let you subscribe to a curated group of creators. You can always adjust later.</div>
+      <div class="onb-pack-list" id="onb-packs"></div>
+      <div class="onb-pack-counter" id="onb-pack-counter"></div>
+      <button class="onb-primary" id="onb-packs-btn" onclick="nextOnb(4)">Follow selected creators →</button>
+      <div class="onb-cta-sub">You can unfollow anyone from their profile at any time.</div>
+    </div>
+
+    <!-- STEP 4 — MEDIA SERVER -->
+    <div class="onb-step" id="onb-step-4">
+      <div class="onb-nav">
+        <button class="onb-back" onclick="prevOnb(3)" aria-label="Back">
+          <svg width="11" height="18" viewBox="0 0 11 18" fill="none" stroke="#F5F5F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1L1.5 9l8 8"/></svg>
+        </button>
+        <div class="onb-nav-title">Where your photos live</div>
+        <button class="onb-skip" onclick="nextOnb(5)">Skip</button>
+      </div>
+      <div class="onb-dots"><span class="onb-pdot"></span><span class="onb-pdot"></span><span class="onb-pdot on"></span><span class="onb-pdot"></span></div>
+      <div class="onb-scroll">
+        <div class="onb-h">Choose a media server</div>
+        <div class="onb-sub">Your photos are stored on content-addressed servers you control. You can always change this.</div>
+        <div style="height:18px"></div>
+        <div class="onb-srv on" data-srv="blossom.primal.net" onclick="selectServer(this)">
+          <span class="onb-srv-ico">🗄️</span>
+          <div class="onb-srv-body"><div class="onb-srv-name">blossom.primal.net</div><div class="onb-srv-desc">Fast global CDN, free</div></div>
+          <span class="onb-radio"></span>
+        </div>
+        <div class="onb-srv" data-srv="cdn.satellite.earth" onclick="selectServer(this)">
+          <span class="onb-srv-ico">🗄️</span>
+          <div class="onb-srv-body"><div class="onb-srv-name">cdn.satellite.earth</div><div class="onb-srv-desc">Community-run, EU West</div></div>
+          <span class="onb-radio"></span>
+        </div>
+        <div class="onb-srv" data-srv="custom" onclick="selectServer(this)">
+          <span class="onb-srv-ico">🗄️</span>
+          <div class="onb-srv-body">
+            <div class="onb-srv-name">Add your own</div>
+            <div class="onb-srv-desc">Point to a server you host</div>
+            <input class="onb-field onb-srv-input" id="onb-srv-custom" placeholder="https://your-server.example" type="text" autocapitalize="none" spellcheck="false" onclick="event.stopPropagation()">
+          </div>
+          <span class="onb-radio"></span>
+        </div>
+      </div>
+      <button class="onb-primary" onclick="nextOnb(5)">Continue</button>
+    </div>
+
+    <!-- STEP 5 — ALL SET -->
+    <div class="onb-step" id="onb-step-5">
+      <div class="onb-check-wrap">
+        <svg width="96" height="96" viewBox="0 0 100 100">
+          <circle class="onb-check-circle" cx="50" cy="50" r="45"/>
+          <path class="onb-check-tick" d="M30 52 L44 66 L72 36"/>
+        </svg>
+      </div>
+      <div class="onb-done-h">You're all set!</div>
+      <div class="onb-done-sub">Your feed is being populated. Tap to start.</div>
+      <div class="onb-spacer" style="max-height:40px"></div>
+      <button class="onb-primary" style="max-width:320px" onclick="finishOnboarding()">Explore Olas →</button>
+      <div class="onb-social">Joined 12,847 photographers and creators</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── ACTION ICONS (SVG) ────────────────────────────────────────────────────────
+const SVG_HEART = '<svg class="act-svg act-svg-heart" viewBox="0 0 24 24" stroke-linejoin="round"><path d="M12 20.5C12 20.5 3 14.5 3 8.8 3 6.1 5.1 4 7.7 4 9.4 4 10.9 4.9 12 6.3 13.1 4.9 14.6 4 16.3 4 18.9 4 21 6.1 21 8.8 21 14.5 12 20.5 12 20.5Z"/></svg>';
+const SVG_COMMENT = '<svg class="act-svg" viewBox="0 0 24 24" stroke-linejoin="round"><path d="M21 11.5C21 16 16.97 19.5 12 19.5C10.7 19.5 9.46 19.26 8.34 18.83L3.5 20.5L5.05 16.05C4.07 14.78 3.5 13.2 3.5 11.5C3.5 7 7.53 3.5 12 3.5C16.97 3.5 21 7 21 11.5Z"/></svg>';
+const SVG_ZAP = '<svg class="act-svg act-svg-zap" viewBox="0 0 24 24" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22L19.5 10H13L13 2Z"/></svg>';
+const SVG_SHARE = '<svg class="act-svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5L20 5L13 21L11 13.5L4 12.5Z"/></svg>';
+const SVG_BOOKMARK = '<svg class="act-svg" viewBox="0 0 24 24" stroke-linejoin="round"><path d="M6 4.5H18V20.5L12 16L6 20.5V4.5Z"/></svg>';
+const SVG_BOOKMARK_FILL = '<svg class="act-svg" viewBox="0 0 24 24" stroke-linejoin="round" style="fill:var(--text1)"><path d="M6 4.5H18V20.5L12 16L6 20.5V4.5Z"/></svg>';
+
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const USERS = {
+  u1:{id:'u1',name:'Ana Morales',handle:'ana',av:'https://i.pravatar.cc/80?img=3',bio:'Landscape & travel photographer. Alps obsessed 🏔️',banner:'https://picsum.photos/seed/anabnr/800/200',following:312,followers:4820,nip05:'ana@olas.app',grid:['alps2024','coast1','mist9','snow2','lake7','arch1']},
+  u2:{id:'u2',name:'Marco Rossi',handle:'marco_photo',av:'https://i.pravatar.cc/80?img=52',bio:'Street photography. Rome → Lisbon → everywhere.',banner:'https://picsum.photos/seed/marcbnr/800/200',following:287,followers:2100,nip05:'marco@olas.app',grid:['street9','urban2','door7','face1','crowd3','rain4']},
+  u3:{id:'u3',name:'Freya Hansen',handle:'freya',av:'https://i.pravatar.cc/80?img=11',bio:'Morning light & slow coffee ☁️',banner:'https://picsum.photos/seed/freybnr/800/200',following:193,followers:6340,nip05:'freya@nostr.band',grid:['coffee1','flat7','window2','book4','candle3','leaf8']},
+  u4:{id:'u4',name:'Johannes Berg',handle:'j.berg',av:'https://i.pravatar.cc/80?img=7',bio:'Architecture. Detail. Silence.',banner:'https://picsum.photos/seed/jberg/800/200',following:104,followers:1870,nip05:'jberg@snort.social',grid:['arch4','stair2','facade1','glass3','shadow7','wall2']},
+  u5:{id:'u5',name:'Zara Osei',handle:'zara_creates',av:'https://i.pravatar.cc/80?img=44',bio:'Mixed media artist. Lagos ✦ London.',banner:'https://picsum.photos/seed/zarabnr/800/200',following:229,followers:3210,nip05:'zara@nos.social',grid:['art3','paint2','studio7','color1','textile4','sketch9']},
+  u6:{id:'u6',name:'Luna Park',handle:'lunapark',av:'https://i.pravatar.cc/80?img=26',bio:'Botanist & macro lens enthusiast 🌿',banner:'https://picsum.photos/seed/lunabnr/800/200',following:88,followers:940,nip05:'luna@damus.io',grid:['flower3','macro2','green7','moss1','petal4','fern2']},
+  u7:{id:'u7',name:'Satellite.earth',handle:'satellite',av:'https://i.pravatar.cc/80?img=22',bio:'Running photo relays. NIP-68 or bust.',banner:'https://picsum.photos/seed/satbnr/800/200',following:441,followers:720,nip05:'relay@satellite.earth',grid:['server1','rack2','fiber3','dark4','glow5','code6']},
+};
+
+// Blurhash-style gradient placeholders (approximate dominant colors per image mood)
+const BLURHASH = {
+  alps:'linear-gradient(135deg, #4a6fa1 0%, #c0d4e8 50%, #e8d5b0 100%)',
+  street:'linear-gradient(160deg, #2c2c3e 0%, #8b7355 60%, #d4a96a 100%)',
+  coffee:'linear-gradient(135deg, #f5e6d0 0%, #c8a882 50%, #8b6343 100%)',
+  arch:'linear-gradient(180deg, #e8e4e0 0%, #c4bdb5 50%, #6b7280 100%)',
+  art:'linear-gradient(135deg, #1a0a2e 0%, #6b21a8 50%, #f59e0b 100%)',
+  flower:'linear-gradient(160deg, #1a3a2a 0%, #4a8a5a 50%, #d4e8c4 100%)',
+  server:'linear-gradient(160deg, #0a0a1a 0%, #1e2a4a 50%, #2a4a6a 100%)',
+  coast:'linear-gradient(160deg, #2a4a6a 0%, #4a8aba 50%, #d4e8f0 100%)',
+  book:'linear-gradient(135deg, #f0e6d0 0%, #c8a882 50%, #6b5343 100%)',
+  paris:'linear-gradient(160deg, #2c2c3a 0%, #5a5a6a 50%, #9aa0b0 100%)',
+  door:'linear-gradient(160deg, #3a2a2a 0%, #8b5a3a 60%, #d4a96a 100%)',
+  tokyo:'linear-gradient(160deg, #0a0a1a 0%, #4a1a3a 50%, #d41a6a 100%)',
+  paint:'linear-gradient(135deg, #2a0a2e 0%, #8b21a8 50%, #f5b04b 100%)',
+  barca:'linear-gradient(160deg, #2a5a7a 0%, #6abad4 50%, #f0e8d0 100%)',
+};
+
+const POSTS = {
+  following:[
+    {id:'p1',uid:'u1',img:'https://picsum.photos/seed/alps2024/800/1000',images:['https://picsum.photos/seed/alps2024/800/1000','https://picsum.photos/seed/snow2/800/1000','https://picsum.photos/seed/mist9/800/1000'],aspect:'img-4-5',blurhash:BLURHASH.alps,reactions:247,comments:18,zaps:3210,caption:'Golden hour in the Alps. Nothing compares to this light.',tags:'#landscape #photography',time:'2h',minutesAgo:120,trust:'You follow Ana'},
+    {id:'p2',uid:'u2',img:'https://picsum.photos/seed/street9/800/1000',aspect:'img-4-5',blurhash:BLURHASH.street,reactions:114,comments:7,zaps:540,caption:'Fado playing from a window on Alfama hill.',tags:'#lisbon #streetphotography',time:'4h',minutesAgo:240,trust:'You follow Marco'},
+    {id:'p3',uid:'u3',img:'https://picsum.photos/seed/coffee1/800/800',aspect:'img-1-1',blurhash:BLURHASH.coffee,reactions:381,comments:22,zaps:1870,caption:'The ritual that makes everything possible.',tags:'#morning #coffee #slowliving',time:'5h',minutesAgo:300,trust:'You follow Freya'},
+    {id:'p_cw',uid:'u5',img:'https://picsum.photos/seed/art3/800/1000',aspect:'img-4-5',blurhash:BLURHASH.art,reactions:628,comments:41,zaps:9400,caption:'New piece exploring grief and loss. Heavy themes — content warning.',tags:'#art #cw',time:'6h',minutesAgo:360,trust:'You follow Zara',contentWarning:true,cwLabel:'Sensitive content'},
+    {id:'p4',uid:'u4',img:'https://picsum.photos/seed/arch4/800/1000',aspect:'img-4-5',blurhash:BLURHASH.arch,reactions:92,comments:4,zaps:210,caption:'Concrete and light. Rotterdam harbor terminal.',tags:'#architecture #brutalism',time:'7h',minutesAgo:420,trust:'You follow Johannes'},
+    {id:'p5',uid:'u5',img:'https://picsum.photos/seed/art3/800/800',aspect:'img-1-1',blurhash:BLURHASH.art,reactions:628,comments:41,zaps:9400,caption:'New piece. Three weeks of layers. Finally done.',tags:'#art #studio #process',time:'9h',minutesAgo:540,trust:'You follow Zara',cw:false},
+    {id:'p6',uid:'u6',img:'https://picsum.photos/seed/flower3/800/1000',aspect:'img-4-5',blurhash:BLURHASH.flower,reactions:55,comments:3,zaps:120,caption:'Macro Monday. Dew drops on rosemary.',tags:'#macro #botany #nature',time:'1d',minutesAgo:1560,trust:'You follow Luna'},
+    {id:'p7',uid:'u7',img:'https://picsum.photos/seed/server1/800/1000',aspect:'img-4-5',blurhash:BLURHASH.server,reactions:34,comments:8,zaps:4321,caption:'New photo relay online. 200 ms median latency, EU West. Open for anyone.',tags:'#nostr #relay #infrastructure',time:'1d',minutesAgo:1620,trust:'You follow Satellite'},
+  ],
+  network:[
+    {id:'n1',uid:'u1',img:'https://picsum.photos/seed/coast1/800/1000',aspect:'img-4-5',blurhash:BLURHASH.coast,reactions:892,comments:67,zaps:12400,caption:'Patagonia calling. Shot this on my last day before the storm rolled in.',tags:'#patagonia #landscape',time:'1h',minutesAgo:60,trust:'You follow Ana'},
+    {id:'n2',uid:'u3',img:'https://picsum.photos/seed/book4/800/800',aspect:'img-1-1',blurhash:BLURHASH.book,reactions:234,comments:15,zaps:780,caption:'Reading light. The best hours.',tags:'#books #slowliving',time:'2h',minutesAgo:120,trust:'You follow Freya'},
+    {id:'n3',uid:'u8_ext',name:'Camille Dubois',handle:'camille',av:'https://i.pravatar.cc/80?img=9',img:'https://picsum.photos/seed/paris7/800/1000',aspect:'img-4-5',blurhash:BLURHASH.paris,reactions:441,comments:28,zaps:2200,caption:'Paris through rain-soaked glass.',tags:'#paris #rain #mood',time:'3h',minutesAgo:180,trust:'Followed by Ana + 2 others'},
+    {id:'n4',uid:'u2',img:'https://picsum.photos/seed/door7/800/1000',aspect:'img-4-5',blurhash:BLURHASH.door,reactions:177,comments:11,zaps:640,caption:'Every door tells a different story.',tags:'#doors #travel #texture',time:'5h',minutesAgo:300,trust:'You follow Marco'},
+    {id:'n5',uid:'u9_ext',name:'Kai Nakamura',handle:'kai.photo',av:'https://i.pravatar.cc/80?img=33',img:'https://picsum.photos/seed/tokyo4/800/1000',aspect:'img-4-5',blurhash:BLURHASH.tokyo,reactions:2105,comments:94,zaps:28000,caption:'Shibuya at 3am. The city breathes differently.',tags:'#tokyo #night #street',time:'6h',minutesAgo:360,trust:'Followed by Marco + 4 others'},
+    {id:'n6',uid:'u5',img:'https://picsum.photos/seed/paint2/800/1000',aspect:'img-4-5',blurhash:BLURHASH.paint,reactions:312,comments:19,zaps:3100,caption:'Work in progress. Process is the point.',tags:'#art #wip',time:'8h',minutesAgo:480,trust:'You follow Zara'},
+    {id:'n7',uid:'u10_ext',name:'Marta Vidal',handle:'martavidal',av:'https://i.pravatar.cc/80?img=41',img:'https://picsum.photos/seed/barca2/800/1000',aspect:'img-4-5',blurhash:BLURHASH.barca,reactions:88,comments:5,zaps:330,caption:'Late summer, Barceloneta.',tags:'#barcelona #summer #sea',time:'11h',minutesAgo:660,trust:'Followed by Freya + 1 other'},
+  ]
+};
+
+const SUGGESTIONS = [
+  {uid:'u2',mutual:'Followed by Ana + 5 others',mutualCount:6,grid:['street9','urban2','door7','face1']},
+  {uid:'u4',mutual:'Followed by Zara + 2 others',mutualCount:3,grid:['arch4','stair2','facade1','glass3']},
+  {uid:'u5',mutual:'Followed by Ana, Marco + 3 others',mutualCount:5,grid:['art3','paint2','studio7','color1']},
+  {uid:'u6',mutual:'Followed by Freya + 1 other',mutualCount:2,grid:['flower3','macro2','green7','moss1']},
+  {uid:'u7',mutual:'Followed by Johannes',mutualCount:1,grid:['server1','rack2','fiber3','dark4']},
+];
+
+const NOTIFS = [
+  {type:'zapsummary',text:'You received <b>⚡ 4,321 sats</b> in the last 24h — from <b>8 people</b>',time:'just now'},
+  {type:'heart',uid:'u1',stack:['u1','u3','u2'],text:'<b>Ana Morales</b> and <b>11 others</b> reacted to your photo',time:'2 min',img:'https://picsum.photos/seed/alps2024/80/80',color:'#ff375f'},
+  {type:'follow',uid:'u5',text:'<b>Zara Osei</b> started following you',time:'14 min',img:null,color:'#34c759'},
+  {type:'zap',uid:'u7',text:'<b>Satellite</b> zapped your photo <b>⚡ 1,000 sats</b>',time:'31 min',img:'https://picsum.photos/seed/server1/80/80',color:'#fbb131'},
+  {separator:'Earlier'},
+  {type:'comment',uid:'u3',text:'<b>Freya</b> commented: "The light here is absolutely magical 🤍"',time:'1h',img:'https://picsum.photos/seed/alps2024/80/80',color:'#0a84ff'},
+  {type:'heart',uid:'u2',text:'<b>Marco</b> and <b>3 others</b> reacted to your photo',time:'2h',img:'https://picsum.photos/seed/coffee1/80/80',color:'#ff375f'},
+  {type:'zap',uid:'u4',text:'<b>Johannes Berg</b> zapped <b>⚡ 210 sats</b>',time:'3h',img:'https://picsum.photos/seed/arch4/80/80',color:'#fbb131'},
+  {type:'comment',uid:'u1',text:'<b>Ana</b> replied: "See you there next summer!"',time:'4h',img:'https://picsum.photos/seed/alps2024/80/80',color:'#0a84ff'},
+  {type:'follow',uid:'u6',text:'<b>Luna Park</b> started following you',time:'5h',img:null,color:'#34c759'},
+];
+
+const COMMENTS = [
+  {uid:'u1',text:'Absolutely stunning — the alpine glow is unreal 🏔️',time:'1h'},
+  {uid:'u3',text:'I need this on my wall. Seriously stunning composition.',time:'2h'},
+  {uid:'u2',text:'What lens was this? The compression is perfect.',time:'2h'},
+  {uid:'u4',text:'Geometric perfection. The leading lines.',time:'3h'},
+  {uid:'u5',text:'The palette here!! 🤍',time:'4h'},
+];
+
+const FILTERS = ['Original','Daylight','Ember','Dusk','Mist','Chrome','Film','Fade','Grain','Arctic','Copper','Veil'];
+const COMPOSE_IMGS = ['alps2024','coffee1','arch4','art3','street9','flower3','coast1','book4','paint2','tokyo4','barca2','server1'];
+const RELAY_TILES = [
+  {name:'Global Photos',count:'2.4k posts today',img:'https://picsum.photos/seed/relay1/800/300',desc:'The largest open photo relay on Nostr'},
+  {name:'Olas Network',count:'841 posts',img:'https://picsum.photos/seed/relay2/400/200',desc:'Curated photography'},
+  {name:'Satellite.earth',count:'1.1k posts',img:'https://picsum.photos/seed/relay3/400/200',desc:'Media-first relay'},
+  {name:'nos.social',count:'3.2k posts',img:'https://picsum.photos/seed/relay4/400/200',desc:'Community relay'},
+];
+const RELAY_VIEW_IMGS = ['alps2024','street9','coffee1','arch4','art3','flower3','coast1','tokyo4','paint2','barca2','door7','book4'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const st = {
+  tab: 'home',
+  feedMode: 'following',
+  likes: {},
+  bookmarks: {},
+  follows: {},
+  zapAmounts: {},
+  currentZapTarget: null,
+  selectedZap: 100,
+  composeStep: 'pick', // 'pick' | 'edit'
+  selectedComposeImg: null,
+  openModalId: null,
+  cwRevealed: {},
+  networkLoaded: true,
+  walletConnected: false,
+  wotPreset: 'Balanced',
+  moreMenuPostId: null,
+  onbStep: 0,
+  onbData: { displayName: '', username: '', packs: new Set(['fp1']), server: 'blossom.primal.net' },
+};
+
+// ── NIP-51 kind:30000 follow packs (Categorized People Lists) ──────────────────
+const FOLLOW_PACKS = [
+  { id:'fp1', name:'Visual Storytellers', desc:'Landscape, portrait & street photographers', category:'Photography', color:'#0A84FF', count:847, avatarIds:[3,7,11,26,33,44], preselected: true },
+  { id:'fp2', name:'World Travelers', desc:'Documenting the planet one photo at a time', category:'Travel', color:'#30D158', count:634, avatarIds:[9,15,22,36,41,52], preselected: false },
+  { id:'fp3', name:'Digital Artists', desc:'Illustration, 3D, mixed media & beyond', category:'Art', color:'#BF5AF2', count:412, avatarIds:[1,5,18,29,47,63], preselected: false },
+  { id:'fp4', name:'Food & Culture', desc:'Chefs, markets, rituals and table moments', category:'Food', color:'#FF9F0A', count:291, avatarIds:[4,12,24,38,55,66], preselected: false },
+  { id:'fp5', name:'Nostr Builders', desc:'Devs and creators building the open social web', category:'Tech', color:'#FF375F', count:189, avatarIds:[7,14,22,33,45,68], preselected: false },
+];
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init() {
+  updateClock();
+  setInterval(updateClock, 30000);
+  renderFeed('following');
+  renderFeed('network');
+  renderSuggested();
+  renderMagazine();
+  renderNotifs();
+  renderOwnGrid();
+  renderComposeGrid();
+  renderFilterStrip();
+  setupFeedParallax();
+  attachEdgeSwipe();
+  setupSpringPress();
+  setupPullToRefresh();
+  setupFullImgGestures();
+  renderOnboarding();
+  setTimeout(() => document.getElementById('new-pill').classList.add('show'), 4000);
+  // Splash auto-advances to Welcome after 0.8s
+  st.onbTimer = setTimeout(() => { if (st.onbStep === 0) nextOnb(1); }, 800);
+}
+
+// ── FEED HEADER PARALLAX / COMPRESS ───────────────────────────────────────────
+function setupFeedParallax() {
+  const scr = document.getElementById('feed-scr');
+  const top = document.querySelector('.feed-top');
+  const logo = document.querySelector('.feed-logo');
+  if (!scr || !top || !logo) return;
+  scr.addEventListener('scroll', () => {
+    const y = scr.scrollTop;
+    if (y < 10) {
+      top.classList.remove('compressed');
+      logo.style.opacity = '1';
+      logo.style.transform = 'scale(1)';
+    } else {
+      const t = Math.min(y / 60, 1);
+      logo.style.opacity = String(1 - t);
+      logo.style.transform = 'scale(' + (1 - t*0.15) + ')';
+      if (y >= 60) top.classList.add('compressed');
+      else top.classList.remove('compressed');
+    }
+  }, {passive:true});
+}
+
+// ── PULL TO REFRESH ───────────────────────────────────────────────────────────
+function setupPullToRefresh() {
+  const scr = document.getElementById('feed-scr');
+  const ptr = document.getElementById('ptr');
+  const ptrText = document.getElementById('ptr-text');
+  if (!scr || !ptr) return;
+  let startY = 0, pulling = false, dist = 0;
+  const MAX = 80, TRIGGER = 60;
+
+  scr.addEventListener('touchstart', e => {
+    if (scr.scrollTop <= 0) { startY = e.touches[0].clientY; pulling = true; dist = 0; }
+    else pulling = false;
+  }, {passive:true});
+
+  scr.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { dist = 0; ptr.style.height = '0px'; return; }
+    dist = Math.min(dy * 0.5, MAX);
+    ptr.style.transition = 'none';
+    ptr.style.height = dist + 'px';
+    ptrText.textContent = dist >= TRIGGER ? 'Release to refresh' : 'Pull to refresh';
+  }, {passive:true});
+
+  scr.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    ptr.style.transition = 'height .2s';
+    if (dist >= TRIGGER) {
+      ptr.style.height = '50px';
+      ptrText.textContent = 'Refreshing…';
+      haptic('impact');
+      setTimeout(() => {
+        ptr.style.height = '0px';
+        addRefreshedPost();
+        toast('Feed refreshed');
+        haptic('success');
+      }, 700);
+    } else {
+      ptr.style.height = '0px';
+    }
+    dist = 0;
+  }, {passive:true});
+}
+
+function addRefreshedPost() {
+  const fresh = {
+    id:'pfresh' + Date.now(), uid:'u3',
+    img:'https://picsum.photos/seed/fresh' + (Date.now()%999) + '/800/1000',
+    aspect:'img-4-5', blurhash:BLURHASH.coffee,
+    reactions:2, comments:0, zaps:0,
+    caption:'Just shared a moment from this morning.',
+    tags:'#new #morning', minutesAgo:0, trust:'You follow Freya'
+  };
+  const container = document.getElementById('feed-following');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = postCardHTML(fresh, 'following');
+  const card = tmp.firstElementChild;
+  card.style.opacity = '0';
+  card.style.transform = 'translateY(-16px)';
+  card.style.transition = 'all .45s cubic-bezier(.34,1.56,.64,1)';
+  container.prepend(card);
+  requestAnimationFrame(() => { card.style.opacity='1'; card.style.transform='translateY(0)'; });
+}
+
+// ── SPRING PRESS (JS event listeners, fires spring-back even on quick taps) ────
+function setupSpringPress() {
+  const selector = '.act,.tab,.compose-btn,.uprof-follow,.uprof-zap,.sug-follow,.tog,.zchip,.zap-confirm,.cs-share,.prof-edit,.btn-text,.reply-send,.new-pill,.mag-tile';
+  const pressDown = (el) => {
+    if (el.dataset.noSpring) return;
+    el.classList.remove('spring-back');
+    el.classList.add('spring-press');
+  };
+  const pressUp = (el) => {
+    if (!el.classList.contains('spring-press')) return;
+    el.classList.remove('spring-press');
+    el.classList.add('spring-back');
+    setTimeout(()=>el.classList.remove('spring-back'), 400);
+  };
+  // Delegated so dynamically-rendered buttons are covered too
+  const root = document.querySelector('.app');
+  root.addEventListener('pointerdown', e => {
+    const el = e.target.closest(selector);
+    if (el) pressDown(el);
+  }, {passive:true});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev =>
+    root.addEventListener(ev, e => {
+      const el = e.target.closest(selector);
+      if (el) pressUp(el);
+      // also release any stuck pressed elements
+      document.querySelectorAll('.spring-press').forEach(p => { if (p !== el) pressUp(p); });
+    }, {passive:true})
+  );
+}
+
+function updateClock() {
+  const d = new Date();
+  document.getElementById('clk').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────────
+function userOf(post) {
+  if (USERS[post.uid]) return USERS[post.uid];
+  return {name:post.name,handle:post.handle,av:post.av,trust:post.trust};
+}
+
+function renderFeed(mode) {
+  const el = document.getElementById('feed-' + mode);
+  const header = (mode === 'network') ? `<div class="net-header">Based on who you follow</div>` : '';
+  el.innerHTML = header + POSTS[mode].map(p => postCardHTML(p, mode)).join('');
+}
+
+function imgWrapInner(p) {
+  // Content warning (not yet revealed)
+  if (p.contentWarning && !st.cwRevealed[p.id]) {
+    return `<img class="cw-img" src="${p.img}" loading="lazy" decoding="async" alt="" onload="this.classList.add('loaded');this.parentElement.classList.add('loaded-wrap')">
+      <div class="cw-overlay" onclick="event.stopPropagation();revealCW('${p.id}')">
+        <div class="cw-emoji">🫣</div>
+        <div class="cw-title">${p.cwLabel || 'Sensitive content'}</div>
+        <div class="cw-sub">Tap to view</div>
+      </div>
+      <div class="heart-pop" id="hpop-${p.id}">❤️</div>`;
+  }
+  // Carousel (multi-image)
+  if (p.images && p.images.length > 1) {
+    const slides = p.images.map(src =>
+      `<div class="carousel-slide"><img src="${src}" loading="lazy" decoding="async" onload="this.classList.add('loaded');this.closest('.img-wrap').classList.add('loaded-wrap')"></div>`
+    ).join('');
+    return `<div class="carousel-count" id="cc-${p.id}">1/${p.images.length}</div>
+      <div class="carousel-strip" id="strip-${p.id}" onscroll="onCarouselScroll('${p.id}',${p.images.length})">${slides}</div>
+      <div class="heart-pop" id="hpop-${p.id}">❤️</div>`;
+  }
+  // Single image
+  return `<img src="${p.img}" loading="lazy" decoding="async" alt="${p.caption}" onload="this.classList.add('loaded');this.parentElement.classList.add('loaded-wrap')">
+    <div class="heart-pop" id="hpop-${p.id}">❤️</div>`;
+}
+
+function postCardHTML(p, mode) {
+  const u = userOf(p);
+  const liked = st.likes[p.id];
+  const bookmarked = st.bookmarks[p.id];
+  const isExt = p.uid && p.uid.includes('_ext');
+  const trust = p.trust || '';
+  // A "trusted" relationship: your own post or someone you directly follow.
+  const isDirectFollow = trust.startsWith('You follow') || trust === 'You';
+  // External/network posts show a trust line; "outside network" tag when not a direct follow.
+  const trustBadge = isExt
+    ? `<span class="post-sub">${p.trust}${!isDirectFollow ? `<span class="post-ext-tag">· Outside your network</span>` : ''}</span>`
+    : '';
+  // WoT avatar badge: green ✓ for trusted relationships, shield 🛡 for everyone else.
+  const wotBadge = isDirectFollow
+    ? `<span class="wot-badge verified">✓</span>`
+    : `<span class="wot-badge">🛡</span>`;
+  const isCarousel = p.images && p.images.length > 1;
+  const dots = isCarousel ? `<div class="dots" id="dots-${p.id}">${p.images.map((_,i)=>`<span class="dot ${i===0?'on':''}"></span>`).join('')}</div>` : '';
+  const bgStyle = p.blurhash ? ` style="background:${p.blurhash}"` : '';
+  const timeStr = (typeof p.minutesAgo === 'number') ? relativeTime(p.minutesAgo) : p.time;
+  const reactN = p.reactions + (liked?1:0);
+  const reactStr = reactN > 0 ? fmtN(reactN) + ' reactions' : 'No reactions yet';
+
+  return `<div class="post" id="card-${p.id}">
+    <div class="post-hdr">
+      <span class="av-wrap">
+        <img class="av" width="34" height="34" decoding="async" src="${u.av}" loading="lazy" decoding="async" onclick="openUserProfile('${p.uid || 'u1'}','${p.id}')">
+        ${wotBadge}
+      </span>
+      <div class="post-info">
+        <div class="post-name" onclick="openUserProfile('${p.uid || 'u1'}','${p.id}')">${u.name}</div>
+        ${trustBadge}
+      </div>
+      <button class="more-btn" onclick="showMoreMenu('${p.id}')">···</button>
+    </div>
+    <div class="img-wrap ${p.aspect}"${bgStyle} onclick="handleImgTap(event,'${p.id}')" id="imgwrap-${p.id}">
+      ${imgWrapInner(p)}
+    </div>
+    ${dots}
+    <div class="actions">
+      <button class="act ${liked ? 'liked-state' : ''}" id="like-${p.id}" onclick="toggleLike('${p.id}')">
+        <span class="act-ico">${SVG_HEART}</span>
+      </button>
+      <button class="act" onclick="openPostDetail('${p.id}')">
+        <span class="act-ico">${SVG_COMMENT}</span>
+      </button>
+      <button class="act" onclick="openZap('${p.id}')">
+        <span class="act-ico">${SVG_ZAP}</span>
+        <span class="act-n" id="zap-n-${p.id}">${fmtN(p.zaps)}</span>
+      </button>
+      <button class="act" onclick="sharePost('${p.id}')">
+        <span class="act-ico">${SVG_SHARE}</span>
+      </button>
+      <div class="sp"></div>
+      <button class="act ${bookmarked ? 'bk-state' : ''}" id="bk-${p.id}" onclick="toggleBookmark('${p.id}')">
+        <span class="act-ico">${bookmarked ? SVG_BOOKMARK_FILL : SVG_BOOKMARK}</span>
+      </button>
+    </div>
+    <div class="meta">
+      <div class="meta-react" id="react-${p.id}">${reactStr}</div>
+      <p class="meta-cap"><b>${u.handle}</b> ${p.caption} ${renderTags(p.tags)}</p>
+      <div class="meta-cmts" onclick="openPostDetail('${p.id}')">View ${p.comments} comments</div>
+      <div class="meta-time">${timeStr}</div>
+    </div>
+  </div>`;
+}
+
+// Render hashtags as tappable spans
+function renderTags(tags) {
+  if (!tags) return '';
+  return tags.split(/\s+/).filter(Boolean).map(tok => {
+    if (tok.startsWith('#')) {
+      const clean = tok.replace(/[^#\w]/g,'');
+      return `<span class="hashtag" onclick="event.stopPropagation();openHashtag('${clean.replace(/'/g,"")}')">${clean}</span>`;
+    }
+    return `<span style="color:var(--text3)">${tok}</span>`;
+  }).join(' ');
+}
+
+function renderSuggested() {
+  const el = document.getElementById('suggested-row');
+  el.innerHTML = SUGGESTIONS.map(s => {
+    const u = USERS[s.uid];
+    if (!u) return '';
+    const grid = (s.grid||[]).slice(0,4).map(seed =>
+      `<img src="https://picsum.photos/seed/${seed}/200/200" loading="lazy" decoding="async">`
+    ).join('');
+    return `<div class="sug-card" onclick="openUserProfile('${u.id}',null)">
+      <div class="sug-photo-grid">${grid}</div>
+      <div class="sug-info">
+        <div class="sug-av-row"><img class="av" width="24" height="24" src="${u.av}" loading="lazy" decoding="async"><span class="sug-name">${u.name}</span></div>
+        <div class="sug-mutual">${s.mutual}</div>
+        <button class="sug-follow" id="sug-${u.id}" onclick="event.stopPropagation();toggleFollowSug('${u.id}',this)">${st.follows[u.id]?'Following':'Follow'}</button>
+        <div class="sug-mutual" style="margin-top:5px;color:#48484A">${s.mutualCount} mutual follow${s.mutualCount===1?'':'s'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMagazine() {
+  const el = document.getElementById('mag-grid');
+  el.innerHTML = RELAY_TILES.map((r,i) => `
+    <div class="mag-tile" onclick="openRelayView('${r.name.replace(/'/g,"\\'")}','${r.img}','${r.count}')">
+      <img src="${r.img}" loading="lazy" decoding="async">
+      <div class="mag-lbl">
+        <div class="mag-name">${r.name}</div>
+        ${i===0 ? `<div class="mag-desc">${r.desc||''}</div>` : ''}
+        <div class="mag-cnt"><span class="mag-live-dot"></span>${r.count}</div>
+      </div>
+    </div>`).join('');
+}
+
+// RELAY VIEW MODAL
+function openRelayView(name, img, count) {
+  document.getElementById('relay-title').textContent = name;
+  document.getElementById('relay-hero-img').src = img;
+  document.getElementById('relay-hero-name').textContent = name;
+  document.getElementById('relay-hero-cnt').textContent = (count || '') + ' · live';
+  document.getElementById('relay-grid').innerHTML = RELAY_VIEW_IMGS.map(s =>
+    `<div class="pg-item"><img src="https://picsum.photos/seed/${s}/300/300" loading="lazy" decoding="async"></div>`
+  ).join('');
+  openModal('m-relay');
+}
+
+function renderNotifs() {
+  const el = document.getElementById('notifs-list');
+  const icons = {heart:'❤️',zap:'⚡',follow:'➕',comment:'💬'};
+  el.innerHTML = NOTIFS.map(n => {
+    if (n.separator) return `<div class="ni-sep">${n.separator}</div>`;
+    if (n.type === 'zapsummary') {
+      return `<div class="ni ni-zapsum">
+        <div class="ni-zapsum-ico">⚡</div>
+        <div class="ni-text">${n.text} <span class="ni-time">· ${n.time}</span></div>
+      </div>`;
+    }
+    const u = USERS[n.uid] || {av:'https://i.pravatar.cc/80?img=1'};
+    let avHtml;
+    if (n.stack && n.stack.length) {
+      const imgs = n.stack.map(uid => `<img src="${(USERS[uid]||u).av}" loading="lazy" decoding="async">`).join('');
+      avHtml = `<div class="ni-stack">${imgs}<div class="ni-badge" style="background:${n.color}">${icons[n.type]||'•'}</div></div>`;
+    } else {
+      avHtml = `<div class="ni-av">
+        <img class="av" width="44" height="44" src="${u.av}" loading="lazy" decoding="async">
+        <div class="ni-badge" style="background:${n.color}">${icons[n.type]||'•'}</div>
+      </div>`;
+    }
+    return `<div class="ni">
+      ${avHtml}
+      <div class="ni-text">${n.text} <span class="ni-time">· ${n.time}</span></div>
+      ${n.img ? `<img class="ni-img" src="${n.img}" loading="lazy" decoding="async">` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderOwnGrid() {
+  const imgs = ['alps2024','coffee1','arch4','art3','street9','flower3','coast1','book4','paint2'];
+  const multi = [1,4]; // 2nd and 5th items are carousels
+  document.getElementById('own-grid').innerHTML = imgs.map((s,i) =>
+    `<div class="pg-item" onclick="openPostDetail('p1')"><img src="https://picsum.photos/seed/${s}/300/300" loading="lazy" decoding="async">${multi.includes(i)?'<span class="pg-multi">⊞</span>':''}</div>`
+  ).join('');
+}
+
+function renderComposeGrid() {
+  document.getElementById('cs-grid').innerHTML = COMPOSE_IMGS.map((s,i) =>
+    `<div class="cs-item ${i===0?'sel':''}" id="cs-${i}" onclick="selectComposeImg('https://picsum.photos/seed/${s}/800/1000',${i})">
+      <img src="https://picsum.photos/seed/${s}/300/300" loading="lazy" decoding="async">
+    </div>`
+  ).join('');
+  st.selectedComposeImg = 'https://picsum.photos/seed/' + COMPOSE_IMGS[0] + '/800/1000';
+}
+
+function renderFilterStrip() {
+  document.getElementById('filter-strip').innerHTML = FILTERS.map((f,i) =>
+    `<div class="filter-item ${i===0?'on':''}" id="filt-${i}" onclick="pickFilter(${i},this)">
+      <div class="filter-thumb"><img src="https://picsum.photos/seed/${COMPOSE_IMGS[0]}/80/80" loading="lazy" decoding="async" style="filter:${filterCSS(i)}"></div>
+      <span class="filter-name">${f}</span>
+    </div>`
+  ).join('');
+}
+
+function filterCSS(i) {
+  const filters = ['none','brightness(1.1) saturate(1.2)','sepia(.4) saturate(1.4) hue-rotate(-10deg)','brightness(.9) contrast(1.1) hue-rotate(200deg)','brightness(1.05) contrast(.9) saturate(.8)','contrast(1.3) saturate(.9)','sepia(.3) contrast(1.1)','brightness(1.1) contrast(.85) saturate(.7)','contrast(1.2) saturate(.8) brightness(.95)','brightness(1.15) saturate(.6) hue-rotate(180deg)','sepia(.2) hue-rotate(20deg) saturate(1.3)','brightness(1.1) opacity(.85)','saturate(1.5) contrast(1.1)'];
+  return filters[i] || 'none';
+}
+
+function renderUProfGrid(uid) {
+  const u = USERS[uid];
+  if (!u) return;
+  const imgs = u.grid || ['alps2024','coffee1','arch4'];
+  document.getElementById('uprof-grid').innerHTML = imgs.map(s =>
+    `<div class="pg-item"><img src="https://picsum.photos/seed/${s}/300/300" loading="lazy" decoding="async"></div>`
+  ).join('');
+}
+
+// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  // feed-scr scroll position is preserved by CSS transform visibility — no reset needed
+  const map = {home:'s-home',search:'s-search',notifs:'s-notifs',profile:'s-profile'};
+  const cur = document.getElementById('s-'+st.tab);
+  const next = document.getElementById(map[tab] || 's-home');
+  if (cur === next) { if(tab==='home') document.getElementById('feed-scr').scrollTo({top:0,behavior:'smooth'}); return; }
+  cur.classList.remove('active');
+  next.classList.add('active');
+  const tabMap = {home:'tab-home',search:'tab-search',notifs:'tab-notifs',profile:'tab-profile'};
+  // deselect animation on previously-active tab icon
+  const prevTab = document.getElementById(tabMap[st.tab]);
+  if (prevTab) { prevTab.classList.remove('on','tab-bounce'); prevTab.classList.add('tab-deselect'); setTimeout(()=>prevTab.classList.remove('tab-deselect'),300); }
+  document.querySelectorAll('.tab').forEach(t => { if(t!==prevTab) t.classList.remove('on'); });
+  const tid = tabMap[tab];
+  if (tid) {
+    const nextTab = document.getElementById(tid);
+    nextTab.classList.add('on');
+    nextTab.classList.remove('tab-bounce'); void nextTab.offsetWidth;
+    nextTab.classList.add('tab-bounce');
+    setTimeout(()=>nextTab.classList.remove('tab-bounce'),300);
+  }
+  st.tab = tab;
+  haptic('impact');
+}
+
+function openModal(id) {
+  closeModal(st.openModalId);
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.add('open');
+  document.getElementById('s-'+st.tab)?.classList.add('modal-behind');
+  st.openModalId = id;
+  haptic('impact');
+}
+
+function closeModal(id) {
+  if (!id) return;
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.remove('open','dragging');
+  m.style.transform = '';
+  document.getElementById('s-'+st.tab)?.classList.remove('modal-behind');
+  st.openModalId = null;
+}
+
+// Swipe-from-left-edge to close modal
+let edgeSwipe = null;
+function attachEdgeSwipe() {
+  document.querySelectorAll('.modal').forEach(m => {
+    m.addEventListener('touchstart', e => {
+      if (!m.classList.contains('open')) return;
+      const x = e.touches[0].clientX;
+      if (x <= 24) {
+        edgeSwipe = { id:m.id, startX:x, startY:e.touches[0].clientY, el:m };
+        m.classList.add('dragging');
+      }
+    }, {passive:true});
+    m.addEventListener('touchmove', e => {
+      if (!edgeSwipe || edgeSwipe.id !== m.id) return;
+      const dx = e.touches[0].clientX - edgeSwipe.startX;
+      if (dx > 0) m.style.transform = 'translateX(' + dx + 'px)';
+    }, {passive:true});
+    m.addEventListener('touchend', e => {
+      if (!edgeSwipe || edgeSwipe.id !== m.id) return;
+      const dx = (e.changedTouches[0].clientX) - edgeSwipe.startX;
+      m.classList.remove('dragging');
+      if (dx > 60) { closeModal(m.id); haptic('impact'); }
+      else { m.style.transform = ''; }
+      edgeSwipe = null;
+    }, {passive:true});
+  });
+}
+
+function openSheet(id) {
+  document.getElementById(id)?.classList.add('open');
+  if (id === 'sh-compose') document.getElementById('compose-btn')?.classList.add('sheet-open');
+  haptic('impact');
+}
+
+function closeSheet(id) {
+  document.getElementById(id)?.classList.remove('open');
+  if (id === 'sh-compose') { document.getElementById('compose-btn')?.classList.remove('sheet-open'); resetCompose(); }
+}
+
+function switchFeed(mode, btn) {
+  st.feedMode = mode;
+  document.querySelectorAll('.tog').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('feed-following').style.display = mode === 'following' ? '' : 'none';
+  document.getElementById('feed-network').style.display = mode === 'network' ? '' : 'none';
+}
+
+// LIKE
+function toggleLike(id) {
+  st.likes[id] = !st.likes[id];
+  const liked = st.likes[id];
+  const p = findPost(id);
+  if (!p) return;
+  // update all instances (following + network)
+  document.querySelectorAll(`#like-${id}`).forEach(btn => {
+    btn.className = 'act' + (liked?' liked-state':'');
+    const cls = liked ? 'like-on' : 'like-off';
+    btn.classList.remove('like-on','like-off'); void btn.offsetWidth;
+    btn.classList.add(cls);
+    setTimeout(()=>btn.classList.remove(cls), liked?450:300);
+    if (liked) {
+      const ico = btn.querySelector('.act-ico');
+      if (ico) {
+        const ring = document.createElement('span');
+        ring.className = 'like-glow';
+        ico.appendChild(ring);
+        requestAnimationFrame(()=>ring.classList.add('go'));
+        setTimeout(()=>ring.remove(), 450);
+      }
+    }
+  });
+  document.querySelectorAll(`#react-${id}`).forEach(el => {
+    const n = p.reactions + (liked?1:0);
+    el.textContent = n > 0 ? fmtN(n) + ' reactions' : 'No reactions yet';
+  });
+  haptic('impact');
+}
+
+// IMAGE TAP — single tap opens fullscreen, double tap likes
+const lastTap = {};
+const singleTapTimer = {};
+function handleImgTap(e, id) {
+  const now = Date.now();
+  if (now - (lastTap[id]||0) < 350) {
+    // DOUBLE TAP → like
+    lastTap[id] = 0;
+    clearTimeout(singleTapTimer[id]);
+    if (!st.likes[id]) toggleLike(id);
+    const pop = document.getElementById('hpop-'+id);
+    if (pop) { pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go'); }
+    spawnHeartBurst(e, id);
+    haptic('impact');
+  } else {
+    lastTap[id] = now;
+    // delay single-tap action so a second tap can cancel it
+    const src = currentImgSrcFor(id, e);
+    clearTimeout(singleTapTimer[id]);
+    singleTapTimer[id] = setTimeout(() => {
+      if (lastTap[id] === now) openFullImg(src);
+    }, 320);
+  }
+}
+
+// Resolve which image src is currently visible (handles carousels)
+function currentImgSrcFor(id, e) {
+  const wrap = document.getElementById('imgwrap-'+id);
+  if (wrap) {
+    const tappedImg = e && e.target && e.target.tagName === 'IMG' ? e.target : null;
+    if (tappedImg && tappedImg.src) return tappedImg.src;
+    const strip = document.getElementById('strip-'+id);
+    if (strip) {
+      const idx = Math.round(strip.scrollLeft / strip.clientWidth);
+      const imgs = strip.querySelectorAll('img');
+      if (imgs[idx]) return imgs[idx].src;
+    }
+    const img = wrap.querySelector('img');
+    if (img) return img.src;
+  }
+  const p = findPost(id);
+  return p ? p.img : '';
+}
+
+// CAROUSEL scroll → update dots + count
+function onCarouselScroll(id, total) {
+  const strip = document.getElementById('strip-' + id);
+  if (!strip) return;
+  const idx = Math.round(strip.scrollLeft / strip.clientWidth);
+  const dots = document.getElementById('dots-' + id);
+  if (dots) dots.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('on', i === idx));
+  const cc = document.getElementById('cc-' + id);
+  if (cc) cc.textContent = (idx + 1) + '/' + total;
+}
+
+// CONTENT WARNING reveal — only swap the img-wrap contents
+function revealCW(id) {
+  st.cwRevealed[id] = true;
+  const p = findPost(id);
+  if (!p) return;
+  document.querySelectorAll('#imgwrap-' + id).forEach(wrap => {
+    wrap.classList.remove('loaded-wrap');
+    wrap.innerHTML = imgWrapInner(p);
+  });
+  haptic('impact');
+}
+
+function spawnHeartBurst(e, id) {
+  const wrap = document.getElementById('imgwrap-'+id);
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const touch = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]) || e;
+  const px = (touch.clientX || rect.left + rect.width/2) - rect.left;
+  const py = (touch.clientY || rect.top + rect.height/2) - rect.top;
+  const N = 6;
+  for (let i = 0; i < N; i++) {
+    const part = document.createElement('div');
+    part.className = 'heart-particle';
+    part.textContent = '♥';
+    const angle = (-90 - 60 + (i * (120/(N-1)))) * Math.PI/180; // fan upward
+    const dist = 60 + Math.random()*45;
+    const hx = Math.cos(angle) * dist;
+    const hy = Math.sin(angle) * dist;
+    part.style.left = px + 'px';
+    part.style.top = py + 'px';
+    part.style.setProperty('--hx', hx.toFixed(1) + 'px');
+    part.style.setProperty('--hy', hy.toFixed(1) + 'px');
+    part.style.fontSize = (13 + Math.random()*9) + 'px';
+    wrap.appendChild(part);
+    requestAnimationFrame(()=>part.classList.add('fly'));
+    setTimeout(()=>part.remove(), 850);
+  }
+}
+
+// BOOKMARK
+function toggleBookmark(id) {
+  st.bookmarks[id] = !st.bookmarks[id];
+  document.querySelectorAll(`#bk-${id}`).forEach(btn => {
+    const ico = btn.querySelector('.act-ico');
+    if (ico) ico.innerHTML = st.bookmarks[id] ? SVG_BOOKMARK_FILL : SVG_BOOKMARK;
+  });
+  if (st.bookmarks[id]) toast('Saved to collection');
+}
+
+// FOLLOW (suggested cards)
+function toggleFollowSug(uid, btn) {
+  st.follows[uid] = !st.follows[uid];
+  const nowFollowing = st.follows[uid];
+  animateFollowBtn(btn, nowFollowing, 'on');
+  btn.classList.toggle('on', nowFollowing);
+  if (nowFollowing) toast(`Following ${USERS[uid]?.name || 'user'}`);
+  haptic('impact');
+}
+
+// Shared follow-button animation: bump + checkmark pop → "Following"
+function animateFollowBtn(btn, nowFollowing, onClass) {
+  btn.classList.remove('follow-bump'); void btn.offsetWidth;
+  btn.classList.add('follow-bump');
+  setTimeout(()=>btn.classList.remove('follow-bump'),300);
+  if (nowFollowing) {
+    btn.innerHTML = '<span class="btn-check">✓</span>';
+    setTimeout(()=>{ if (btn.classList.contains(onClass)) btn.textContent = 'Following'; }, 500);
+  } else {
+    btn.textContent = 'Follow';
+  }
+}
+
+// ZAP
+function openZap(id) {
+  st.currentZapTarget = id;
+  const amountView = document.getElementById('zap-amount-view');
+  const connectView = document.getElementById('zap-connect-view');
+  if (!st.walletConnected) {
+    amountView.style.display = 'none';
+    connectView.style.display = '';
+  } else {
+    amountView.style.display = '';
+    connectView.style.display = 'none';
+  }
+  document.getElementById('sh-zap').classList.add('open');
+  haptic('impact');
+}
+
+function zapSkipConnect() {
+  st.walletConnected = true;
+  document.getElementById('zap-connect-view').style.display = 'none';
+  document.getElementById('zap-amount-view').style.display = '';
+}
+
+function pickZap(amt, btn) {
+  st.selectedZap = amt;
+  document.querySelectorAll('.zchip').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const label = amt >= 1000 ? fmtN(amt) + ' sats' : amt + ' sats';
+  document.getElementById('zap-total').textContent = '≈ ' + label;
+  document.querySelector('.zap-confirm').textContent = 'Zap ⚡ ' + label;
+}
+
+function flyZapCoin(fromEl) {
+  let cx, cy;
+  if (fromEl) {
+    const r = fromEl.getBoundingClientRect();
+    cx = r.left + r.width/2; cy = r.top + r.height/2;
+  } else {
+    cx = window.innerWidth/2; cy = window.innerHeight*0.6;
+  }
+  const coin = document.createElement('div');
+  coin.className = 'zap-fly';
+  coin.textContent = '⚡';
+  coin.style.left = cx + 'px';
+  coin.style.top = cy + 'px';
+  document.body.appendChild(coin);
+  requestAnimationFrame(()=>coin.classList.add('go'));
+  setTimeout(()=>coin.remove(), 950);
+}
+
+function confirmZap() {
+  closeSheet('sh-zap');
+  const id = st.currentZapTarget;
+  if (!id || id === 'uprof') { flyZapCoin(document.getElementById('zap-n-'+id)); toast('⚡ Zapped! ' + st.selectedZap + ' sats sent'); haptic('success'); return; }
+  const p = findPost(id);
+  if (!p) return;
+  p.zaps += st.selectedZap;
+  const el = document.getElementById('zap-n-'+id);
+  flyZapCoin(el);
+  if (el) {
+    el.textContent = fmtN(p.zaps);
+    el.classList.remove('zap-count-bump'); void el.offsetWidth;
+    el.classList.add('zap-count-bump');
+    setTimeout(()=>el.classList.remove('zap-count-bump'),600);
+  }
+  // delay toast slightly so the coin animation reads first
+  setTimeout(()=>toast('⚡ Zapped ' + st.selectedZap + ' sats!'), 280);
+  haptic('success');
+}
+
+// USER PROFILE
+function openUserProfile(uid, fromPostId) {
+  const u = USERS[uid];
+  if (!u) { // external user from network feed
+    const p = POSTS.network.find(x=>x.id===fromPostId);
+    if (!p) return;
+    populateUprof({id:uid,name:p.name||'Unknown',handle:p.handle||'user',av:p.av||'https://i.pravatar.cc/80?img=1',bio:'',following:0,followers:0,nip05:'',banner:'https://picsum.photos/seed/extbnr/800/200',grid:[]}, p.trust||'Outside your network');
+  } else {
+    populateUprof(u, 'You follow ' + u.name.split(' ')[0]);
+  }
+  openModal('m-uprof');
+}
+
+function populateUprof(u, trustText) {
+  document.getElementById('uprof-handle').textContent = '@' + u.handle;
+  document.getElementById('uprof-banner').src = u.banner || 'https://picsum.photos/seed/defbnr/800/200';
+  document.getElementById('uprof-av').src = u.av;
+  document.getElementById('uprof-name').textContent = u.name;
+  document.getElementById('uprof-nip05').textContent = (u.nip05 ? '✓ ' + u.nip05 : u.handle);
+  document.getElementById('uprof-bio').textContent = u.bio || '';
+  document.getElementById('uprof-following').textContent = u.following ? fmtN(u.following) : '—';
+  document.getElementById('uprof-followers').textContent = u.followers ? fmtN(u.followers) : '—';
+  document.getElementById('uprof-wot-text').textContent = trustText;
+  const followed = st.follows[u.id];
+  const fbtn = document.getElementById('uprof-follow-btn');
+  fbtn.textContent = followed ? 'Following' : 'Follow';
+  fbtn.className = 'uprof-follow' + (followed?' on':'');
+  fbtn.dataset.uid = u.id;
+  renderUProfGrid(u.id);
+}
+
+function toggleFollowModal() {
+  const btn = document.getElementById('uprof-follow-btn');
+  const uid = btn.dataset.uid;
+  st.follows[uid] = !st.follows[uid];
+  const nowFollowing = st.follows[uid];
+  btn.className = 'uprof-follow' + (nowFollowing?' on':'');
+  animateFollowBtn(btn, nowFollowing, 'on');
+  if (nowFollowing) toast('Following ' + (USERS[uid]?.name.split(' ')[0]||'user'));
+  haptic('impact');
+}
+
+// POST DETAIL
+function openPostDetail(pid) {
+  const p = findPost(pid);
+  if (!p) return;
+  const u = userOf(p);
+  const liked = st.likes[pid];
+  let html = postCardHTML(p, st.feedMode);
+  html += `<div class="cmts-lbl">${p.comments} comments</div>`;
+  html += COMMENTS.map(c => {
+    const cu = USERS[c.uid]||{av:'https://i.pravatar.cc/80?img=1',handle:'user'};
+    return `<div class="cmt">
+      <img class="av" width="32" height="32" src="${cu.av}" loading="lazy" decoding="async">
+      <div class="cmt-body">
+        <div class="cmt-text"><span class="cmt-name">${cu.handle}</span> ${c.text}</div>
+        <div class="cmt-t">${c.time} · <span style="color:var(--text2);cursor:pointer" onclick="replyTo('${cu.handle}')">Reply</span></div>
+      </div>
+    </div><div class="cmt-div"></div>`;
+  }).join('');
+  // Live typing indicator — auto-appears after 2s, removed after 4s
+  html += `<div class="typing-row" id="typing-row">
+    <img class="av" width="28" height="28" decoding="async" src="https://i.pravatar.cc/40?img=15">
+    <div class="typing-bubble"><span></span><span></span><span></span></div>
+  </div>`;
+  document.getElementById('pd-content').innerHTML = html;
+  startTypingIndicator();
+  openModal('m-post');
+}
+
+// Live "someone is typing" indicator in the comment thread
+let typingTimers = [];
+function startTypingIndicator() {
+  typingTimers.forEach(clearTimeout);
+  typingTimers = [];
+  const row = document.getElementById('typing-row');
+  if (!row) return;
+  typingTimers.push(setTimeout(() => { const r = document.getElementById('typing-row'); if (r) r.classList.add('show'); }, 2000));
+  typingTimers.push(setTimeout(() => { const r = document.getElementById('typing-row'); if (r) r.classList.remove('show'); }, 6000));
+}
+
+// COMMENT REPLY THREADING
+function replyTo(handle) {
+  const input = document.getElementById('reply-input');
+  if (!input) return;
+  input.value = '@' + handle + ' ';
+  input.focus();
+  // place cursor at end
+  const len = input.value.length;
+  try { input.setSelectionRange(len, len); } catch(e){}
+  haptic('impact');
+}
+
+function sendReply() {
+  const input = document.getElementById('reply-input');
+  if (!input || !input.value.trim()) return;
+  input.value = '';
+  input.blur();
+  toast('Comment posted');
+  haptic('success');
+}
+
+// COMPOSE
+function composeNext() {
+  if (st.composeStep === 'pick') {
+    document.getElementById('cs-picker').style.display = 'none';
+    document.getElementById('cs-editor').style.display = '';
+    document.getElementById('cs-preview').src = st.selectedComposeImg || 'https://picsum.photos/seed/alps2024/800/1000';
+    document.getElementById('cs-ttl-txt').textContent = 'Edit';
+    document.getElementById('cs-next-btn').style.display = 'none';
+    st.composeStep = 'edit';
+  }
+}
+
+function selectComposeImg(src, idx) {
+  document.querySelectorAll('.cs-item').forEach(el => el.classList.remove('sel'));
+  document.getElementById('cs-'+idx)?.classList.add('sel');
+  st.selectedComposeImg = src;
+}
+
+function pickFilter(i, el) {
+  document.querySelectorAll('.filter-item').forEach(f => f.classList.remove('on'));
+  el.classList.add('on');
+  const pre = document.getElementById('cs-preview');
+  if (pre) pre.style.filter = filterCSS(i);
+}
+
+function submitPost() {
+  closeSheet('sh-compose');
+  const caption = document.getElementById('cs-caption')?.value || 'New photo';
+  // Add optimistic post to top of feed
+  const newPost = {
+    id:'pnew',uid:'pablo',name:'Pablo Fernández',handle:'pablo',
+    av:'https://i.pravatar.cc/80?img=68',
+    img:st.selectedComposeImg,aspect:'img-4-5',
+    reactions:0,comments:0,zaps:0,
+    caption:caption||'',tags:'',time:'just now',trust:'You'
+  };
+  const container = document.getElementById('feed-following');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = postCardHTML(newPost, 'following');
+  const card = tmp.firstElementChild;
+  card.style.opacity = '0';
+  card.style.transform = 'translateY(-20px)';
+  card.style.transition = 'all .4s cubic-bezier(.34,1.56,.64,1)';
+  container.prepend(card);
+  requestAnimationFrame(() => { card.style.opacity='1'; card.style.transform='translateY(0)'; });
+  document.getElementById('feed-scr').scrollTo({top:0,behavior:'smooth'});
+  toast('Posted ✓');
+  haptic('success');
+}
+
+function resetCompose() {
+  st.composeStep = 'pick';
+  st.selectedComposeImg = null;
+  document.getElementById('cs-picker').style.display = '';
+  document.getElementById('cs-editor').style.display = 'none';
+  document.getElementById('cs-ttl-txt').textContent = 'New Post';
+  document.getElementById('cs-next-btn').style.display = '';
+  document.getElementById('cs-caption').value = '';
+  document.querySelectorAll('.cs-item').forEach((el,i) => { el.classList.toggle('sel', i===0); });
+  document.querySelectorAll('.filter-item').forEach((el,i) => { el.classList.toggle('on', i===0); });
+  const pre = document.getElementById('cs-preview');
+  if (pre) { pre.src=''; pre.style.filter='none'; }
+  st.selectedComposeImg = 'https://picsum.photos/seed/' + COMPOSE_IMGS[0] + '/800/1000';
+}
+
+// NOTIF TABS
+function switchNotifTab(tab, btn) {
+  document.querySelectorAll('.ntab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+// MISC
+function dismissNewPill() {
+  document.getElementById('new-pill').classList.remove('show');
+  document.getElementById('feed-scr').scrollTo({top:0,behavior:'smooth'});
+  toast('Feed refreshed');
+}
+
+function sharePost(id) { toast('Link copied to clipboard'); }
+
+// ── EASTER EGG: triple-tap the wordmark ───────────────────────────────────────
+let logoTaps = 0, logoTapTimer = null;
+function tapLogo() {
+  logoTaps++;
+  clearTimeout(logoTapTimer);
+  if (logoTaps >= 3) {
+    logoTaps = 0;
+    toast('⚡ Built on Nostr. Your keys, your content.', 4000);
+    haptic('success');
+    return;
+  }
+  // reset the streak if taps are too slow
+  logoTapTimer = setTimeout(() => { logoTaps = 0; }, 600);
+}
+
+// ── ADD TO HOME SCREEN SHEET ──────────────────────────────────────────────────
+function dismissA2HS() {
+  closeSheet('sh-a2hs');
+  try { localStorage.setItem('olas-a2hs-dismissed', '1'); } catch(e) {}
+}
+
+// ── POST MORE MENU ────────────────────────────────────────────────────────────
+function showMoreMenu(id) {
+  st.moreMenuPostId = id;
+  const p = findPost(id);
+  const u = p ? userOf(p) : null;
+  const handle = u ? u.handle : 'username';
+  document.getElementById('mm-mute').textContent = 'Mute @' + handle;
+  openSheet('sh-more-menu');
+}
+
+function moreAction(action) {
+  const id = st.moreMenuPostId;
+  const p = findPost(id);
+  const u = p ? userOf(p) : null;
+  const handle = u ? u.handle : 'username';
+  closeSheet('sh-more-menu');
+  if (action === 'save') { toast('Saved to Photos'); }
+  else if (action === 'why') { setTimeout(()=>showWhy(id), 260); }
+  else if (action === 'mute') {
+    document.querySelectorAll('#card-'+id).forEach(c => c.style.display='none');
+    toast('Muted @' + handle);
+  }
+  else if (action === 'report') { toast('Report submitted'); }
+}
+
+function showWhy(id) {
+  const p = findPost(id);
+  const trust = (p && p.trust) ? p.trust : 'Followed by Ana + 2 others';
+  document.getElementById('why-title').textContent = trust;
+  // mini avatar list (sample connectors)
+  const samples = ['u1','u3','u2'];
+  document.getElementById('why-list').innerHTML = samples.map(uid => {
+    const su = USERS[uid];
+    return `<div class="why-item"><img src="${su.av}" loading="lazy" decoding="async"><span class="why-name">${su.name}</span></div>`;
+  }).join('');
+  openSheet('sh-why');
+}
+
+// ── HASHTAG FEED (reuses relay modal) ─────────────────────────────────────────
+function openHashtag(tag) {
+  const clean = tag.replace('#','');
+  document.getElementById('relay-title').textContent = '#' + clean;
+  document.getElementById('relay-hero-img').src = 'https://picsum.photos/seed/tag' + clean + '/800/300';
+  document.getElementById('relay-hero-name').textContent = '#' + clean;
+  document.getElementById('relay-hero-cnt').textContent = (Math.floor(Math.random()*900)+120) + ' posts · trending';
+  document.getElementById('relay-grid').innerHTML = RELAY_VIEW_IMGS.map(s =>
+    `<div class="pg-item"><img src="https://picsum.photos/seed/${clean}${s}/300/300" loading="lazy" decoding="async"></div>`
+  ).join('');
+  openModal('m-relay');
+}
+
+// ── FULL-SCREEN IMAGE VIEWER ───────────────────────────────────────────────────
+let fullImgScale = 1;
+function openFullImg(src) {
+  if (!src) return;
+  const m = document.getElementById('m-fullimg');
+  const img = document.getElementById('fullimg-img');
+  fullImgScale = 1;
+  img.classList.add('no-anim');
+  img.style.transform = 'scale(1) translate(0,0)';
+  img.src = src;
+  void img.offsetWidth;
+  img.classList.remove('no-anim');
+  m.classList.add('open');
+  showFullImgExif();
+  haptic('impact');
+}
+
+function closeFullImg() {
+  const m = document.getElementById('m-fullimg');
+  m.classList.remove('open');
+  const img = document.getElementById('fullimg-img');
+  img.style.transform = '';
+  fullImgScale = 1;
+}
+
+let exifTimer = null;
+function showFullImgExif() {
+  const exif = document.getElementById('fullimg-exif');
+  exif.classList.add('show');
+  clearTimeout(exifTimer);
+  exifTimer = setTimeout(()=>exif.classList.remove('show'), 3000);
+}
+
+function setupFullImgGestures() {
+  const stage = document.getElementById('fullimg-stage');
+  const img = document.getElementById('fullimg-img');
+  if (!stage || !img) return;
+  let pinchStartDist = 0, pinchStartScale = 1;
+  let dragStartY = 0, dragging = false, lastTapTime = 0;
+
+  function dist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  stage.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      pinchStartDist = dist(e.touches);
+      pinchStartScale = fullImgScale;
+      img.classList.add('no-anim');
+    } else if (e.touches.length === 1) {
+      dragStartY = e.touches[0].clientY;
+      dragging = fullImgScale <= 1.02;
+      // double-tap to toggle zoom
+      const now = Date.now();
+      if (now - lastTapTime < 320) {
+        lastTapTime = 0;
+        fullImgScale = fullImgScale > 1.2 ? 1 : 2;
+        img.classList.remove('no-anim');
+        img.style.transform = 'scale(' + fullImgScale + ')';
+        haptic('impact');
+      } else {
+        lastTapTime = now;
+        showFullImgExif();
+      }
+    }
+  }, {passive:true});
+
+  stage.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      const d = dist(e.touches);
+      let scale = pinchStartScale * (d / pinchStartDist);
+      scale = Math.max(1, Math.min(4, scale));
+      fullImgScale = scale;
+      img.style.transform = 'scale(' + scale + ')';
+    } else if (e.touches.length === 1 && dragging) {
+      const dy = e.touches[0].clientY - dragStartY;
+      if (dy > 0) {
+        img.classList.add('no-anim');
+        const fade = Math.max(0, 1 - dy/400);
+        img.style.transform = 'translateY(' + dy + 'px) scale(' + (1 - dy/2000) + ')';
+        document.getElementById('m-fullimg').style.background = 'rgba(0,0,0,' + fade + ')';
+      }
+    }
+  }, {passive:true});
+
+  stage.addEventListener('touchend', e => {
+    if (e.touches.length === 0) {
+      img.classList.remove('no-anim');
+      if (dragging) {
+        const m = document.getElementById('m-fullimg');
+        const cur = img.style.transform;
+        const match = cur.match(/translateY\(([\d.]+)px\)/);
+        const dy = match ? parseFloat(match[1]) : 0;
+        if (dy > 80) {
+          img.style.transform = 'translateY(120%) scale(.8)';
+          setTimeout(()=>{ closeFullImg(); m.style.background='#000'; }, 250);
+        } else {
+          img.style.transform = fullImgScale > 1.02 ? 'scale(' + fullImgScale + ')' : 'scale(1) translateY(0)';
+          m.style.background = '#000';
+        }
+      }
+      dragging = false;
+    }
+  }, {passive:true});
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────────
+function settingTap(name) { toast(name + ' settings coming soon'); }
+function signOut() { closeSheet('sh-settings'); toast('Signed out'); }
+
+// ── WoT FILTER ────────────────────────────────────────────────────────────────
+function pickWot(card) {
+  document.querySelectorAll('#sh-wot .wot-card').forEach(c => c.classList.remove('on'));
+  card.classList.add('on');
+  st.wotPreset = card.dataset.wot;
+}
+function applyWot() {
+  closeSheet('sh-wot');
+  const preset = document.getElementById('set-preset');
+  if (preset) preset.childNodes[0].nodeValue = st.wotPreset;
+  toast('Feed showing: ' + st.wotPreset + ' network');
+}
+
+// ── ONBOARDING ────────────────────────────────────────────────────────────────
+function renderOnboarding() {
+  // Welcome mosaic — 3 panning columns of circular portraits (slightly blurred)
+  const cols = [
+    { cls:'c1', imgs:[[3,72],[12,96],[26,64],[44,84],[7,96]] },
+    { cls:'c2', imgs:[[11,88],[33,64],[52,100],[15,72],[36,88]] },
+    { cls:'c3', imgs:[[9,72],[22,96],[41,68],[63,90],[5,72]] },
+  ];
+  document.getElementById('onb-mosaic').innerHTML = cols.map(c =>
+    `<div class="onb-mosaic-col ${c.cls}">` +
+    c.imgs.map(([n,sz]) => `<img src="https://i.pravatar.cc/${sz*2}?img=${n}" style="height:${sz}px" loading="lazy" decoding="async" alt="">`).join('') +
+    `</div>`
+  ).join('');
+
+  // Step 2 — enable Continue only when both fields filled
+  const nameIn = document.getElementById('onb-name');
+  const unameIn = document.getElementById('onb-uname');
+  const createBtn = document.getElementById('onb-create-btn');
+  const checkCreate = () => {
+    st.onbData.displayName = nameIn.value.trim();
+    st.onbData.username = unameIn.value.trim();
+    createBtn.disabled = !(st.onbData.displayName && st.onbData.username);
+  };
+  [nameIn, unameIn].forEach(el => {
+    el.addEventListener('input', checkCreate);
+    // iOS keyboard: keep focused field visible
+    el.addEventListener('focus', () => setTimeout(() => el.scrollIntoView({ block:'center', behavior:'smooth' }), 250));
+  });
+  unameIn.addEventListener('input', () => {
+    unameIn.value = unameIn.value.toLowerCase().replace(/[^a-z0-9_.]/g,'');
+  });
+
+  // Step 3 — render NIP-51 kind:30000 follow pack cards
+  document.getElementById('onb-packs').innerHTML = FOLLOW_PACKS.map(p => {
+    const on = st.onbData.packs.has(p.id);
+    const avs = p.avatarIds.map(n => `<img src="https://i.pravatar.cc/48?img=${n}" loading="lazy" decoding="async" alt="">`).join('');
+    return `<div class="onb-pack${on?' on':''}" id="pack-${p.id}" onclick="togglePack('${p.id}')">
+      <div class="onb-pack-accent" style="background:${p.color}"></div>
+      <div class="onb-pack-body">
+        <div class="onb-pack-badge">${p.category}</div>
+        <div class="onb-pack-title">${p.name}</div>
+        <div class="onb-pack-desc">${p.desc}</div>
+        <div class="onb-pack-avs">${avs}</div>
+        <div class="onb-pack-foot">
+          <div class="onb-pack-count">${p.count.toLocaleString()} people follow this pack</div>
+          <div class="onb-switch"></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  updatePackCounter();
+
+  // Step 4 — custom server field keeps onbData.server in sync
+  const customSrv = document.getElementById('onb-srv-custom');
+  if (customSrv) customSrv.addEventListener('input', () => { st.onbData.server = customSrv.value || 'custom'; });
+}
+
+function togglePack(id) {
+  if (st.onbData.packs.has(id)) st.onbData.packs.delete(id);
+  else st.onbData.packs.add(id);
+  document.getElementById('pack-' + id).classList.toggle('on', st.onbData.packs.has(id));
+  updatePackCounter();
+  haptic('impact');
+}
+
+function updatePackCounter() {
+  const n = st.onbData.packs.size;
+  const creators = FOLLOW_PACKS.filter(p => st.onbData.packs.has(p.id)).reduce((s,p) => s + p.count, 0);
+  document.getElementById('onb-pack-counter').textContent =
+    n === 0 ? 'No packs selected' : `${n} pack${n>1?'s':''} selected · ${creators.toLocaleString()} creators`;
+  const btn = document.getElementById('onb-packs-btn');
+  btn.disabled = n === 0;
+  btn.textContent = n === 0 ? 'Select a pack to continue' : 'Follow selected creators →';
+}
+
+function selectServer(el) {
+  document.querySelectorAll('#onb-step-4 .onb-srv').forEach(s => {
+    s.classList.remove('on');
+    const inp = s.querySelector('.onb-srv-input');
+    if (inp) inp.classList.remove('show');
+  });
+  el.classList.add('on');
+  const srv = el.dataset.srv;
+  if (srv === 'custom') {
+    const inp = el.querySelector('.onb-srv-input');
+    inp.classList.add('show');
+    setTimeout(() => inp.focus(), 100);
+    st.onbData.server = inp.value || 'custom';
+  } else {
+    st.onbData.server = srv;
+  }
+  haptic('impact');
+}
+
+function submitCreate() {
+  // Simulate local keypair gen + NIP-05 registration with a brief spinner
+  const btn = document.getElementById('onb-create-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="onb-spin"></span>&nbsp; Setting up your account…';
+  setTimeout(() => {
+    btn.innerHTML = 'Continue';
+    nextOnb(3);
+  }, 1000);
+}
+
+function setOnbStep(step) {
+  st.onbStep = step;
+  for (let i = 0; i <= 5; i++) {
+    const el = document.getElementById('onb-step-' + i);
+    if (el) el.classList.toggle('on', i === step);
+  }
+}
+
+function nextOnb(step) {
+  clearTimeout(st.onbTimer);
+  setOnbStep(step);
+  haptic('impact');
+}
+
+function prevOnb(step) {
+  setOnbStep(step);
+  haptic('impact');
+}
+
+function finishOnboarding() {
+  clearTimeout(st.onbTimer);
+  st.onbStep = -1;
+  // Silently "publish" kind:3 — mark selected pack creators as followed
+  FOLLOW_PACKS.filter(p => st.onbData.packs.has(p.id)).forEach(() => {});
+  Object.keys(USERS).forEach(uid => { st.follows[uid] = true; });
+  renderSuggested();
+  const onb = document.getElementById('onb');
+  onb.classList.add('gone');
+  setTimeout(() => { onb.style.display = 'none'; }, 450);
+  haptic('success');
+}
+
+function findPost(id) {
+  return [...POSTS.following, ...POSTS.network].find(p => p.id === id);
+}
+
+function fmtN(n) {
+  if (n >= 1000) return (n/1000).toFixed(n>=10000?0:1).replace('.0','') + 'k';
+  return String(n);
+}
+
+// Relative timestamp from minutes-ago offset
+function relativeTime(offsetMinutes) {
+  if (offsetMinutes < 1) return 'now';
+  if (offsetMinutes < 60) return Math.round(offsetMinutes) + 'm ago';
+  if (offsetMinutes < 1440) return Math.round(offsetMinutes/60) + 'h ago';
+  return Math.round(offsetMinutes/1440) + 'd';
+}
+
+function toast(msg, duration) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hide');
+  void t.offsetWidth;
+  t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => {
+    t.classList.remove('show');
+    t.classList.add('hide');
+    setTimeout(()=>t.classList.remove('hide'), 350);
+  }, duration || 2200);
+}
+
+function haptic(type) {
+  if (!navigator.vibrate) return;
+  if (type === 'impact') navigator.vibrate(8);
+  else if (type === 'success') navigator.vibrate([10,50,10]);
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+init();
+
+// Prevent body scroll on iOS
+document.body.addEventListener('touchmove', e => {
+  if (e.target === document.body) e.preventDefault();
+}, {passive:false});
+
+// Add to Home Screen — beautifully styled sheet on first load in mobile Safari (not standalone)
+window.addEventListener('load', () => {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('olas-a2hs-dismissed') === '1'; } catch(e) {}
+  if (isIOS && !isStandalone && !dismissed) {
+    setTimeout(() => { if (!st.openModalId) openSheet('sh-a2hs'); }, 4000);
+  }
+});
+</script>
+</body>
+</html>

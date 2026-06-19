@@ -4,7 +4,6 @@ struct SettingsView: View {
     @State private var showAdvanced = false
 
     var body: some View {
-        // NMP-GAP(#31): Settings rows must come from Rust-owned capability config, not a hardcoded Swift array.
         List {
             // Tier 1
             Section {
@@ -99,7 +98,7 @@ struct SettingsView: View {
         List {
             Section("NWC Connection") {
                 Button("Connect Wallet") {
-                    // Open wallet connect flow
+                    // Tracked by https://github.com/pablof7z/olas/issues/52.
                 }
                 .foregroundStyle(Color.olasBlue)
             }
@@ -121,10 +120,12 @@ struct SettingsView: View {
         List {
             Section {
                 Button("Export Recovery Key") {
-                    // Key export flow
+                    // Tracked by https://github.com/pablof7z/olas/issues/52.
                 }
                 .foregroundStyle(Color.olasDestructive)
-                Button("Backup to Keychain") {}
+                Button("Backup to Keychain") {
+                    // Tracked by https://github.com/pablof7z/olas/issues/52.
+                }
                     .foregroundStyle(Color.olasBlue)
             }
             Section("Signer Type") {

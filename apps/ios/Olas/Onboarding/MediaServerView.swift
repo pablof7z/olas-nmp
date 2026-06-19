@@ -19,20 +19,20 @@ struct MediaServerView: View {
             url: "https://blossom.primal.net",
             isFeatured: true
         ),
-        ServerOption(
-            id: "satellite",
-            name: "Satellite.earth",
-            description: "Community-run media server for the Nostr ecosystem.",
-            url: "https://cdn.satellite.earth",
-            isFeatured: false
-        ),
-        ServerOption(
-            id: "nostrcheck",
-            name: "Nostrcheck.me",
-            description: "Privacy-focused media hosting for Nostr users.",
-            url: "https://nostrcheck.me",
-            isFeatured: false
-        )
+            ServerOption(
+                id: "satellite",
+                name: "Satellite.earth",
+                description: "Community-run media server for open social photos.",
+                url: "https://cdn.satellite.earth",
+                isFeatured: false
+            ),
+            ServerOption(
+                id: "nostrcheck",
+                name: "Privacy Host",
+                description: "Privacy-focused media hosting.",
+                url: "https://nostrcheck.me",
+                isFeatured: false
+            )
     ]
 
     var body: some View {

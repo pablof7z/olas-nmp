@@ -45,7 +45,13 @@ class UploadViewModel : ViewModel() {
      * event JSON, no signing, no imeta assembly happen here. D8: no polling —
      * each Rust action terminal resolves a suspended awaiter.
      */
-    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>) {
+    fun upload(
+        context: Context,
+        uris: List<Uri>,
+        caption: String,
+        altTexts: Map<Uri, String>,
+        geohash: String?,
+    ) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
@@ -58,7 +64,7 @@ class UploadViewModel : ViewModel() {
                 val uri = uris.first()
                 _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
                 val publishInput = withContext(Dispatchers.IO) {
-                    uploadOne(appContext, uri, caption, altTexts[uri])
+                    uploadOne(appContext, uri, caption, altTexts[uri], geohash)
                 } ?: throw IllegalStateException("Upload failed")
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
@@ -78,7 +84,13 @@ class UploadViewModel : ViewModel() {
      * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
      * JSON (built in Rust). Returns null on any failure.
      */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String? {
+    private suspend fun uploadOne(
+        context: Context,
+        uri: Uri,
+        caption: String,
+        alt: String?,
+        geohash: String?,
+    ): String? {
         // 1. Decode + downsample (render).
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
@@ -89,7 +101,6 @@ class UploadViewModel : ViewModel() {
         // 2. Write JPEG to a temp file (capability).
         val tmp = File.createTempFile("olas_upload_", ".jpg", context.cacheDir)
         try {
-            // NMP-GAP(#21): JPEG quality, EXIF strip policy, and downsample dimensions must be Rust-owned capability config.
             tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, 92, out) }
 
             // 3. Dispatch the Blossom upload action and await the descriptor.
@@ -107,6 +118,7 @@ class UploadViewModel : ViewModel() {
                 caption = caption,
                 alt = alt,
                 dim = dim,
+                geohash = geohash,
             )
         } finally {
             tmp.delete()

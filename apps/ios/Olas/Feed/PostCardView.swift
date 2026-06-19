@@ -114,7 +114,7 @@ struct PostCardView: View {
 
     private var imageAspectRatio: CGFloat {
         guard let first = post.images.first else { return 4.0/5.0 }
-        return PhotoPostParser.aspectRatio(for: first)
+        return ImageDisplayMetrics.aspectRatio(for: first)
     }
 
     // MARK: - Metadata Section

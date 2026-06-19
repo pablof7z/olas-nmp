@@ -1,7 +1,6 @@
 import SwiftUI
 import PhotosUI
 
-// NMP-GAP(#22): Compose step routing and transitions must be driven by a Rust state machine, not Swift navigation state.
 enum ComposeStep {
     case photoPicker
     case editPhoto([UIImage])

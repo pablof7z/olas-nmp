@@ -7,7 +7,7 @@ description = "Olas app glue — app-specific Rust logic and C-ABI FFI for iOS/A
 
 [lib]
 name = "nmp_app_olas"
-crate-type = ["staticlib", "rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = ["lmdb-backend"]
@@ -17,3 +17,11 @@ lmdb-backend = ["nmp-core/lmdb-backend"]
 nmp-core.workspace = true
 nmp-defaults.workspace = true
 nmp-ffi.workspace = true
+nmp-blossom.workspace = true
+nmp-nip57.workspace = true
+nmp-wot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true

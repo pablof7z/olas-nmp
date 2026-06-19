@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// NMP-GAP(#32): Onboarding step routing and completion state must be driven by a Rust state machine.
 enum class OnboardingStep {
     WELCOME, CREATE_ACCOUNT, FOLLOW_PACKS, MEDIA_SERVER, COMPLETE
 }
@@ -46,7 +45,6 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     name     = state.displayName.trim(),
                     username = state.username.trim().ifEmpty { state.displayName.trim().lowercase() },
                 )
-                markOnboardingComplete()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     step      = OnboardingStep.FOLLOW_PACKS,
@@ -60,7 +58,6 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // NMP-GAP(#27): Secret format validation must be performed by Rust, not Kotlin.
     fun signInNsec(nsec: String) {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         viewModelScope.launch {

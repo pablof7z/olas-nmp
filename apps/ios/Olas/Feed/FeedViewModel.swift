@@ -6,19 +6,19 @@ final class FeedViewModel {
     var mode: FeedMode = .following
     var isLoading = false
     var pendingNewCount = 0
+
     private var pendingPosts: [PhotoPost] = []
     private var seenIds: Set<String> = []
     private var handlerRegistered = false
 
     func start(mode: FeedMode) {
         self.mode = mode
-        self.posts = []
-        self.seenIds = []
-        self.pendingNewCount = 0
-        self.pendingPosts = []
+        posts = []
+        seenIds = []
+        pendingNewCount = 0
+        pendingPosts = []
         isLoading = true
 
-        // Register only once — each call to start() must not stack handlers.
         if !handlerRegistered {
             handlerRegistered = true
             NMPBridge.shared.addEventHandler { [weak self] json in
@@ -29,83 +29,80 @@ final class FeedViewModel {
             }
         }
 
-        // Do not call openFeed() here. FeedView observes NMPBridge.shared.isRunning
-        // and calls openFeed() the moment the bridge is ready (event-driven).
+        openFeed(mode: mode)
     }
 
-    /// Open the feed subscription. Call only when NMPBridge.shared.isRunning == true.
-    func openFeed() {
-        switch mode {
-        case .following: NMPBridge.shared.openFollowingFeed()
-        case .network:   NMPBridge.shared.openNetworkFeed()
+    private func openFeed(mode: FeedMode) {
+        let targetMode = mode
+        NMPBridge.shared.whenRunning {
+            switch targetMode {
+            case .following:
+                NMPBridge.shared.openFollowingFeed()
+            case .network:
+                NMPBridge.shared.openNetworkFeed()
+            }
         }
     }
 
     func handleEvent(_ json: String) {
-        guard let data = json.data(using: .utf8),
-              let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
-        switch event.kind {
-        case 20:
-            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
-            guard !seenIds.contains(event.id),
-                  var post = PhotoPostParser.parse(event) else { return }
-            seenIds.insert(event.id)
+        if var post = NMPBridge.shared.photoPost(from: json, mode: mode) {
+            guard !seenIds.contains(post.id) else { return }
+            seenIds.insert(post.id)
             isLoading = false
-            // Apply any already-cached profile for this author immediately.
-            if let cached = NMPBridge.shared.profileCache[event.author] {
-                post.authorName = cached.display.isEmpty ? nil : cached.display
-                post.authorAvatar = cached.pictureUrl
+            if let cached = NMPBridge.shared.profileCache[post.authorPubkey] {
+                post.authorName = cached.name.isEmpty ? nil : cached.name
+                post.authorAvatar = cached.avatar
             }
-            // Request kind:0 profile metadata (force=1 bypasses EventStore dedup).
-            NMPBridge.shared.claimProfile(pubkey: event.author, consumer: "olas.feed")
-            if posts.isEmpty {
-                posts.insert(post, at: 0)
-            } else {
-                pendingPosts.insert(post, at: 0)
-                pendingNewCount = pendingPosts.count
-            }
-        case 0:
-            // Profile metadata arrived — update any posts in feed from this author.
-            guard let meta = try? JSONDecoder().decode(ProfileMeta.self, from: Data(event.content.utf8)) else { return }
-            let name = meta.displayName ?? meta.name
-            let avatar = meta.picture
-            guard name != nil || avatar != nil else { return }
-            func apply(to post: inout PhotoPost) {
-                if let n = name { post.authorName = n }
-                if let a = avatar { post.authorAvatar = a }
-            }
-            for i in posts.indices where posts[i].authorPubkey == event.author { apply(to: &posts[i]) }
-            for i in pendingPosts.indices where pendingPosts[i].authorPubkey == event.author { apply(to: &pendingPosts[i]) }
-        default:
-            break
+            NMPBridge.shared.claimProfile(pubkey: post.authorPubkey, consumer: "olas.feed")
+            insert(post)
+            return
+        }
+
+        guard let profile = NMPBridge.shared.profile(from: json) else { return }
+        let name = profile.displayName ?? profile.name
+        let avatar = profile.picture
+        guard name != nil || avatar != nil else { return }
+        applyProfile(pubkey: profile.pubkey, name: name, avatar: avatar)
+    }
+
+    private func insert(_ post: PhotoPost) {
+        if posts.isEmpty {
+            posts.insert(post, at: 0)
+        } else {
+            pendingPosts.insert(post, at: 0)
+            pendingNewCount = pendingPosts.count
         }
     }
 
-    // Minimal subset of NIP-01 kind:0 content.
-    private struct ProfileMeta: Codable {
-        let name: String?
-        let displayName: String?
-        let picture: String?
-        enum CodingKeys: String, CodingKey {
-            case name
-            case displayName = "display_name"
-            case picture
+    private func applyProfile(pubkey: String, name: String?, avatar: String?) {
+        func apply(to post: inout PhotoPost) {
+            if let name { post.authorName = name }
+            if let avatar { post.authorAvatar = avatar }
+        }
+        for index in posts.indices where posts[index].authorPubkey == pubkey {
+            apply(to: &posts[index])
+        }
+        for index in pendingPosts.indices where pendingPosts[index].authorPubkey == pubkey {
+            apply(to: &pendingPosts[index])
         }
     }
 
-    // Apply profile cache updates to all feed posts (called when snapshot delivers profiles).
-    private func applyProfileCache(_ cache: [String: ProfileWire]) {
-        func apply(to post: inout PhotoPost, cached: ProfileWire) {
-            let name = cached.display
-            if !name.isEmpty { post.authorName = name }
-            if let a = cached.pictureUrl, !a.isEmpty { post.authorAvatar = a }
+    private func applyProfileCache(_ cache: [String: (name: String, avatar: String?)]) {
+        for index in posts.indices {
+            if let cached = cache[posts[index].authorPubkey] {
+                applyCachedProfile(cached, to: &posts[index])
+            }
         }
-        for i in posts.indices {
-            if let cached = cache[posts[i].authorPubkey] { apply(to: &posts[i], cached: cached) }
+        for index in pendingPosts.indices {
+            if let cached = cache[pendingPosts[index].authorPubkey] {
+                applyCachedProfile(cached, to: &pendingPosts[index])
+            }
         }
-        for i in pendingPosts.indices {
-            if let cached = cache[pendingPosts[i].authorPubkey] { apply(to: &pendingPosts[i], cached: cached) }
-        }
+    }
+
+    private func applyCachedProfile(_ cached: (name: String, avatar: String?), to post: inout PhotoPost) {
+        if !cached.name.isEmpty { post.authorName = cached.name }
+        if let avatar = cached.avatar { post.authorAvatar = avatar }
     }
 
     func revealNewPosts() {
@@ -120,9 +117,7 @@ final class FeedViewModel {
         pendingNewCount = 0
         pendingPosts = []
         isLoading = true
-        // Re-open the subscription without re-registering the handler.
-        // NMP is always running when the user can pull-to-refresh.
-        openFeed()
+        openFeed(mode: mode)
     }
 
     func loadMore() {
@@ -130,16 +125,15 @@ final class FeedViewModel {
         NMPBridge.shared.loadOlderFeed(key: feedKey)
     }
 
-    // NMP-GAP(#24): Reaction state will be updated by the Rust photo-feed projection.
-    // Do NOT add optimistic mutations — Rust is the single source of truth.
     func toggleLike(postId: String) {
-        let json = "{\"event_id\":\"\(postId)\"}"
-        _ = NMPBridge.shared.dispatchAction(namespace: "nmp.react", json: json)
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        guard !posts[index].isLiked else { return }
+        _ = NMPBridge.shared.react(to: posts[index])
     }
 
-    // NMP-GAP(#24): Bookmark requires a Rust bookmark projection. Do NOT optimistically
-    // mutate isBookmarked — the action will be wired once the projection exists.
     func toggleBookmark(postId: String) {
-        // Intentionally empty: wired once the NMP bookmark projection ships.
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+        let shouldAdd = !posts[index].isBookmarked
+        _ = NMPBridge.shared.bookmark(post: posts[index], add: shouldAdd)
     }
 }

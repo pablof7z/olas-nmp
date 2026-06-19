@@ -45,9 +45,15 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: Olas/Olas.entitlements
         GENERATE_INFOPLIST_FILE: NO
-        OTHER_LDFLAGS: "$(inherited) -lnmp_app_olas -lc++"
-        LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../target/$(RUST_TARGET)/debug $(SRCROOT)/../../target/$(RUST_TARGET)/release"
+        OTHER_LDFLAGS: "$(inherited) $(SRCROOT)/../../target/$(RUST_TARGET)/$(RUST_BUILD_PROFILE)/libnmp_app_olas.a -lc++"
+        LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../target/$(RUST_TARGET)/$(RUST_BUILD_PROFILE)"
+        SWIFT_INCLUDE_PATHS: "$(inherited) $(SRCROOT)/Olas/Bridge"
         SWIFT_OBJC_BRIDGING_HEADER: ""
+      configs:
+        Debug:
+          RUST_BUILD_PROFILE: debug
+        Release:
+          RUST_BUILD_PROFILE: release
   OlasTests:
     type: bundle.unit-test
     platform: iOS
@@ -57,6 +63,7 @@ targets:
       - target: Olas
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas.tests
   OlasUITests:
     type: bundle.ui-testing
@@ -67,4 +74,5 @@ targets:
       - target: Olas
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas.uitests

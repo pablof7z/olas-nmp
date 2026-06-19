@@ -2,7 +2,7 @@
 title: Android Platform
 slug: android-platform
 topic: android-platform
-summary: The Android app package is io.f7z.olas, with cargo-ndk wired into the preBuild step
+summary: The Android app uses applicationId io.f7z.olas with compileSdk 34, minSdk 26, and Compose enabled
 tags:
   - capture
 volatility: warm
@@ -19,4 +19,6 @@ sources:
 
 ## Android Platform
 
-The Android app package is io.f7z.olas, with cargo-ndk wired into the preBuild step. The Android UI is built with Kotlin/Compose. <!-- [^2aff7-1] -->
+The Android app uses applicationId io.f7z.olas with compileSdk 34, minSdk 26, and Compose enabled. The Android UI is built with Kotlin/Compose. Cargo-ndk is wired into the preBuild step.
+
+<!-- citations: [^2aff7-1] [^2aff7-17] -->

@@ -19,13 +19,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.f7z.olas.ui.theme.OlasColors
 
@@ -60,7 +56,6 @@ fun PostActions(
         // Zap
         ZapButton(onClick = onZap)
 
-        // NMP-GAP(#26): Share URL construction and sats→msats conversion must be Rust capabilities.
         // Share
         IconButton(onClick = onShare, modifier = Modifier.size(44.dp)) {
             Icon(
@@ -87,23 +82,19 @@ fun PostActions(
 
 @Composable
 private fun LikeButton(isLiked: Boolean, onClick: () -> Unit) {
-    var liked by remember { mutableStateOf(isLiked) }
     val scale by animateFloatAsState(
-        targetValue = if (liked) 1.2f else 1f,
+        targetValue = if (isLiked) 1.2f else 1f,
         animationSpec = spring(dampingRatio = 0.4f),
         label = "like_scale",
     )
     IconButton(
-        onClick  = {
-            liked = !liked
-            onClick()
-        },
+        onClick  = onClick,
         modifier = Modifier.size(44.dp),
     ) {
         Icon(
-            imageVector        = if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            contentDescription = if (liked) "Unlike" else "Like",
-            tint               = if (liked) OlasColors.Heart else OlasColors.Text1,
+            imageVector        = if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+            contentDescription = if (isLiked) "Liked" else "Like",
+            tint               = if (isLiked) OlasColors.Heart else OlasColors.Text1,
             modifier           = Modifier.size(24.dp).scale(scale),
         )
     }

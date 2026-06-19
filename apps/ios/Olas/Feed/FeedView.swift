@@ -71,16 +71,7 @@ struct FeedView: View {
                 FullscreenImageView(post: item.post, initialIndex: item.index)
             }
         }
-        .task {
-            vm.start(mode: selectedMode)
-            // If NMP was already running when the view appeared (e.g. tab revisit),
-            // open the feed immediately.
-            if NMPBridge.shared.isRunning { vm.openFeed() }
-        }
-        .onChange(of: NMPBridge.shared.isRunning) { _, running in
-            // Open the feed the moment the bridge transitions to running — zero polling.
-            if running { vm.openFeed() }
-        }
+        .onAppear { vm.start(mode: selectedMode) }
     }
 
     private var feedPickerMenu: some View {
@@ -107,8 +98,6 @@ struct FeedView: View {
         guard mode != selectedMode else { return }
         selectedMode = mode
         vm.start(mode: mode)
-        // NMP is always running when the user can interact with the mode picker.
-        vm.openFeed()
     }
 }
 

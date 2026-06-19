@@ -19,7 +19,6 @@ import androidx.navigation.NavController
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
 
-// NMP-GAP(#22): Compose step routing and transitions must be driven by a Rust state machine, not Kotlin navigation state.
 private sealed interface ComposeStep {
     object Pick : ComposeStep
     data class Edit(val uris: List<Uri>) : ComposeStep

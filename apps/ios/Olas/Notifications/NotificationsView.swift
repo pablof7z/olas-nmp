@@ -1,11 +1,11 @@
 import SwiftUI
 
-// MARK: - WoT gap copy (keep in sync with Android WoTStrings.kt)
+// MARK: - WoT copy (keep in sync with Android WoTStrings.kt)
 
-/// One-line disclosure shown in the notification list header while the WoT FFI gap is active.
-/// Android mirror: `WOT_GAP_NOTIFICATIONS_NOTE` in core/WoTStrings.kt
-private let wotGapNotificationsNote =
-    "Showing all · Trust scoring updating in the background"
+/// One-line disclosure shown in the notification list header.
+/// Android mirror: `WOT_NOTIFICATIONS_NOTE` in core/WoTStrings.kt
+private let wotNotificationsNote =
+    "Filtered by your trust settings"
 
 enum NotificationsTab: String, CaseIterable {
     case all = "All"
@@ -26,52 +26,9 @@ final class NotificationsViewModel {
     }
 
     private func handleEvent(_ json: String) {
-        guard let data = json.data(using: .utf8),
-              let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
+        guard let notification = NMPBridge.shared.notification(from: json) else { return }
         isLoading = false
-
-        switch event.kind {
-        case 7: // reaction
-            let n = OlasNotification(
-                id: event.id, type: .reaction, actorPubkey: event.author,
-                postId: event.tags.first(where: { $0.first == "e" })?[safe: 1],
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 9735: // zap
-            let amount = zapAmount(from: event)
-            let n = OlasNotification(
-                id: event.id, type: .zap(amount), actorPubkey: event.author,
-                postId: event.tags.first(where: { $0.first == "e" })?[safe: 1],
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 1: // mention / comment
-            let mentionedId = event.tags.first(where: { $0.first == "e" })?[safe: 1]
-            let n = OlasNotification(
-                id: event.id, type: .comment, actorPubkey: event.author,
-                postId: mentionedId,
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 3: // follow
-            let n = OlasNotification(
-                id: event.id, type: .follow, actorPubkey: event.author,
-                postId: nil,
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        default:
-            break
-        }
-    }
-
-    // NMP-GAP(#8): Zap amount must be delivered by a Rust notification projection, not computed from raw event tags in Swift.
-    private func zapAmount(from event: NostrEvent) -> Int64 {
-        guard let bolt11 = event.tags.first(where: { $0.first == "bolt11" })?[safe: 1] else { return 0 }
-        // Amount encoded in bolt11; simplified: return 21 sats as default
-        _ = bolt11
-        return 21
+        notifications.insert(notification, at: 0)
     }
 
     func filtered(by tab: NotificationsTab) -> [OlasNotification] {
@@ -121,7 +78,7 @@ struct NotificationsView: View {
             HStack(spacing: OlasSpacing.xs) {
                 Image(systemName: "clock")
                     .font(.system(size: 11, weight: .medium))
-                Text(wotGapNotificationsNote)
+                Text(wotNotificationsNote)
                     .font(OlasFont.caption())
             }
             .foregroundStyle(Color.olasText2)
