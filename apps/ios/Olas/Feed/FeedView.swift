@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
     @State private var vm = FeedViewModel()
+    // NMP-GAP(#28): Feed mode state must be owned by a Rust projection, not native @State.
     @State private var selectedMode: FeedMode = .network
     @State private var showFullscreen: (post: PhotoPost, index: Int)?
 

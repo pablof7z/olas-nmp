@@ -17,16 +17,16 @@ import Combine
 
     // MARK: - Follow state
 
+    // NMP-GAP(#7): followedPubkeys will be populated by a Rust follow-graph projection.
+    // Until that projection exists, this set remains empty. The UI will reflect reality
+    // only once Rust owns the follow state. Do NOT add optimistic mutations here.
     private(set) var followedPubkeys: Set<String> = []
-    // TODO(#7): follow graph must come from a Rust projection, not kind:3 event parsing.
 
     func follow(pubkey: String) {
-        followedPubkeys.insert(pubkey)
         _ = dispatchAction(namespace: "nmp.follow", json: "{\"pubkey\":\"\(pubkey)\"}")
     }
 
     func unfollow(pubkey: String) {
-        followedPubkeys.remove(pubkey)
         _ = dispatchAction(namespace: "nmp.unfollow", json: "{\"pubkey\":\"\(pubkey)\"}")
     }
 
@@ -230,6 +230,9 @@ import Combine
         }
     }
 
+    // NMP-GAP(#18): dispatchAndAwaitResult suspends on an action terminal, making native
+    // Swift the owner of the upload/publish lifecycle state machine. Once NMP ships a
+    // stream-based action-result projection, this bridging shim must be removed.
     func dispatchAndAwaitResult(namespace: String, json: String) async -> ActionTerminal? {
         guard let returnJSON = dispatchAction(namespace: namespace, json: json),
               let data = returnJSON.data(using: .utf8),
@@ -276,6 +279,9 @@ import Combine
 
     // MARK: - Profile
 
+    // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles
+    // Rust projection. It is NOT an authoritative store — only Rust's snapshot is truth.
+    // A future typed projection will supersede this dictionary entirely.
     private(set) var profileCache: [String: ProfileWire] = [:]
 
     func claimProfile(pubkey: String, consumer: String = "olas.profile") {

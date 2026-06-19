@@ -46,6 +46,7 @@ final class FeedViewModel {
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
         switch event.kind {
         case 20:
+            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
             guard !seenIds.contains(event.id),
                   var post = PhotoPostParser.parse(event) else { return }
             seenIds.insert(event.id)
@@ -129,20 +130,16 @@ final class FeedViewModel {
         NMPBridge.shared.loadOlderFeed(key: feedKey)
     }
 
+    // NMP-GAP(#24): Reaction state will be updated by the Rust photo-feed projection.
+    // Do NOT add optimistic mutations — Rust is the single source of truth.
     func toggleLike(postId: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
-        let wasLiked = posts[index].isLiked
-        posts[index].isLiked = !wasLiked
-        posts[index].reactionCount += wasLiked ? -1 : 1
-
-        if !wasLiked {
-            let json = "{\"event_id\":\"\(postId)\"}"
-            _ = NMPBridge.shared.dispatchAction(namespace: "nmp.react", json: json)
-        }
+        let json = "{\"event_id\":\"\(postId)\"}"
+        _ = NMPBridge.shared.dispatchAction(namespace: "nmp.react", json: json)
     }
 
+    // NMP-GAP(#24): Bookmark requires a Rust bookmark projection. Do NOT optimistically
+    // mutate isBookmarked — the action will be wired once the projection exists.
     func toggleBookmark(postId: String) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
-        posts[index].isBookmarked.toggle()
+        // Intentionally empty: wired once the NMP bookmark projection ships.
     }
 }

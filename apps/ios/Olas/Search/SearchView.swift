@@ -79,6 +79,7 @@ enum SearchResultTab: String, CaseIterable {
     private func handleSearchEvent(_ json: String) {
         guard !query.isEmpty,
               let data = json.data(using: .utf8),
+              // NMP-GAP(#11): Raw event decoding must be replaced by a typed Rust search projection.
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
 
         switch event.kind {
@@ -98,6 +99,7 @@ enum SearchResultTab: String, CaseIterable {
                 collectedProfiles[event.author] = parsed
             }
         case 20:
+            // NMP-GAP(#9): PhotoPostParser decodes kind:20 events in Swift. Must be replaced by a typed Rust snapshot projection.
             if let post = PhotoPostParser.parse(event) {
                 collectedPosts[event.id] = post
             }

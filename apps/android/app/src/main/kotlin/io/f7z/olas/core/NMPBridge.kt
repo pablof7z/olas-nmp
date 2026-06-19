@@ -128,6 +128,8 @@ object NMPBridge {
         nativeDispatchAction(appHandle, namespace, json)
 
     // --- Follow / Unfollow ----------------------------------------------------
+    // followedPubkeys state comes from the Rust follow-graph projection (#7).
+    // Do NOT add optimistic mutations here — Rust is the single source of truth.
 
     fun follow(pubkey: String) = dispatchAction("nmp.follow", """{"pubkey":"$pubkey"}""")
     fun unfollow(pubkey: String) = dispatchAction("nmp.unfollow", """{"pubkey":"$pubkey"}""")
