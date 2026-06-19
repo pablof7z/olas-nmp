@@ -1,0 +1,18 @@
+[
+  [
+    "user",
+    "this will be an nmp app (../nostr-multi-platform) -- start setting up the basics -- we'll start with an ios and android app (that MUST be kept in feature-parity at all times) -- add an AGENTS.md rule like the one in nmp repo about 300/500 LOC soft/hard limit per source code file"
+  ],
+  [
+    "assistant",
+    "Set up the project basics, created AGENTS.md with the 300/500 LOC limit and iOS/Android feature parity rules, and initialized the project structure for the iOS, Android, and relay apps."
+  ],
+  [
+    "user",
+    "git init, and ios and android should be in apps/{ios,android}\n\nrelay in apps/{relay}"
+  ],
+  [
+    "assistant",
+    "Initialized git, restructured the project to place iOS, Android, and relay under the apps/ directory, and deployed the relay to the server with Caddy and systemd."
+  ]
+]
