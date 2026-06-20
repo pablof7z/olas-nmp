@@ -100,14 +100,15 @@ struct CaptionView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Share") {
                     captionFocused = false
-                    // Enqueue — upload runs in background; dismiss immediately.
+                    // P0-B: enqueue ALL selected images with per-image alt text.
+                    // filteredPreview replaces images[0] (filter was applied).
                     let gh = locationEnabled ? locationManager.geohash : nil
-                    UploadQueue.shared.enqueue(
-                        image: filteredPreview,
-                        caption: caption,
-                        altText: altTexts[0],
-                        geohash: gh
-                    )
+                    var entries: [UploadQueue.ImageEntry] = []
+                    for (idx, img) in images.enumerated() {
+                        let src = idx == 0 ? filteredPreview : img
+                        entries.append(UploadQueue.ImageEntry(image: src, altText: altTexts[idx]))
+                    }
+                    UploadQueue.shared.enqueue(images: entries, caption: caption, geohash: gh)
                     onDone()
                 }
                 .font(OlasFont.headline())

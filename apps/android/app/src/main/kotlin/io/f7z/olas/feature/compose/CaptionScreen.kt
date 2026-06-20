@@ -106,17 +106,32 @@ fun CaptionScreen(
 
         HorizontalDivider(color = OlasColors.Border)
 
-        // Alt text chips per image
+        // P0-B: alt text field per image (collected and passed to Rust imeta "alt").
         uris.forEachIndexed { index, uri ->
             Row(
-                modifier          = Modifier.padding(vertical = 8.dp),
+                modifier          = Modifier.padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text     = "Photo ${index + 1} alt text",
+                    text     = "Photo ${index + 1}:",
                     color    = OlasColors.Text2,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                TextField(
+                    value         = altTexts[uri] ?: "",
+                    onValueChange = { altTexts[uri] = it },
+                    modifier      = Modifier.weight(1f),
+                    placeholder   = { Text("Alt text (accessibility)", color = OlasColors.Text3, fontSize = 13.sp) },
+                    singleLine    = true,
+                    colors        = TextFieldDefaults.colors(
+                        focusedContainerColor   = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor        = OlasColors.Text1,
+                        unfocusedTextColor      = OlasColors.Text1,
+                        focusedIndicatorColor   = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
                 )
             }
         }

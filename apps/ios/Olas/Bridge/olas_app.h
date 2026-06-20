@@ -156,24 +156,59 @@ char* olas_decode_snapshot_active_account_json(const uint8_t* frame, size_t len)
 char* olas_decode_snapshot_action_results_json(const uint8_t* frame, size_t len);
 
 /// Build the nmp.publish action input JSON for a NIP-68 (kind:20) picture post
-/// from a finished Blossom upload. This is the single canonical picture-post
-/// publish entry point shared by both platforms.
+/// from one or more finished Blossom uploads. This is the single canonical
+/// picture-post publish entry point shared by both platforms.
 ///
-/// blossom_result_json — the `result_json` terminal from nmp.blossom.upload
-///   (a BUD-02 descriptor with at least `url` and `sha256`). Required.
-/// caption — kind:20 content (NULL → empty).
-/// alt     — accessibility alt text for the imeta tag (NULL → omitted).
-/// dim     — pixel dimensions "WxH" for the imeta tag (NULL → omitted).
+/// P0-B: replaced the 5-arg single-image signature with an array form so that
+/// multi-photo posts emit one kind:20 with multiple NIP-68 `imeta` tags.
+///
+/// uploaded_images_json — JSON array of per-image descriptors:
+///   [{"descriptor":{...BUD-02...},"alt":"alt text","dim":"WxH"}, ...]
+///   Each `descriptor` must contain at least `url` and `sha256`. `alt` and
+///   `dim` are optional per image. A single-element array produces the same
+///   kind:20 as the old single-image form.
+/// caption — kind:20 content string (NULL → empty).
+/// geohash — 4-char NIP-52 "g" tag value (NULL → omitted). EXIF GPS is always
+///   stripped in the native encoding step; only set when user enables location.
 ///
 /// Returns a JSON string suitable for:
 ///   nmp_app_dispatch_action(app, "nmp.publish", <returned_json>)
-/// The kernel's nmp.publish action constructs and signs the kind:20 — no event
-/// JSON or signing happens natively. Returned pointer must be freed with
-/// nmp_free_string.
-/// geohash — 4-char NIP-52 "g" tag value (NULL → omitted). EXIF GPS is always
-/// stripped in the native encoding step; this tag is added only when the user
-/// explicitly enables location in the composer.
-char* olas_picture_post_publish_json(const char* blossom_result_json, const char* caption, const char* alt, const char* dim, const char* geohash);
+/// The kernel's nmp.publish action constructs and signs the kind:20.
+/// Returned pointer must be freed with nmp_free_string.
+char* olas_picture_post_publish_json(const char* uploaded_images_json, const char* caption, const char* geohash);
+
+// ── P0-A: Follow-pack discovery and bulk-apply ────────────────────────────────
+
+/// Open a NIP-51 kind:30000 follow-pack discovery interest for the canonical
+/// Olas curated pack authors. Events arrive via the kernel event observer.
+/// Decode each event with olas_decode_follow_pack_event_json to get pack
+/// metadata + member pubkeys. Close with olas_close_follow_pack_discovery.
+void olas_open_follow_pack_discovery(void* app, const char* consumer_id);
+
+/// Close the follow-pack discovery interest.
+void olas_close_follow_pack_discovery(void* app, const char* consumer_id);
+
+/// Decode a raw kind:30000 Nostr event JSON (from the event observer) into a
+/// FollowPack descriptor JSON for rendering.
+/// Returns: {"id":"<d-tag>","name":"...","description":"...","accent_color":"...",
+///           "pubkeys":["<hex>",...],"count":N}
+/// Returns NULL when the event is not a valid kind:30000 with p tags.
+/// Returned string must be freed with nmp_free_string.
+char* olas_decode_follow_pack_event_json(const char* event_json);
+
+/// Apply the selected follow packs. The native side passes the union of all
+/// `p`-tag pubkeys from the selected packs (deduplicated, self-excluded).
+/// Rust dispatches one `nmp.follow` per pubkey through the action bus.
+///
+/// pubkeys_json    — JSON array of hex pubkey strings. Required.
+/// active_pubkey   — active account hex pubkey for self-exclusion guard
+///                   (may be NULL or empty if unknown).
+///
+/// Returns: {"follow_count":N,"feed_default":"following|network"}
+/// feed_default is "following" when N >= 15, "network" otherwise.
+/// Returns NULL on empty input or decode error.
+/// Returned string must be freed with nmp_free_string.
+char* olas_apply_follow_pack_pubkeys(void* app, const char* pubkeys_json, const char* active_pubkey);
 
 // ── New Olas FFI helpers ──────────────────────────────────────────────────────
 
