@@ -8,7 +8,7 @@ import Combine
 @Observable @MainActor final class NMPBridge {
     static let shared = NMPBridge()
 
-    private var appPtr: UnsafeMutableRawPointer?
+    var appPtr: UnsafeMutableRawPointer?
     var isRunning = false
     var activeAccountPubkey: String?
 
@@ -237,11 +237,9 @@ import Combine
             self.actionResultWaiters[cid] = continuation
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                await MainActor.run { [weak self] in
-                    // If still pending (relay never ACKed), resolve optimistically as published.
-                    if let waiter = self?.actionResultWaiters.removeValue(forKey: cid) {
-                        waiter.resume(returning: ActionTerminal(status: "published", resultJSON: "null"))
-                    }
+                // Already on @MainActor (Task inherits actor from creation context).
+                if let waiter = self?.actionResultWaiters.removeValue(forKey: cid) {
+                    waiter.resume(returning: ActionTerminal(status: "published", resultJSON: "null"))
                 }
             }
         }
@@ -266,16 +264,6 @@ import Combine
 
     // MARK: - Feed
 
-    func openFollowingFeed() {
-        guard let app = appPtr else { return }
-        "olas.following_feed".withCString { olas_open_photo_feed(app, 1, $0) }
-    }
-
-    func openNetworkFeed() {
-        guard let app = appPtr else { return }
-        "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
-    }
-
     func openAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
         let consumer = "olas.author.\(pubkey)"
@@ -292,68 +280,12 @@ import Combine
         }}
     }
 
-    func loadOlderFeed(key: String) {
-        guard let app = appPtr else { return }
-        key.withCString { nmp_app_load_older_feed(app, $0) }
-    }
-
     // MARK: - Profile
 
     // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles
     // Rust projection. It is NOT an authoritative store — only Rust's snapshot is truth.
     // A future typed projection will supersede this dictionary entirely.
     private(set) var profileCache: [String: ProfileWire] = [:]
-
-    func claimProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_claim_profile(app, pk, c, 1) } }
-    }
-
-    func releaseProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_release_profile(app, pk, c) } }
-    }
-
-    // MARK: - Actions
-
-    func dispatchAction(namespace: String, json: String) -> String? {
-        guard let app = appPtr else { return nil }
-        return namespace.withCString { ns in
-            json.withCString { j in
-                guard let ptr = nmp_app_dispatch_action(app, ns, j) else { return nil }
-                defer { nmp_free_string(ptr) }
-                return String(cString: ptr)
-            }
-        }
-    }
-
-    func blossomUploadInputJSON(filePath: String, mime: String, serverURL: String) -> String? {
-        filePath.withCString { fp in
-            mime.withCString { m in
-                serverURL.withCString { s in
-                    guard let ptr = olas_blossom_upload_input_json(fp, m, s) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }
-            }
-        }
-    }
-
-    func picturePostPublishJSON(blossomResultJSON: String, caption: String, alt: String?, dim: String?, geohash: String?) -> String? {
-        func withOpt(_ s: String?, _ body: (UnsafePointer<CChar>?) -> String?) -> String? {
-            if let s { return s.withCString { body($0) } }
-            return body(nil)
-        }
-        return blossomResultJSON.withCString { r in
-            caption.withCString { c in
-                withOpt(alt) { a in withOpt(dim) { d in withOpt(geohash) { g in
-                    guard let ptr = olas_picture_post_publish_json(r, c, a, d, g) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }}}
-            }
-        }
-    }
 
     // MARK: - Event decoders
 
@@ -454,38 +386,6 @@ import Combine
         feedMode = mode
     }
 
-    // MARK: - Relay management
-
-    func addRelay(url: String, role: String) {
-        guard let app = appPtr else { return }
-        url.withCString { u in role.withCString { r in nmp_app_add_relay(app, u, r) } }
-    }
-
-    func removeRelay(url: String) {
-        guard let app = appPtr else { return }
-        url.withCString { nmp_app_remove_relay(app, $0) }
-    }
-
-    // MARK: - Wallet
-
-    func connectWallet(uri: String) {
-        // NMP-GAP: nmp_app_wallet_connect was removed from the FFI surface;
-        // dispatch via the action bus until the NMP wallet projection lands.
-        let escaped = uri.replacingOccurrences(of: "\"", with: "\\\"")
-        _ = dispatchAction(namespace: "nmp.wallet_connect", json: "{\"uri\":\"\(escaped)\"}")
-    }
-
-    // MARK: - Lifecycle
-
-    func appDidBecomeActive() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_foreground(app)
-    }
-
-    func appDidEnterBackground() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_background(app)
-    }
 }
 
 // MARK: - NostrProfileHost

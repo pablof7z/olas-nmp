@@ -29,6 +29,8 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         CFBundleDisplayName: Olas
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "2"
         UIApplicationSupportsIndirectInputEvents: true
         LSApplicationQueriesSchemes:
           - nostrsigner

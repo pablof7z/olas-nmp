@@ -50,10 +50,22 @@ struct PostCardView: View {
     }
 
     private func singleImage(_ image: ImageMeta, width: CGFloat) -> some View {
-        AsyncImage(url: URL(string: image.url)) { img in
-            img.resizable().scaledToFill()
-        } placeholder: {
-            Rectangle().fill(Color.olasSurface2)
+        AsyncImage(url: URL(string: image.url)) { phase in
+            switch phase {
+            case .success(let img):
+                img.resizable().scaledToFill()
+            case .failure:
+                ZStack {
+                    Rectangle().fill(Color.olasSurface2)
+                    Image(systemName: "photo")
+                        .font(.system(size: 40, weight: .thin))
+                        .foregroundStyle(Color.olasText3)
+                }
+            default:
+                Rectangle().fill(Color.olasSurface2).overlay {
+                    ProgressView().tint(Color.olasText3)
+                }
+            }
         }
         .frame(width: width)
         .clipped()
@@ -66,10 +78,22 @@ struct PostCardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(Array(post.images.enumerated()), id: \.offset) { idx, image in
-                        AsyncImage(url: URL(string: image.url)) { img in
-                            img.resizable().scaledToFill()
-                        } placeholder: {
-                            Rectangle().fill(Color.olasSurface2)
+                        AsyncImage(url: URL(string: image.url)) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable().scaledToFill()
+                            case .failure:
+                                ZStack {
+                                    Rectangle().fill(Color.olasSurface2)
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 40, weight: .thin))
+                                        .foregroundStyle(Color.olasText3)
+                                }
+                            default:
+                                Rectangle().fill(Color.olasSurface2).overlay {
+                                    ProgressView().tint(Color.olasText3)
+                                }
+                            }
                         }
                         .frame(width: width)
                         .clipped()

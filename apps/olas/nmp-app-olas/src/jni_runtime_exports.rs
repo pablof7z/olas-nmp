@@ -8,8 +8,7 @@ use jni::JNIEnv;
 use nmp_ffi::{
     nmp_app_claim_profile, nmp_app_dispatch_action, nmp_app_lifecycle_background,
     nmp_app_lifecycle_foreground, nmp_app_load_older_feed, nmp_app_open_contact_feed,
-    nmp_app_register_event_observer, nmp_app_release_profile, nmp_app_wallet_connect,
-    nmp_free_string,
+    nmp_app_register_event_observer, nmp_app_release_profile, nmp_free_string,
 };
 
 use crate::{
@@ -272,10 +271,17 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWalletConnect(
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(uri) = jstring_to_cstring(&mut env, &uri) else {
+        let Some(uri_str) = jstring_to_cstring(&mut env, &uri) else {
             return;
         };
-        nmp_app_wallet_connect(app, uri.as_ptr());
+        // nmp_app_wallet_connect deleted (D11); use dispatch_action directly.
+        let ns = std::ffi::CString::new("nmp.wallet.connect").unwrap();
+        let json_str = format!("{{\"uri\":\"{}\"}}", uri_str.to_string_lossy());
+        let json = std::ffi::CString::new(json_str).unwrap();
+        let raw = nmp_app_dispatch_action(app, ns.as_ptr(), json.as_ptr());
+        if !raw.is_null() {
+            nmp_free_string(raw);
+        }
     }));
 }
 

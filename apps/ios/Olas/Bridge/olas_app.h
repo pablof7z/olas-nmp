@@ -208,3 +208,29 @@ void  olas_blossom_server_url_set(void* app, const char* url);
 // Feed mode (caller must free get result with nmp_free_string)
 char* olas_feed_mode_get(void* app);
 void  olas_feed_mode_set(void* app, const char* mode);
+
+// Default relay list (caller must free with nmp_free_string)
+// Returns JSON array of DefaultRelay objects: [{id, url, role, connected}]
+char* olas_default_relays_json(void);
+
+// Social action builders (caller must free with nmp_free_string)
+// These return JSON suitable for nmp_app_dispatch_action.
+char* olas_react_action_json(const char* event_id, const char* author_pubkey);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
+char* olas_zap_action_json(const char* recipient_pubkey, const char* event_id, uint64_t amount_msats, const char* comment);
+
+// Event model decoders (caller must free with nmp_free_string)
+// Filter and decode a kind:20 event; returns PhotoPost JSON or NULL if filtered out.
+char* olas_filter_photo_post_json(const char* event_json, uint8_t contact_list_only, const char* wot_preset);
+// Decode a kind:0 profile event to OlasProfile JSON (NULL if invalid).
+char* olas_profile_json(const char* event_json);
+// Decode a notification event to OlasNotification JSON (NULL if invalid).
+char* olas_notification_json(const char* event_json);
+// Extract contact list pubkeys from a kind:3 event; returns JSON array of pubkey strings.
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
+
+// Bolt11 amount in satoshis (returns 0 on error; no memory to free)
+uint64_t olas_bolt11_amount_sats(const char* bolt11);
+
+// Location geohash (4-char precision; caller must free with nmp_free_string)
+char* olas_location_geohash4(double latitude, double longitude);
