@@ -94,8 +94,26 @@ enum PhotoFilters {
 
     static func apply(_ filter: FilterDefinition, to image: UIImage, intensity: Float = 1.0) -> UIImage? {
         guard let ciImage = CIImage(image: image) else { return nil }
-        guard let output = filter.apply(ciImage) else { return image }
-        guard let cgImage = context.createCGImage(output, from: output.extent) else { return nil }
+        guard let filtered = filter.apply(ciImage) else { return image }
+
+        // Blend filtered result over original by intensity:
+        // intensity=0 → original, intensity=1 → full filter.
+        let blended: CIImage
+        if intensity <= 0 {
+            blended = ciImage
+        } else if intensity >= 1 {
+            blended = filtered
+        } else {
+            // CIDissolveTransition: inputImage=source, inputTargetImage=destination, inputTime=t
+            // At time=0 → inputImage (original), at time=1 → inputTargetImage (filtered).
+            let dissolve = CIFilter.dissolveTransition()
+            dissolve.inputImage = ciImage.cropped(to: filtered.extent)
+            dissolve.targetImage = filtered
+            dissolve.time = intensity
+            blended = dissolve.outputImage ?? filtered
+        }
+
+        guard let cgImage = context.createCGImage(blended, from: blended.extent) else { return nil }
         return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
     }
 }
