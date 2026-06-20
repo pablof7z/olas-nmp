@@ -9,6 +9,7 @@ final class FeedViewModel {
     private var pendingPosts: [PhotoPost] = []
     private var seenIds: Set<String> = []
     private var handlerRegistered = false
+    private var loadingTimeoutTask: Task<Void, Never>?
 
     func start(mode: FeedMode) {
         self.mode = mode
@@ -17,6 +18,14 @@ final class FeedViewModel {
         self.pendingNewCount = 0
         self.pendingPosts = []
         isLoading = true
+
+        // Clear the feed after 12s if no decodable posts arrived — avoids infinite skeleton.
+        loadingTimeoutTask?.cancel()
+        loadingTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled else { return }
+            self?.isLoading = false
+        }
 
         // Register only once — each call to start() must not stack handlers.
         if !handlerRegistered {
@@ -52,6 +61,7 @@ final class FeedViewModel {
             guard !seenIds.contains(post.id) else { return }
             seenIds.insert(post.id)
             isLoading = false
+            loadingTimeoutTask?.cancel()
             // Apply any already-cached profile for this author immediately.
             if let cached = NMPBridge.shared.profileCache[event.author] {
                 post.authorName = cached.display.isEmpty ? nil : cached.display

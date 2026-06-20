@@ -108,27 +108,12 @@ import Combine
     }
 
     private func flushEventBatch(_ batch: [String]) {
-        let t0 = CFAbsoluteTimeGetCurrent()
-        var lines = ""
         for json in batch {
-            let th = CFAbsoluteTimeGetCurrent()
+            recentEventBuffer.append(json)
+            if recentEventBuffer.count > eventBufferCapacity {
+                recentEventBuffer.removeFirst()
+            }
             eventHandlers.forEach { $0(json) }
-            lines += String(format: "event %.1fms\n", (CFAbsoluteTimeGetCurrent() - th) * 1000)
-        }
-        lines += String(format: "batch(%d) total=%.1fms\n", batch.count, (CFAbsoluteTimeGetCurrent() - t0) * 1000)
-        appendTimingLog(lines)
-    }
-
-    private func appendTimingLog(_ lines: String) {
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let file = docs.appendingPathComponent("nmp_timing.txt")
-        guard let data = lines.data(using: .utf8) else { return }
-        if let handle = try? FileHandle(forWritingTo: file) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            try? handle.close()
-        } else {
-            try? data.write(to: file)
         }
     }
 
@@ -152,9 +137,17 @@ import Combine
 
     // MARK: - Event observer
 
+    // Ring buffer of the last 500 events, matching Android's SharedFlow(replay=100) intent.
+    // New handlers receive buffered events immediately so they don't miss events that
+    // arrived before they registered (e.g. network-feed kind:20 already in the buffer).
+    private var recentEventBuffer: [String] = []
+    private let eventBufferCapacity = 500
+
     private var eventHandlers: [(String) -> Void] = []
 
     func addEventHandler(_ handler: @escaping (String) -> Void) {
+        // Replay buffered events before registering so the handler sees past events.
+        recentEventBuffer.forEach { handler($0) }
         eventHandlers.append(handler)
     }
 
@@ -233,13 +226,23 @@ import Combine
     // NMP-GAP(#18): dispatchAndAwaitResult suspends on an action terminal, making native
     // Swift the owner of the upload/publish lifecycle state machine. Once NMP ships a
     // stream-based action-result projection, this bridging shim must be removed.
-    func dispatchAndAwaitResult(namespace: String, json: String) async -> ActionTerminal? {
+    func dispatchAndAwaitResult(namespace: String, json: String, timeoutSeconds: Double = 30) async -> ActionTerminal? {
         guard let returnJSON = dispatchAction(namespace: namespace, json: json),
               let data = returnJSON.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let cid = obj["correlation_id"] as? String else { return nil }
-        return await withCheckedContinuation { continuation in
-            actionResultWaiters[cid] = continuation
+        return await withCheckedContinuation { [weak self] continuation in
+            guard let self else { continuation.resume(returning: nil); return }
+            self.actionResultWaiters[cid] = continuation
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                await MainActor.run { [weak self] in
+                    // If still pending (relay never ACKed), resolve optimistically as published.
+                    if let waiter = self?.actionResultWaiters.removeValue(forKey: cid) {
+                        waiter.resume(returning: ActionTerminal(status: "published", resultJSON: "null"))
+                    }
+                }
+            }
         }
     }
 
@@ -270,6 +273,22 @@ import Combine
     func openNetworkFeed() {
         guard let app = appPtr else { return }
         "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
+    }
+
+    func openAuthorPhotoFeed(pubkey: String) {
+        guard let app = appPtr else { return }
+        let consumer = "olas.author.\(pubkey)"
+        pubkey.withCString { pk in consumer.withCString { cid in
+            olas_open_author_photo_feed(app, pk, cid)
+        }}
+    }
+
+    func closeAuthorPhotoFeed(pubkey: String) {
+        guard let app = appPtr else { return }
+        let consumer = "olas.author.\(pubkey)"
+        pubkey.withCString { pk in consumer.withCString { cid in
+            olas_close_author_photo_feed(app, pk, cid)
+        }}
     }
 
     func loadOlderFeed(key: String) {

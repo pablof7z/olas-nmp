@@ -72,9 +72,15 @@ struct ProfileView: View {
         }
         .background(Color.olasBackground)
         .onAppear { loadProfile() }
+        .onChange(of: NMPBridge.shared.activeAccountPubkey) { _, _ in
+            // Re-load when sign-in completes so the handler sees the correct pubkey.
+            if isOwn { loadProfile() }
+        }
         .onDisappear {
-            if !resolvedPubkey.isEmpty {
-                NMPBridge.shared.releaseProfile(pubkey: resolvedPubkey)
+            let pk = resolvedPubkey
+            if !pk.isEmpty {
+                NMPBridge.shared.releaseProfile(pubkey: pk)
+                NMPBridge.shared.closeAuthorPhotoFeed(pubkey: pk)
             }
         }
         .sheet(isPresented: $showSignIn) {
@@ -123,9 +129,19 @@ struct ProfileView: View {
         let pk = resolvedPubkey
         guard !pk.isEmpty else { return }
         profile = OlasProfile(pubkey: pk)
+        posts = []
         NMPBridge.shared.claimProfile(pubkey: pk)
+        NMPBridge.shared.openAuthorPhotoFeed(pubkey: pk)
+        // Apply cached profile immediately if available (from snapshot).
+        if let cached = NMPBridge.shared.profileCache[pk] {
+            applyProfileWire(cached, pubkey: pk)
+        }
         NMPBridge.shared.addEventHandler { [pk] json in
             handleProfileEvent(json, pubkey: pk)
+        }
+        NMPBridge.shared.addProfileUpdateHandler { [pk] cache in
+            guard let cached = cache[pk] else { return }
+            applyProfileWire(cached, pubkey: pk)
         }
     }
 
@@ -134,18 +150,10 @@ struct ProfileView: View {
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
 
         if event.kind == 0, event.author == pubkey {
-            if let profileData = event.content.data(using: .utf8),
-               var parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
-                parsed = OlasProfile(
-                    pubkey: pubkey,
-                    name: parsed.name,
-                    displayName: parsed.displayName,
-                    about: parsed.about,
-                    picture: parsed.picture,
-                    banner: parsed.banner,
-                    nip05: parsed.nip05,
-                    lud16: parsed.lud16
-                )
+            // Use the Rust decoder for consistent key casing and pubkey injection.
+            if let profileJSON = NMPBridge.shared.decodeKind0Event(json),
+               let profileData = profileJSON.data(using: .utf8),
+               let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
                 profile = parsed
             }
         }
@@ -153,11 +161,17 @@ struct ProfileView: View {
         if event.kind == 20, event.author == pubkey {
             if let postJSON = NMPBridge.shared.decodeKind20Event(json),
                let postData = postJSON.data(using: .utf8),
-               let post = try? JSONDecoder().decode(PhotoPost.self, from: postData),
-               !posts.contains(where: { $0.id == post.id }) {
-                posts.insert(post, at: 0)
+               let post = try? JSONDecoder().decode(PhotoPost.self, from: postData) {
+                if !posts.contains(where: { $0.id == post.id }) {
+                    posts.insert(post, at: 0)
+                }
             }
         }
+    }
+
+    private func applyProfileWire(_ wire: ProfileWire, pubkey: String) {
+        if let name = wire.displayName, !name.isEmpty { profile.displayName = name }
+        if let pic = wire.pictureUrl, !pic.isEmpty { profile.picture = pic }
     }
 }
 

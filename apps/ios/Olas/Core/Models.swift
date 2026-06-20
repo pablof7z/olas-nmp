@@ -30,15 +30,20 @@ struct PhotoPost: Identifiable, Codable {
     var commentCount: Int = 0
     var zapTotal: Int64 = 0
     let createdAt: Int64
+    // Client-only state — not in Rust JSON output, excluded from CodingKeys.
     var isLiked: Bool = false
     var isBookmarked: Bool = false
-    // WoT score intentionally absent — pending nmp_app_wot_score upstream gap
+
+    enum CodingKeys: String, CodingKey {
+        case id, authorPubkey, authorName, authorAvatar, images, caption, hashtags
+        case reactionCount, commentCount, zapTotal, createdAt
+    }
 }
 
 struct ImageMeta: Codable {
     let url: String
-    let sha256: String
-    let mime: String
+    let sha256: String?
+    let mime: String?
     let width: Int?
     let height: Int?
     let blurhash: String?

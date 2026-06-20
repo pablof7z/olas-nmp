@@ -46,16 +46,31 @@ final class UploadQueue {
 
         setStep(.uploading(0))
 
-        let serverURL = NMPBridge.shared.blossomServerURL
-        guard let uploadInput = NMPBridge.shared.blossomUploadInputJSON(
-            filePath: tmpURL.path, mime: "image/jpeg", serverURL: serverURL
-        ) else { setStep(.error("Upload failed.")); return }
+        // blossom.band first (publicly serves files); primal.net accepts uploads but returns 404 on GET.
+        // The user-configured server overrides this list when it differs from the defaults.
+        let configured = NMPBridge.shared.blossomServerURL
+        let defaultServers = ["https://blossom.band", "https://blossom.primal.net"]
+        let isDefault = configured.isEmpty || defaultServers.contains(configured)
+        var servers = isDefault ? defaultServers : [configured] + defaultServers
+        // dedupe while preserving order
+        var seen = Set<String>()
+        servers = servers.filter { seen.insert($0).inserted }
 
-        guard let terminal = await NMPBridge.shared.dispatchAndAwaitResult(
-            namespace: "nmp.blossom.upload", json: uploadInput
-        ), terminal.succeeded, terminal.resultJSON != "null" else {
-            setStep(.error("Upload failed.")); return
+        var terminal: NMPBridge.ActionTerminal?
+        var lastError = "No servers tried"
+        for server in servers {
+            guard let uploadInput = NMPBridge.shared.blossomUploadInputJSON(
+                filePath: tmpURL.path, mime: "image/jpeg", serverURL: server
+            ) else { continue }
+            let result = await NMPBridge.shared.dispatchAndAwaitResult(
+                namespace: "nmp.blossom.upload", json: uploadInput
+            )
+            if let r = result, r.succeeded, r.resultJSON != "null" {
+                terminal = r; break
+            }
+            lastError = "[\(server)] \(result.map { String($0.resultJSON.prefix(80)) } ?? "dispatch rejected")"
         }
+        guard let terminal else { setStep(.error("Upload failed: \(lastError)")); return }
 
         setStep(.publishing)
 

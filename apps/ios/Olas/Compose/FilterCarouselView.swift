@@ -77,9 +77,9 @@ enum FilterRegistry {
 enum PhotoFilters {
     static let context = CIContext()
 
-    static var all: [FilterDefinition] { makeFilterDefinitions() }
+    @MainActor static var all: [FilterDefinition] { makeFilterDefinitions() }
 
-    private static func makeFilterDefinitions() -> [FilterDefinition] {
+    @MainActor private static func makeFilterDefinitions() -> [FilterDefinition] {
         let catalogJSON = NMPBridge.shared.filterCatalogJSON() ?? "[]"
         guard let data = catalogJSON.data(using: .utf8),
               let items = try? JSONDecoder().decode([[String: String]].self, from: data) else {

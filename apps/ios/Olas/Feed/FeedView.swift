@@ -49,6 +49,12 @@ struct FeedView: View {
 
                     if vm.isLoading {
                         FeedSkeletonView()
+                    } else if vm.posts.isEmpty {
+                        Text("Nothing here yet")
+                            .font(OlasFont.body())
+                            .foregroundStyle(Color.olasText2)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
                     }
                 }
             }

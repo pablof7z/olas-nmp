@@ -142,10 +142,6 @@ struct PostCardView: View {
                     .font(OlasFont.feedCaption())
                     .foregroundStyle(Color.olasText2)
             }
-
-            Text(post.createdAt.relativeTimeString)
-                .font(OlasFont.feedTimestamp())
-                .foregroundStyle(Color.olasText3)
         }
         .padding(.horizontal, OlasSpacing.sm)
         .padding(.top, OlasSpacing.xs)
@@ -153,25 +149,22 @@ struct PostCardView: View {
     }
 
     private var captionText: some View {
-        Group {
-            let name = post.authorName ?? String(post.authorPubkey.prefix(8))
-            let caption = post.caption
-            let lineLimit = isExpanded ? nil : 2
-            HStack(alignment: .top, spacing: 0) {
-                Text("**\(name)** \(caption)")
-                    .font(OlasFont.feedCaption())
-                    .foregroundStyle(Color.olasText1)
-                    .lineLimit(lineLimit)
-                    .truncationMode(.tail)
+        let name = post.authorName ?? String(post.authorPubkey.prefix(8))
+        let caption = post.caption
+        let lineLimit = isExpanded ? nil : 2
+        return VStack(alignment: .leading, spacing: 0) {
+            Text("**\(name)** \(caption)")
+                .font(OlasFont.feedCaption())
+                .foregroundStyle(Color.olasText1)
+                .lineLimit(lineLimit)
+                .truncationMode(.tail)
 
-                if !isExpanded && caption.count > 80 {
-                    Text("…more")
-                        .font(OlasFont.feedCaption())
-                        .foregroundStyle(Color.olasText3)
-                        .padding(.leading, 2)
-                }
+            if !isExpanded && caption.count > 80 {
+                Text("more")
+                    .font(OlasFont.feedCaption())
+                    .foregroundStyle(Color.olasText3)
             }
-            .onTapGesture { isExpanded.toggle() }
         }
+        .onTapGesture { isExpanded.toggle() }
     }
 }
