@@ -129,6 +129,12 @@ object NMPBridge {
     private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
 
+    // P0-E: Real social proof
+    private external fun nativeSocialProofJson(handle: Long, activePubkey: String, targetPubkey: String): String?
+
+    // P0-F: Ranked discover sections
+    private external fun nativeDiscoverSectionsJson(handle: Long, activePubkey: String): String?
+
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
         fun onUpdate(data: ByteArray)
@@ -431,4 +437,26 @@ object NMPBridge {
 
     fun releaseProfile(pubkey: String, consumerId: String) =
         nativeReleaseProfile(appHandle, pubkey, consumerId)
+
+    // --- P0-E: Real social proof -----------------------------------------------
+
+    /**
+     * Query social proof for [targetPubkey] from [activePubkey]'s follow graph.
+     * Returns: `{"mutual_followers":[...],"mutual_count":N,"reason_kind":"followed_by_mutuals"|"new_account"}`
+     * Returns null when the active account is unknown or the WoT graph is not yet bootstrapped.
+     */
+    fun socialProofJson(activePubkey: String, targetPubkey: String): String? =
+        if (activePubkey.isEmpty() || targetPubkey.isEmpty()) null
+        else nativeSocialProofJson(appHandle, activePubkey, targetPubkey)
+
+    // --- P0-F: Ranked discover sections ----------------------------------------
+
+    /**
+     * Return ranked discover sections for [activePubkey] from the WoT follow graph.
+     * Returns: `[{"title":"...","reason":"...","profiles":[{"pubkey":"...","mutual_count":N}]}]`
+     * Returns null when the active account is unknown or the WoT runtime is absent.
+     */
+    fun discoverSectionsJson(activePubkey: String): String? =
+        if (activePubkey.isEmpty()) null
+        else nativeDiscoverSectionsJson(appHandle, activePubkey)
 }

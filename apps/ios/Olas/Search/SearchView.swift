@@ -263,7 +263,17 @@ struct SearchView: View {
     }
 
     private func profileRow(_ profile: OlasProfile) -> some View {
-        HStack(spacing: OlasSpacing.md) {
+        let bridge = NMPBridge.shared
+        let proof: SocialProof? = {
+            guard let activePubkey = bridge.activeAccountPubkey, !activePubkey.isEmpty,
+                  let json = bridge.socialProofJSON(activePubkey: activePubkey, targetPubkey: profile.pubkey),
+                  let data = json.data(using: .utf8),
+                  let p = try? JSONDecoder().decode(SocialProof.self, from: data) else {
+                return nil
+            }
+            return p
+        }()
+        return HStack(spacing: OlasSpacing.md) {
             CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)
             }
@@ -278,6 +288,8 @@ struct SearchView: View {
                     Text(nip05)
                         .font(OlasFont.caption())
                         .foregroundStyle(Color.olasText2)
+                } else if let proof = proof {
+                    SocialProofRow(proof: proof)
                 }
             }
         }
