@@ -31,6 +31,14 @@ targets:
         CFBundleDisplayName: Olas
         CFBundleShortVersionString: "1.0"
         CFBundleVersion: "2"
+        CFBundleIconName: AppIcon
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIApplicationSupportsIndirectInputEvents: true
         LSApplicationQueriesSchemes:
           - nostrsigner
@@ -42,12 +50,18 @@ targets:
               - olas
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas
+        PRODUCT_BUNDLE_IDENTIFIER: com.pablof7z.snapstr
         PRODUCT_MODULE_NAME: Olas
         PRODUCT_NAME: Olas
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: Olas/Olas.entitlements
         GENERATE_INFOPLIST_FILE: NO
+        # RUST_TARGET defaults by SDK so plain Xcode GUI builds resolve the static
+        # lib path without needing a command-line override. `just` still passes
+        # RUST_TARGET explicitly, which takes precedence.
+        RUST_TARGET: aarch64-apple-ios
+        "RUST_TARGET[sdk=iphoneos*]": aarch64-apple-ios
+        "RUST_TARGET[sdk=iphonesimulator*]": aarch64-apple-ios-sim
         OTHER_LDFLAGS: "$(inherited) $(SRCROOT)/../../target/$(RUST_TARGET)/$(RUST_BUILD_PROFILE)/libnmp_app_olas.a -lc++"
         LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../target/$(RUST_TARGET)/$(RUST_BUILD_PROFILE)"
         SWIFT_INCLUDE_PATHS: "$(inherited) $(SRCROOT)/Olas/Bridge"
