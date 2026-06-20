@@ -3,6 +3,10 @@ package io.f7z.olas.feature.compose
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -57,6 +61,8 @@ class UploadViewModel : ViewModel() {
         caption: String,
         altTexts: Map<Uri, String> = emptyMap(),
         geohash: String? = null,
+        filter: PhotoFilter? = null,
+        intensity: Float = 1f,
     ) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
@@ -81,6 +87,8 @@ class UploadViewModel : ViewModel() {
                 }.distinct()
 
                 // Upload each image; collect descriptor + per-image metadata.
+                // Parity with iOS (CaptionView.swift): filteredPreview replaces images[0] only;
+                // subsequent images are uploaded unfiltered. Mirror that here.
                 val uploadedImages = JSONArray()
                 uris.forEachIndexed { index, uri ->
                     val progress = index.toFloat() / uris.size
@@ -89,7 +97,15 @@ class UploadViewModel : ViewModel() {
                         progress = progress,
                     )
                     val entry = withContext(Dispatchers.IO) {
-                        uploadOne(appContext, uri, maxDimension, jpegQuality, servers)
+                        uploadOne(
+                            context       = appContext,
+                            uri           = uri,
+                            maxDimension  = maxDimension,
+                            jpegQuality   = jpegQuality,
+                            servers       = servers,
+                            filter        = if (index == 0) filter else null,
+                            intensity     = intensity,
+                        )
                     }
                     val obj = JSONObject().apply {
                         put("descriptor", JSONObject(entry.descriptorJson))
@@ -126,6 +142,12 @@ class UploadViewModel : ViewModel() {
     /**
      * Encode one image to a temp JPEG, upload via `nmp.blossom.upload`, and
      * await the BUD-02 descriptor. Returns the descriptor JSON + dimensions.
+     *
+     * When [filter] is non-null and not "Original", the selected filter matrix
+     * (blended with identity at [intensity]) is rendered onto the bitmap via
+     * [Canvas] + [Paint] before JPEG compression — identical to the
+     * ColorFilter.colorMatrix overlay shown in the preview. This ensures the
+     * uploaded bytes match what the user saw (WYSIWYG).
      */
     private suspend fun uploadOne(
         context: Context,
@@ -133,17 +155,26 @@ class UploadViewModel : ViewModel() {
         maxDimension: Int,
         jpegQuality: Int,
         servers: List<String>,
+        filter: PhotoFilter? = null,
+        intensity: Float = 1f,
     ): UploadedEntry {
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
         } ?: throw IllegalStateException("Failed to decode image")
         val resized = downsample(bitmap, maxDimension)
-        val dim = "${resized.width}x${resized.height}"
+        // Bake the filter into pixel data using the same blendMatrix logic as
+        // FilterCarousel / EditPhotoScreen, so the JPEG matches the preview.
+        val toCompress = if (filter != null && filter.name != "Original") {
+            bakeFilter(resized, filter.matrix, intensity)
+        } else {
+            resized
+        }
+        val dim = "${toCompress.width}x${toCompress.height}"
 
         val tmp = File.createTempFile("olas_upload_", ".jpg", context.cacheDir)
         try {
             tmp.outputStream().use { out ->
-                resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
+                toCompress.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
             }
 
             var terminal: NMPBridge.ActionTerminal? = null
@@ -172,6 +203,22 @@ class UploadViewModel : ViewModel() {
         } finally {
             tmp.delete()
         }
+    }
+
+    /**
+     * Apply [matrix] at [intensity] to [src] by drawing through a [Paint] with
+     * a [ColorMatrixColorFilter] onto a fresh [Bitmap]. Uses the same
+     * [blendMatrix] / [identityMatrix] functions as [FilterCarousel] so the
+     * result is pixel-identical to the Compose preview overlay.
+     */
+    private fun bakeFilter(src: Bitmap, matrix: FloatArray, intensity: Float): Bitmap {
+        val blended = blendMatrix(identityMatrix(), matrix, intensity)
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix(blended))
+        }
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(src, 0f, 0f, paint)
+        return out
     }
 
     private fun downsample(src: Bitmap, maxDimension: Int): Bitmap {

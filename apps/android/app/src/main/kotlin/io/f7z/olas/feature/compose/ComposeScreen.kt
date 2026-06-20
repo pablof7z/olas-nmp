@@ -63,8 +63,10 @@ fun ComposeScreen(navController: NavController) {
                 }
                 is ComposeStep.Caption -> {
                     CaptionScreen(
-                        uris    = current.uris,
-                        onShare = {
+                        uris      = current.uris,
+                        filter    = current.filter,
+                        intensity = current.intensity,
+                        onShare   = {
                             scope.launch {
                                 sheetState.hide()
                                 navController.popBackStack()

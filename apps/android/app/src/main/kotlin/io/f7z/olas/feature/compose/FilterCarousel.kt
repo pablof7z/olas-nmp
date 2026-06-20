@@ -168,7 +168,7 @@ private fun FilterThumbnail(
 
 // ---- Filter matrix helpers ----
 
-private fun identityMatrix() = floatArrayOf(
+internal fun identityMatrix() = floatArrayOf(
     1f,0f,0f,0f,0f,
     0f,1f,0f,0f,0f,
     0f,0f,1f,0f,0f,
@@ -222,6 +222,6 @@ private fun copperMatrix() = warmMatrix(0.2f)
 private fun veilMatrix()   = blendMatrix(fadeMatrix(0.1f), coolMatrix(0.1f), 1f)
 private fun bloomMatrix()  = blendMatrix(warmMatrix(0.1f), contrastMatrix(1.15f), 1f)
 
-private fun blendMatrix(base: FloatArray, overlay: FloatArray, t: Float): FloatArray {
+internal fun blendMatrix(base: FloatArray, overlay: FloatArray, t: Float): FloatArray {
     return FloatArray(20) { i -> base[i] * (1f - t) + overlay[i] * t }
 }
