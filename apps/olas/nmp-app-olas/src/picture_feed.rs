@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -6,10 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use nmp_core::slots::{event_by_id_from_store, ActiveAccountSlot};
 use nmp_core::substrate::{empty_suppression_lookup, KernelEvent, SuppressionLookup};
 use nmp_core::{KernelEventObserver, TypedProjectionData};
-use nmp_feed::{
-    ClosureInterestShape, FeedAdvance, FeedApply, FeedController, PullFeedController,
-    RootFeedSnapshot,
-};
+use nmp_feed::{ClosureInterestShape, FeedAdvance, FeedApply, FeedController, PullFeedController};
 use nmp_ffi::{
     nmp_app_close_contact_feed, nmp_app_close_interest, nmp_app_open_contact_feed,
     nmp_app_open_interest, NmpApp,
@@ -17,7 +14,6 @@ use nmp_ffi::{
 use nmp_nip02::ActiveFollowSet;
 use nmp_nip68::{
     picture_acquisition_kinds, picture_feed_observer, picture_feed_predicate, PictureFeed,
-    PictureFeedEntry,
 };
 use nmp_planner::InterestShape;
 use nmp_wot::WotBootstrapRuntime;
@@ -33,6 +29,16 @@ use picture_feed_acquisition::{
     acquisition_filter_jsons, author_acquisition_filter_jsons, author_feed_key,
     PICTURE_PRIMARY_KINDS_JSON,
 };
+#[path = "picture_feed_projection.rs"]
+mod picture_feed_projection;
+use picture_feed_projection::{current_photo_feed_json, photo_feed_posts_json_from_payload};
+#[path = "picture_feed_slots.rs"]
+mod picture_feed_slots;
+pub(crate) use picture_feed_slots::reset_network_picture_feed;
+use picture_feed_slots::{
+    clear_picture_feed_slots, picture_feed_registered, record_picture_feed,
+    remove_author_picture_feed, reset_all_picture_feeds, reset_home_picture_feeds,
+};
 const PHOTO_FEED_SCHEMA_ID: &str = "olas.picture.feed";
 const PHOTO_FEED_SCHEMA_VERSION: u32 = 1;
 const PHOTO_FEED_FILE_IDENTIFIER: &str = "OLPF";
@@ -47,15 +53,7 @@ struct FeedRuntime {
     active_slot: ActiveAccountSlot,
 }
 
-#[derive(Default)]
-struct FeedSlots {
-    following: Option<Arc<PictureFeed>>,
-    network: Option<Arc<PictureFeed>>,
-    authors: BTreeMap<String, Arc<PictureFeed>>,
-}
-
 static FEED_RUNTIME: OnceLock<Mutex<Option<FeedRuntime>>> = OnceLock::new();
-static FEED_SLOTS: OnceLock<Mutex<FeedSlots>> = OnceLock::new();
 
 pub(crate) fn install_runtime_handles(
     app: &NmpApp,
@@ -87,6 +85,7 @@ pub(crate) fn install_runtime_handles(
             active_slot,
         });
     }
+    clear_picture_feed_slots();
 }
 
 #[no_mangle]
@@ -153,11 +152,7 @@ pub extern "C" fn olas_close_author_photo_feed(
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
         let _ = app_ref.unregister_feed(consumer.as_str());
-        if let Some(slots) = FEED_SLOTS.get() {
-            if let Ok(mut guard) = slots.lock() {
-                guard.authors.remove(consumer.as_str());
-            }
-        }
+        remove_author_picture_feed(consumer.as_str());
     }));
 }
 
@@ -188,19 +183,37 @@ pub extern "C" fn olas_decode_snapshot_photo_feed_json(
         .unwrap_or(std::ptr::null_mut())
 }
 
-pub(crate) fn reset_network_picture_feed() {
-    if let Some(feed) = FEED_SLOTS
-        .get()
-        .and_then(|slot| slot.lock().ok().and_then(|guard| guard.network.clone()))
-    {
-        let _ = feed.reset_for_perspective_change();
-    }
+#[no_mangle]
+pub extern "C" fn olas_current_photo_feed_json(
+    app: *mut NmpApp,
+    key: *const c_char,
+) -> *mut c_char {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Option<String> {
+        if app.is_null() {
+            return None;
+        }
+        let key = c_string_opt(key).unwrap_or_else(|| NETWORK_FEED_KEY.to_string());
+        let app_ref = unsafe { &*app };
+        current_photo_feed_json(app_ref, &key)
+    }));
+    result
+        .ok()
+        .flatten()
+        .map(|value| {
+            CString::new(value)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut())
+        })
+        .unwrap_or(std::ptr::null_mut())
 }
 
 fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
     let Some(runtime) = current_runtime() else {
         return;
     };
+    if picture_feed_registered(&key, &mode) {
+        return;
+    }
     let event_store = app.event_store_handle();
     let event_lookup: nmp_feed::EventLookup =
         Arc::new(move |id| event_by_id_from_store(&event_store, id));
@@ -246,53 +259,13 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
         })
     });
 
-    if let Ok(mut slots) = FEED_SLOTS
-        .get_or_init(|| Mutex::new(FeedSlots::default()))
-        .lock()
-    {
-        match mode {
-            FeedMode::Following => slots.following = Some(feed),
-            FeedMode::Network => slots.network = Some(feed),
-            FeedMode::Author(_) => {
-                slots.authors.insert(key, feed);
-            }
-        }
-    }
+    record_picture_feed(&key, &mode, feed);
 }
 
 fn current_runtime() -> Option<FeedRuntime> {
     FEED_RUNTIME
         .get()
         .and_then(|slot| slot.lock().ok().and_then(|guard| guard.clone()))
-}
-
-fn reset_all_picture_feeds() {
-    if let Some(slots) = FEED_SLOTS.get() {
-        if let Ok(guard) = slots.lock() {
-            if let Some(feed) = &guard.following {
-                let _ = feed.reset_for_perspective_change();
-            }
-            if let Some(feed) = &guard.network {
-                let _ = feed.reset_for_perspective_change();
-            }
-            for feed in guard.authors.values() {
-                let _ = feed.reset_for_perspective_change();
-            }
-        }
-    }
-}
-
-fn reset_home_picture_feeds() {
-    if let Some(slots) = FEED_SLOTS.get() {
-        if let Ok(guard) = slots.lock() {
-            if let Some(feed) = &guard.following {
-                let _ = feed.reset_for_perspective_change();
-            }
-            if let Some(feed) = &guard.network {
-                let _ = feed.reset_for_perspective_change();
-            }
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -459,23 +432,6 @@ fn close_author_acquisition(app: *mut NmpApp, pubkey: &str, consumer: &str) {
         };
         nmp_app_close_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
     }
-}
-
-fn photo_feed_posts_json_from_payload(payload: &[u8]) -> Option<String> {
-    let snapshot: RootFeedSnapshot<PictureFeedEntry, ()> = serde_json::from_slice(payload).ok()?;
-    let posts = snapshot
-        .cards
-        .iter()
-        .filter_map(|row| {
-            let record = row.card.record.as_ref()?;
-            let mut value = serde_json::to_value(record).ok()?;
-            if let Some(reposted_by) = &row.card.reposted_by {
-                value["repostedBy"] = serde_json::to_value(reposted_by).ok()?;
-            }
-            Some(value)
-        })
-        .collect::<Vec<_>>();
-    serde_json::to_string(&posts).ok()
 }
 
 fn c_string_opt(ptr: *const c_char) -> Option<String> {

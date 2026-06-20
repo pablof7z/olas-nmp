@@ -1,4 +1,4 @@
-use std::ffi::{c_void, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -286,6 +286,22 @@ pub(super) fn picture(id: &str, author: &str, created_at: u64) -> KernelEvent {
 pub(super) fn non_empty_network_posts_json(app: *mut nmp_ffi::NmpApp) -> Option<String> {
     let projections = unsafe { &*app }.run_typed_snapshot_projections();
     non_empty_network_posts_json_from_entries(&projections)
+}
+
+pub(super) fn current_photo_feed_json_via_ffi(
+    app: *mut nmp_ffi::NmpApp,
+    key: &str,
+) -> Option<String> {
+    let key = CString::new(key).expect("feed key");
+    let raw = crate::olas_current_photo_feed_json(app, key.as_ptr());
+    if raw.is_null() {
+        return None;
+    }
+    let value = unsafe { CStr::from_ptr(raw) }
+        .to_string_lossy()
+        .into_owned();
+    nmp_ffi::nmp_free_string(raw);
+    Some(value)
 }
 
 fn non_empty_network_posts_json_from_frame(frame: &[u8]) -> Option<String> {

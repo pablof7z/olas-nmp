@@ -152,6 +152,69 @@ fn snapshot_decoder_preserves_repost_attribution() {
 }
 
 #[test]
+fn current_photo_feed_json_replays_loaded_network_projection() {
+    let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
+    let app = nmp_ffi::nmp_app_new();
+    assert!(!app.is_null());
+    crate::olas_app_register(app);
+    nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+
+    let signal = Arc::new(EventSignal::default());
+    let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
+    let network = CString::new(NETWORK_FEED_KEY).expect("network key");
+
+    crate::olas_open_photo_feed(app, 0, network.as_ptr());
+    let (event_id, event_json) = signed_picture_event(1_700_000_200);
+    inject_signed_event(app, &event_json);
+    let (_observed, pushed_posts_json) = signal
+        .wait_for_non_empty_projection(Duration::from_secs(5), || {
+            non_empty_network_posts_json(app)
+        });
+    assert_posts_contain(&pushed_posts_json, &event_id);
+
+    let current_posts_json = current_photo_feed_json_via_ffi(app, NETWORK_FEED_KEY)
+        .expect("current photo feed projection");
+    assert_posts_contain(&current_posts_json, &event_id);
+
+    unsafe { &*app }.unregister_event_observer(observer_id);
+    nmp_ffi::nmp_app_stop(app);
+    nmp_ffi::nmp_app_free(app);
+}
+
+#[test]
+fn repeated_network_open_preserves_loaded_projection() {
+    let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
+    let app = nmp_ffi::nmp_app_new();
+    assert!(!app.is_null());
+    crate::olas_app_register(app);
+    nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+
+    let signal = Arc::new(EventSignal::default());
+    let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
+    let network = CString::new(NETWORK_FEED_KEY).expect("network key");
+
+    crate::olas_open_photo_feed(app, 0, network.as_ptr());
+    let (event_id, event_json) = signed_picture_event(1_700_000_300);
+    inject_signed_event(app, &event_json);
+    let (_observed, initial_posts_json) = signal
+        .wait_for_non_empty_projection(Duration::from_secs(5), || {
+            non_empty_network_posts_json(app)
+        });
+    assert_posts_contain(&initial_posts_json, &event_id);
+
+    crate::olas_open_photo_feed(app, 0, network.as_ptr());
+    let current_posts_json = current_photo_feed_json_via_ffi(app, NETWORK_FEED_KEY)
+        .expect("current projection survives repeated open");
+    assert_posts_contain(&current_posts_json, &event_id);
+
+    unsafe { &*app }.unregister_event_observer(observer_id);
+    nmp_ffi::nmp_app_stop(app);
+    nmp_ffi::nmp_app_free(app);
+}
+
+#[test]
 fn network_feed_reopens_from_store_after_perspective_switch() {
     let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
     let app = nmp_ffi::nmp_app_new();

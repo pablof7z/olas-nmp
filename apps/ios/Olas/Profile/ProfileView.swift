@@ -148,6 +148,9 @@ struct ProfileView: View {
             guard key == authorFeedKey else { return }
             posts = snapshotPosts
         }
+        if let snapshot = NMPBridge.shared.currentPhotoFeed(key: authorFeedKey), !snapshot.isEmpty {
+            posts = snapshot
+        }
     }
 
     private func handleProfileEvent(_ json: String, pubkey: String) {

@@ -10,11 +10,14 @@ final class FeedViewModel {
     private var handlerRegistered = false
 
     func start(mode: FeedMode) {
+        let shouldReset = !handlerRegistered || self.mode != mode
         self.mode = mode
-        self.posts = []
-        self.pendingNewCount = 0
-        self.pendingPosts = []
-        isLoading = true
+        if shouldReset {
+            self.posts = []
+            self.pendingNewCount = 0
+            self.pendingPosts = []
+            isLoading = true
+        }
 
         // Register only once — each call to start() must not stack handlers.
         if !handlerRegistered {
@@ -37,6 +40,7 @@ final class FeedViewModel {
         case .following: NMPBridge.shared.openFollowingFeed()
         case .network:   NMPBridge.shared.openNetworkFeed()
         }
+        applyCurrentProjectionIfLoaded()
     }
 
     func handlePhotoFeedSnapshot(key: String, posts snapshotPosts: [PhotoPost]) {
@@ -91,6 +95,12 @@ final class FeedViewModel {
 
     private var currentFeedKey: String {
         mode == .following ? "olas.following_feed" : "olas.network_feed"
+    }
+
+    private func applyCurrentProjectionIfLoaded() {
+        guard let snapshot = NMPBridge.shared.currentPhotoFeed(key: currentFeedKey),
+              !snapshot.isEmpty else { return }
+        handlePhotoFeedSnapshot(key: currentFeedKey, posts: snapshot)
     }
 
     // NMP-GAP(#24): Reaction state will be updated by the Rust photo-feed projection.

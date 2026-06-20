@@ -126,6 +126,7 @@ object NMPBridge {
     private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
     private external fun nativeDecodePhotoFeed(handle: Long, frame: ByteArray, key: String): String?
+    private external fun nativeCurrentPhotoFeed(handle: Long, key: String): String?
     private external fun nativeWotPresetGet(handle: Long): String?
     private external fun nativeWotPresetSet(handle: Long, preset: String)
 
@@ -210,6 +211,8 @@ object NMPBridge {
 
     /** Network feed — kind 20 global; Rust applies the active WoT preset per event. */
     fun openNetworkFeed() = nativeOpenPhotoFeed(appHandle, false, NETWORK_FEED_KEY)
+
+    fun currentPhotoFeedJson(key: String): String? = nativeCurrentPhotoFeed(appHandle, key)
 
     fun profileJson(raw: String): String? = nativeProfileJson(appHandle, raw)
 

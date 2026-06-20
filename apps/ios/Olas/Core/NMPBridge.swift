@@ -301,6 +301,16 @@ import Combine
         unregisterPhotoFeedKey(consumer)
     }
 
+    func currentPhotoFeed(key: String) -> [PhotoPost]? {
+        guard let app = appPtr else { return nil }
+        return key.withCString { keyPtr in
+            guard let ptr = olas_current_photo_feed_json(app, keyPtr) else { return nil }
+            defer { nmp_free_string(ptr) }
+            guard let data = String(cString: ptr).data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode([PhotoPost].self, from: data)
+        }
+    }
+
     // MARK: - Profile
 
     // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles

@@ -12,8 +12,9 @@ use nmp_ffi::{
 };
 
 use crate::{
-    olas_close_author_photo_feed, olas_close_search_feed, olas_open_author_photo_feed,
-    olas_open_photo_feed, olas_open_search_feed, olas_wot_preset_get, olas_wot_preset_set,
+    olas_close_author_photo_feed, olas_close_search_feed, olas_current_photo_feed_json,
+    olas_open_author_photo_feed, olas_open_photo_feed, olas_open_search_feed, olas_wot_preset_get,
+    olas_wot_preset_set,
 };
 
 use super::{
@@ -425,6 +426,27 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodePhotoFeed(
         };
         let raw =
             crate::olas_decode_snapshot_photo_feed_json(bytes.as_ptr(), bytes.len(), key.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeCurrentPhotoFeed(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    key: JString,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(key) = jstring_to_cstring(&mut env, &key) else {
+            return std::ptr::null_mut();
+        };
+        let raw = olas_current_photo_feed_json(app, key.as_ptr());
         cstring_into_jstring(&mut env, raw)
     }));
     result.unwrap_or(std::ptr::null_mut())

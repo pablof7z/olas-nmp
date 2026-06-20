@@ -54,6 +54,8 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             targetPubkey = pk
             NMPBridge.claimProfile(pk, "profile_screen")
             NMPBridge.openAuthorPhotoFeed(pk)
+            NMPBridge.currentPhotoFeedJson(NMPBridge.authorPhotoFeedKey(pk))
+                ?.let { applyAuthorFeedSnapshot(pk, it, allowEmpty = false) }
         }
 
         // After 10s with no profile, show a minimal stub using the pubkey.
@@ -88,13 +90,7 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             .onEach { (key, raw) ->
                 val pk = targetPubkey ?: return@onEach
                 if (key != NMPBridge.authorPhotoFeedKey(pk)) return@onEach
-                val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
-                    .getOrNull()
-                    ?: return@onEach
-                _uiState.value = _uiState.value.copy(
-                    posts = posts,
-                    isLoading = false,
-                )
+                applyAuthorFeedSnapshot(pk, raw, allowEmpty = true)
             }
             .launchIn(viewModelScope)
 
@@ -112,6 +108,18 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
                 _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
             }
             .launchIn(viewModelScope)
+    }
+
+    private fun applyAuthorFeedSnapshot(pubkey: String, raw: String, allowEmpty: Boolean) {
+        if (targetPubkey != pubkey) return
+        val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
+            .getOrNull()
+            ?: return
+        if (!allowEmpty && posts.isEmpty()) return
+        _uiState.value = _uiState.value.copy(
+            posts = posts,
+            isLoading = false,
+        )
     }
 
     private fun parseClaimedProfiles(raw: String) {

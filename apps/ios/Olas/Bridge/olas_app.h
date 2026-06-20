@@ -122,6 +122,10 @@ void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* cons
 /// Returned string is a JSON array of PhotoPost rows; caller frees with nmp_free_string.
 char* olas_decode_snapshot_photo_feed_json(const uint8_t* frame, size_t len, const char* key);
 
+/// Read the current Rust-owned photo-feed projection for the requested feed key.
+/// Returned string is a JSON array of PhotoPost rows; caller frees with nmp_free_string.
+char* olas_current_photo_feed_json(void* app, const char* key);
+
 /// Open a kind:20 photo feed filtered to a single author (profile grid).
 /// consumer_id identifies this subscription; close with olas_close_author_photo_feed.
 void olas_open_author_photo_feed(void* app, const char* pubkey, const char* consumer_id);

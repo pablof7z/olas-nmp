@@ -228,8 +228,8 @@ pub use event_models::{
 
 mod picture_feed;
 pub use picture_feed::{
-    olas_close_author_photo_feed, olas_decode_snapshot_photo_feed_json,
-    olas_open_author_photo_feed, olas_open_photo_feed,
+    olas_close_author_photo_feed, olas_current_photo_feed_json,
+    olas_decode_snapshot_photo_feed_json, olas_open_author_photo_feed, olas_open_photo_feed,
 };
 
 // Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.

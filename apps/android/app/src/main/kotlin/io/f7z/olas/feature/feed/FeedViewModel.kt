@@ -45,17 +45,7 @@ class FeedViewModel : ViewModel() {
     private fun observePhotoFeeds() {
         NMPBridge.photoFeedsJson
             .onEach { (key, raw) ->
-                val current = _uiState.value
-                if (key != feedKey(current.feedMode)) return@onEach
-                val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
-                    .getOrNull()
-                    ?: return@onEach
-                _uiState.value = current.copy(
-                    posts = posts,
-                    pendingPosts = emptyList(),
-                    hasNewPosts = false,
-                    isLoading = false,
-                )
+                applyFeedSnapshot(key, raw, allowEmpty = true)
             }
             .launchIn(viewModelScope)
     }
@@ -77,6 +67,28 @@ class FeedViewModel : ViewModel() {
                 NMPBridge.openNetworkFeed()
             }
         }
+        applyCurrentProjectionIfLoaded(mode)
+    }
+
+    private fun applyCurrentProjectionIfLoaded(mode: FeedMode) {
+        val key = feedKey(mode)
+        val raw = NMPBridge.currentPhotoFeedJson(key) ?: return
+        applyFeedSnapshot(key, raw, allowEmpty = false)
+    }
+
+    private fun applyFeedSnapshot(key: String, raw: String, allowEmpty: Boolean) {
+        val current = _uiState.value
+        if (key != feedKey(current.feedMode)) return
+        val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
+            .getOrNull()
+            ?: return
+        if (!allowEmpty && posts.isEmpty()) return
+        _uiState.value = current.copy(
+            posts = posts,
+            pendingPosts = emptyList(),
+            hasNewPosts = false,
+            isLoading = false,
+        )
     }
 
     /** Merge pending posts into visible list (triggered by tapping the pill). */
