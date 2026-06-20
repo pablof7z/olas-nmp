@@ -26,6 +26,13 @@ enum SearchResultTab: String, CaseIterable {
     private var collectedPosts: [String: PhotoPost] = [:]
     private var lastSearchQuery: String?
 
+    // Social-proof cache — populated asynchronously so the SwiftUI body never
+    // calls the synchronous WoT FFI directly.  Keyed by target pubkey.
+    private(set) var socialProofCache: [String: SocialProof] = [:]
+    // Tracks pubkeys whose proof has already been attempted to avoid re-queuing.
+    private var proofAttempted: Set<String> = []
+    private var proofTask: Task<Void, Never>?
+
     func startListening() {
         guard !isListening else { return }
         isListening = true
@@ -51,6 +58,8 @@ enum SearchResultTab: String, CaseIterable {
             profileResults = []
             postResults = []
             tagResults = []
+            socialProofCache = [:]
+            proofAttempted = []
             isSearching = false
             return
         }
@@ -62,6 +71,10 @@ enum SearchResultTab: String, CaseIterable {
     private func performSearch(query: String) {
         collectedProfiles = [:]
         collectedPosts = [:]
+        socialProofCache = [:]
+        proofAttempted = []
+        proofTask?.cancel()
+        proofTask = nil
         if let last = lastSearchQuery {
             NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
         }
@@ -74,6 +87,8 @@ enum SearchResultTab: String, CaseIterable {
         guard let last = lastSearchQuery else { return }
         NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
         lastSearchQuery = nil
+        proofTask?.cancel()
+        proofTask = nil
     }
 
     private func handleSearchEvent(_ json: String) {
@@ -127,6 +142,34 @@ enum SearchResultTab: String, CaseIterable {
             }
         }
         tagResults = Array(tagSet).sorted()
+
+        // Precompute social proof off the body builder — avoids synchronous WoT FFI
+        // during SwiftUI layout, which caused main-thread jank.
+        loadSocialProofForResults()
+    }
+
+    /// Asynchronously loads social-proof for any newly-appearing profile pubkeys.
+    /// Yields between each FFI call so other main-actor work (renders) can interleave.
+    /// Proof values are stored in `socialProofCache`; `@Observable` propagates the change.
+    private func loadSocialProofForResults() {
+        let activePubkey = NMPBridge.shared.activeAccountPubkey ?? ""
+        guard !activePubkey.isEmpty else { return }
+        let newPubkeys = profileResults.map { $0.pubkey }.filter { !proofAttempted.contains($0) }
+        guard !newPubkeys.isEmpty else { return }
+        proofAttempted.formUnion(newPubkeys)
+        proofTask?.cancel()
+        proofTask = Task { @MainActor [weak self] in
+            for pubkey in newPubkeys {
+                guard !Task.isCancelled, let self else { return }
+                if let json = NMPBridge.shared.socialProofJSON(activePubkey: activePubkey, targetPubkey: pubkey),
+                   let data = json.data(using: .utf8),
+                   let proof = try? JSONDecoder().decode(SocialProof.self, from: data) {
+                    self.socialProofCache[pubkey] = proof
+                }
+                // Yield so other scheduled main-actor work (renders) can run between items.
+                await Task.yield()
+            }
+        }
     }
 }
 
@@ -263,16 +306,9 @@ struct SearchView: View {
     }
 
     private func profileRow(_ profile: OlasProfile) -> some View {
-        let bridge = NMPBridge.shared
-        let proof: SocialProof? = {
-            guard let activePubkey = bridge.activeAccountPubkey, !activePubkey.isEmpty,
-                  let json = bridge.socialProofJSON(activePubkey: activePubkey, targetPubkey: profile.pubkey),
-                  let data = json.data(using: .utf8),
-                  let p = try? JSONDecoder().decode(SocialProof.self, from: data) else {
-                return nil
-            }
-            return p
-        }()
+        // Read from cache — populated asynchronously by loadSocialProofForResults()
+        // so the body never calls the synchronous WoT FFI during layout.
+        let proof = vm.socialProofCache[profile.pubkey]
         return HStack(spacing: OlasSpacing.md) {
             CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)

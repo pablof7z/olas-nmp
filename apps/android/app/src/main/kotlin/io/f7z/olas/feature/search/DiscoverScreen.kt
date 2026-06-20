@@ -18,11 +18,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import org.nmp.registry.LocalNostrProfileHost
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,6 +112,7 @@ fun DiscoverScreen() {
 
 @Composable
 private fun SuggestedSection(section: DiscoverSection) {
+    val profileHost = LocalNostrProfileHost.current
     Column {
         Text(
             text       = section.title,
@@ -124,12 +127,22 @@ private fun SuggestedSection(section: DiscoverSection) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(section.profiles.take(15), key = { it.pubkey }) { dp ->
+                // Claim the profile so the kernel fetches kind:0; release when the
+                // item leaves the composition (LazyRow scrolls it out of view).
+                DisposableEffect(dp.pubkey) {
+                    profileHost?.claimProfile(dp.pubkey, "olas.discover")
+                    onDispose { profileHost?.releaseProfile(dp.pubkey, "olas.discover") }
+                }
+                // Read the resolved profile reactively — recomposes when kind:0 arrives.
+                val wire = profileHost?.profileForPubkey(dp.pubkey)
                 val mutualFollowName = if (dp.mutual_count > 0) "${dp.mutual_count} of your follows" else null
                 SuggestedAccountCard(
                     account = SuggestedAccount(
                         pubkey            = dp.pubkey,
-                        name              = dp.pubkey.take(8),
-                        avatarUrl         = null,
+                        // wire?.display falls back to npubShort (Rust-formatted); show "…"
+                        // only before the kernel has delivered *any* profile data.
+                        name              = wire?.display ?: "…",
+                        avatarUrl         = wire?.avatarUrl,
                         photoUrls         = emptyList(),
                         mutualFollowCount = dp.mutual_count,
                         mutualFollowName  = mutualFollowName,

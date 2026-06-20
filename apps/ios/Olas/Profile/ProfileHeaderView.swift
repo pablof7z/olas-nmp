@@ -23,7 +23,6 @@ struct SocialProofRow: View {
     private var bridge: NMPBridge { NMPBridge.shared }
 
     private var label: String {
-        guard proof.isReal else { return "New to Nostr" }
         let names = proof.mutualFollowers.prefix(2).compactMap {
             bridge.profile(forPubkey: $0)?.displayName ?? bridge.profile(forPubkey: $0)?.npubShort
         }
@@ -37,10 +36,14 @@ struct SocialProofRow: View {
             : "Followed by \(base)"
     }
 
+    // Renders nothing when there is no genuine mutual overlap — mirrors Android
+    // parseSocialProofLabel which returns null for the zero-overlap / new_account case.
     var body: some View {
-        Text(label)
-            .font(OlasFont.caption())
-            .foregroundStyle(Color.olasText2)
+        if proof.isReal {
+            Text(label)
+                .font(OlasFont.caption())
+                .foregroundStyle(Color.olasText2)
+        }
     }
 }
 
