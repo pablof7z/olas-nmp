@@ -1,25 +1,54 @@
 import SwiftUI
 
+// MARK: - Active zoom id environment key
+
+/// The `id` of the item currently displayed in the fullscreen lift overlay,
+/// or nil when the overlay is closed. Source thumbnails read this to yield
+/// geometry ownership to the fullscreen image while the overlay is open.
+struct ActiveZoomIdKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var activeZoomId: String? {
+        get { self[ActiveZoomIdKey.self] }
+        set { self[ActiveZoomIdKey.self] = newValue }
+    }
+}
+
 // MARK: - Zoom transition helpers (used by source AND destination views)
 
 extension View {
     /// Apply matchedGeometryEffect as a SOURCE (thumbnail in feed / grid).
+    ///
+    /// When `isLiftActive` is true the thumbnail yields geometry ownership to
+    /// the fullscreen viewer image (which becomes the source). This is the
+    /// standard zoom pattern: only ONE of {thumbnail, fullscreen} is the
+    /// source at any given time so SwiftUI animates the frame transfer
+    /// correctly in both directions (open → zoom in; dismiss → zoom back).
+    ///
     /// No-op when namespace is nil (e.g. Reduce Motion is on).
     @ViewBuilder
-    func zoomSource(id: String, namespace: Namespace.ID?) -> some View {
+    func zoomSource(id: String, namespace: Namespace.ID?, isLiftActive: Bool = false) -> some View {
         if let ns = namespace {
-            self.matchedGeometryEffect(id: id, in: ns, isSource: true)
+            self.matchedGeometryEffect(id: id, in: ns, isSource: !isLiftActive)
         } else {
             self
         }
     }
 
     /// Apply matchedGeometryEffect as the DESTINATION (fullscreen viewer image).
+    ///
+    /// The fullscreen image is the ACTIVE SOURCE (`isSource: true`) while it
+    /// exists so it occupies its natural full-screen frame. The thumbnail
+    /// (non-source while the lift is open) animates between the thumbnail
+    /// slot and the fullscreen frame, driving the zoom-in / zoom-out effect.
+    ///
     /// No-op when namespace is nil.
     @ViewBuilder
     func zoomDest(id: String, namespace: Namespace.ID?) -> some View {
         if let ns = namespace {
-            self.matchedGeometryEffect(id: id, in: ns, isSource: false)
+            self.matchedGeometryEffect(id: id, in: ns, isSource: true)
         } else {
             self
         }

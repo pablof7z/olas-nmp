@@ -10,6 +10,7 @@ struct PostCardView: View {
     @State private var heartBurstLocation: CGPoint = .zero
     @State private var isExpanded = false
     @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(\.activeZoomId) private var activeZoomId
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -56,8 +57,9 @@ struct PostCardView: View {
         CachedImage(url: URL(string: image.url), meta: image)
             .frame(width: width)
             .clipped()
-            // Mark this thumbnail as the zoom source for the fullscreen viewer.
-            .zoomSource(id: sourceId, namespace: zoomNamespace)
+            // Yield source ownership when this thumbnail is the active lift so
+            // the fullscreen image (isSource: true) controls its own full-screen frame.
+            .zoomSource(id: sourceId, namespace: zoomNamespace, isLiftActive: activeZoomId == sourceId)
     }
 
     private func carouselImages(width: CGFloat) -> some View {
@@ -70,8 +72,9 @@ struct PostCardView: View {
                         CachedImage(url: URL(string: image.url), meta: image)
                             .frame(width: width)
                             .clipped()
-                            // Each page is an independent zoom source.
-                            .zoomSource(id: "feed-\(post.id)-\(idx)", namespace: zoomNamespace)
+                            // Each page is an independent zoom source; yield when active.
+                            .zoomSource(id: "feed-\(post.id)-\(idx)", namespace: zoomNamespace,
+                                        isLiftActive: activeZoomId == "feed-\(post.id)-\(idx)")
                             .onTapGesture { onImageTap?(idx) }
                     }
                 }

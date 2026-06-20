@@ -1,6 +1,7 @@
 package io.f7z.olas.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -125,6 +126,11 @@ fun OlasApp() {
 
     // Callback forwarded from feed and profile screens.
     val onImageTap: (String) -> Unit = { url -> fullscreenUrl = url }
+
+    // Intercept system Back while the photo overlay is visible so it closes
+    // the overlay instead of falling through to the NavController (which would
+    // pop the back-stack or exit the app on the HOME destination).
+    BackHandler(enabled = fullscreenUrl != null) { fullscreenUrl = null }
 
     CompositionLocalProvider(LocalNostrProfileHost provides OlasProfileHost) {
         Box(modifier = Modifier.fillMaxSize()) {

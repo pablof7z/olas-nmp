@@ -143,8 +143,11 @@ struct ContentView: View {
             }
         }
         // Inject state and namespace so any tab can trigger the viewer.
+        // activeZoomId lets source thumbnails yield geometry ownership to the
+        // fullscreen image while the overlay is open (correct zoom-source pattern).
         .environment(photoLift)
         .environment(\.zoomNamespace, zoomNamespace)
+        .environment(\.activeZoomId, photoLift.item?.id)
     }
 
     // MARK: - Open-compose intent
