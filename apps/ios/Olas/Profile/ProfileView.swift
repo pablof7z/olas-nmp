@@ -143,6 +143,10 @@ struct ProfileView: View {
             guard let cached = cache[pk] else { return }
             applyProfileWire(cached, pubkey: pk)
         }
+        // NMP event observer only fires for events NEW to the local EventStore.
+        // Published events from earlier sessions are already in LMDB and won't
+        // re-fire. Load them directly from publish_intents/ as a reliable fallback.
+        Task { loadPostsFromPublishIntents(pubkey: pk) }
     }
 
     private func handleProfileEvent(_ json: String, pubkey: String) {
@@ -169,9 +173,85 @@ struct ProfileView: View {
         }
     }
 
+    private func loadPostsFromPublishIntents(pubkey: String) {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let dir = docs.appendingPathComponent("publish_intents")
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+
+        let decoder = JSONDecoder()
+        var loaded: [PhotoPost] = []
+        for fileURL in files where fileURL.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let intent = try? decoder.decode(PublishIntentFile.self, from: data),
+                  intent.event.unsigned.kind == 20,
+                  intent.event.unsigned.pubkey == pubkey else { continue }
+
+            let u = intent.event.unsigned
+            let kernel = KernelEventPayload(
+                id: intent.event.id,
+                author: u.pubkey,
+                kind: u.kind,
+                createdAt: u.createdAt,
+                tags: u.tags,
+                content: u.content
+            )
+            guard let kernelData = try? JSONEncoder().encode(kernel),
+                  let kernelJSON = String(data: kernelData, encoding: .utf8),
+                  let postJSON = NMPBridge.shared.decodeKind20Event(kernelJSON),
+                  let postData = postJSON.data(using: .utf8),
+                  let post = try? decoder.decode(PhotoPost.self, from: postData) else { continue }
+            loaded.append(post)
+        }
+
+        guard !loaded.isEmpty else { return }
+        loaded.sort { $0.createdAt > $1.createdAt }
+        Task { @MainActor in
+            for post in loaded where !posts.contains(where: { $0.id == post.id }) {
+                posts.append(post)
+            }
+            posts.sort { $0.createdAt > $1.createdAt }
+        }
+    }
+
     private func applyProfileWire(_ wire: ProfileWire, pubkey: String) {
         if let name = wire.displayName, !name.isEmpty { profile.displayName = name }
         if let pic = wire.pictureUrl, !pic.isEmpty { profile.picture = pic }
+    }
+}
+
+// MARK: - Publish Intent decoding (for LMDB-bypass own-post loading)
+
+private struct PublishIntentFile: Decodable {
+    struct EventWrapper: Decodable {
+        let id: String
+        let unsigned: UnsignedEvent
+    }
+    struct UnsignedEvent: Decodable {
+        let pubkey: String
+        let kind: Int
+        let tags: [[String]]
+        let content: String
+        let createdAt: Int64
+        enum CodingKeys: String, CodingKey {
+            case pubkey, kind, tags, content
+            case createdAt = "created_at"
+        }
+    }
+    let event: EventWrapper
+}
+
+private struct KernelEventPayload: Encodable {
+    let id: String
+    let author: String
+    let kind: Int
+    let createdAt: Int64
+    let tags: [[String]]
+    let content: String
+    let relayProvenance: [String] = []
+    enum CodingKeys: String, CodingKey {
+        case id, author, kind, tags, content
+        case createdAt = "created_at"
+        case relayProvenance = "relay_provenance"
     }
 }
 

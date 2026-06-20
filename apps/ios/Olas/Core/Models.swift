@@ -43,6 +43,20 @@ struct PhotoPost: Identifiable, Codable {
         case authorName, authorAvatar, images, content, hashtags
         case createdAt = "created_at"
     }
+
+    // Rust skips empty arrays (skip_serializing_if = "Vec::is_empty"), so
+    // hashtags may be absent. Use decodeIfPresent to avoid keyNotFound errors.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        authorPubkey = try c.decode(String.self, forKey: .authorPubkey)
+        authorName = try c.decodeIfPresent(String.self, forKey: .authorName)
+        authorAvatar = try c.decodeIfPresent(String.self, forKey: .authorAvatar)
+        images = try c.decode([ImageMeta].self, forKey: .images)
+        content = try c.decode(String.self, forKey: .content)
+        hashtags = try c.decodeIfPresent([String].self, forKey: .hashtags) ?? []
+        createdAt = try c.decode(Int64.self, forKey: .createdAt)
+    }
 }
 
 // Mirrors nmp_nip92_types::MediaDimensions JSON.

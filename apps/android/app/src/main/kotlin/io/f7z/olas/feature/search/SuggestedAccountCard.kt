@@ -135,7 +135,12 @@ fun SuggestedAccountCard(account: SuggestedAccount, modifier: Modifier = Modifie
                 contentColor   = if (isFollowing) OlasColors.Text1    else OlasColors.Background,
             ),
         ) {
-            Text(if (isFollowing) "Following" else "Follow", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text       = if (isFollowing) "Following" else "Follow",
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color      = if (isFollowing) OlasColors.Text1 else OlasColors.Background,
+            )
         }
     }
 }

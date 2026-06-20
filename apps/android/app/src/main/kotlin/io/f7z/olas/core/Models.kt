@@ -40,7 +40,7 @@ data class PhotoPost(
     val authorAvatar: String? = null,
     val images: List<ImageMeta>,
     @SerialName("content") val content: String,
-    val hashtags: List<String>,
+    val hashtags: List<String> = emptyList(),
     @SerialName("created_at") val createdAt: Long,
     // Client-only counters — not in Rust JSON output.
     val reactionCount: Int = 0,

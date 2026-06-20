@@ -7,10 +7,20 @@ struct NotificationItemView: View {
         HStack(alignment: .top, spacing: OlasSpacing.sm) {
             // Avatar with type badge
             ZStack(alignment: .bottomTrailing) {
-                AsyncImage(url: URL(string: notification.actorAvatar ?? "")) { img in
-                    img.resizable().scaledToFill()
-                } placeholder: {
+                ZStack {
                     Circle().fill(Color.olasSurface2)
+                    if let initial = (notification.actorName ?? notification.actorPubkey).first {
+                        Text(String(initial).uppercased())
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.olasText2)
+                    }
+                    if let url = notification.actorAvatar.flatMap(URL.init) {
+                        AsyncImage(url: url) { phase in
+                            if case .success(let img) = phase {
+                                img.resizable().scaledToFill()
+                            }
+                        }
+                    }
                 }
                 .frame(width: 36, height: 36)
                 .clipShape(Circle())

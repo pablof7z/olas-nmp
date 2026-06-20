@@ -274,13 +274,13 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWalletConnect(
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(uri) = jstring_to_cstring(&mut env, &uri) else {
+        let Some(uri_str) = jstring_to_cstring(&mut env, &uri) else {
             return;
         };
-        let Ok(namespace) = CString::new("nmp.wallet_connect") else {
+        let Ok(namespace) = CString::new("nmp.wallet.connect") else {
             return;
         };
-        let payload = serde_json::json!({ "uri": uri.to_string_lossy() }).to_string();
+        let payload = serde_json::json!({ "uri": uri_str.to_string_lossy() }).to_string();
         let Ok(payload) = CString::new(payload) else {
             return;
         };

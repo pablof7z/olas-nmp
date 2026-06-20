@@ -32,7 +32,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import io.f7z.olas.core.FeedMode
-import io.f7z.olas.core.WOT_NETWORK_FEED_LABEL
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
@@ -72,12 +71,7 @@ fun FeedScreen(navController: NavController) {
             Tab(
                 selected = state.feedMode == FeedMode.NETWORK,
                 onClick  = { vm.switchMode(FeedMode.NETWORK) },
-                text     = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Network", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text(WOT_NETWORK_FEED_LABEL, fontSize = 11.sp, color = OlasColors.Text3)
-                    }
-                },
+                text     = { Text("Network", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) },
             )
         }
 

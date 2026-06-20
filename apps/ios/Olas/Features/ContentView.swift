@@ -24,7 +24,7 @@ struct ContentView: View {
                 .tag(2)
 
             NotificationsView()
-                .tabItem { Label("Activity", systemImage: "bell") }
+                .tabItem { Label("Notifications", systemImage: "bell") }
                 .tag(3)
 
             ProfileView(pubkey: nil, isOwn: true)
