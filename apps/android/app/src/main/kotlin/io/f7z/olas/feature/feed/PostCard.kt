@@ -15,10 +15,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +28,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
 import org.nmp.registry.LocalNostrProfileHost
@@ -40,10 +37,18 @@ fun PostCard(
     post: PhotoPost,
     onImageTap: (url: String) -> Unit,
     modifier: Modifier = Modifier,
+    onLike: (PhotoPost) -> Unit = {},
+    onBookmark: (PhotoPost) -> Unit = {},
+    onZap: (PhotoPost) -> Unit = {},
+    onShare: (PhotoPost) -> Unit = {},
+    onComment: (PhotoPost) -> Unit = {},
 ) {
-    var isLiked by remember { mutableStateOf(false) }
-    var isBookmarked by remember { mutableStateOf(false) }
     val profileHost = LocalNostrProfileHost.current
+    val profileConsumerId = remember(post.id) { "olas.feed.${post.id}.author" }
+    DisposableEffect(profileHost, post.authorPubkey, profileConsumerId) {
+        profileHost?.claimProfile(post.authorPubkey, profileConsumerId)
+        onDispose { profileHost?.releaseProfile(post.authorPubkey, profileConsumerId) }
+    }
     val resolvedProfile = profileHost?.profileForPubkey(post.authorPubkey)
     val authorDisplay = resolvedProfile?.display ?: post.authorName ?: post.authorPubkey.take(8)
 
@@ -85,17 +90,13 @@ fun PostCard(
 
         // Action row
         PostActions(
-            isLiked      = isLiked,
-            isBookmarked = isBookmarked,
-            onLike       = { isLiked = !isLiked },
-            onComment    = {},
-            onZap        = {
-                // Build the zap action JSON in Rust (sats→msats conversion is Rust's responsibility).
-                val zapJson = NMPBridge.buildZapActionJson(post.id, 21L)
-                if (zapJson != null) NMPBridge.dispatchAction("nmp.zap", zapJson)
-            },
-            onShare      = {},
-            onBookmark   = { isBookmarked = !isBookmarked },
+            isLiked      = post.isLiked,
+            isBookmarked = post.isBookmarked,
+            onLike       = { onLike(post) },
+            onComment    = { onComment(post) },
+            onZap        = { onZap(post) },
+            onShare      = { onShare(post) },
+            onBookmark   = { onBookmark(post) },
         )
 
         // Reaction count

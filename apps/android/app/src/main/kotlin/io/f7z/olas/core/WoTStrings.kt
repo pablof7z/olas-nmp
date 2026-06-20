@@ -23,3 +23,11 @@ const val WOT_GAP_NOTIFICATIONS_NOTE =
 
 /** Feed mode label for the network (unfiltered) tab — matches iOS "Your extended network". */
 const val WOT_GAP_NETWORK_FEED_LABEL = "Your extended network"
+
+const val WOT_SETTINGS_NOTE =
+    "Network filtering uses the active trust graph. Close is stricter; Open still honors mutes and blocks."
+
+const val WOT_NOTIFICATIONS_NOTE =
+    "Notifications are filtered through the active trust graph."
+
+const val WOT_NETWORK_FEED_LABEL = "Your extended network"

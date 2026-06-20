@@ -5,13 +5,13 @@ extension NMPBridge {
     // MARK: - Feed
 
     func openFollowingFeed() {
-        guard let app = appPtr else { return }
-        "olas.following_feed".withCString { olas_open_photo_feed(app, 1, $0) }
+        guard let app = appForFFI() else { return }
+        Self.followingFeedKey.withCString { olas_open_photo_feed(app, 1, $0) }
     }
 
     func openNetworkFeed() {
-        guard let app = appPtr else { return }
-        "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
+        guard let app = appForFFI() else { return }
+        Self.networkFeedKey.withCString { olas_open_photo_feed(app, 0, $0) }
     }
 
     func photoPost(from eventJSON: String, mode: FeedMode) -> PhotoPost? {
@@ -81,26 +81,26 @@ extension NMPBridge {
     }
 
     func loadOlderFeed(key: String) {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         key.withCString { nmp_app_load_older_feed(app, $0) }
     }
 
     // MARK: - Profile
 
     func claimProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_claim_profile(app, pk, c, 1) } }
+        guard let app = appForFFI() else { return }
+        pubkey.withCString { pk in consumer.withCString { c in nmp_app_claim_profile(app, pk, c, 1, 0) } }
     }
 
     func releaseProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         pubkey.withCString { pk in consumer.withCString { c in nmp_app_release_profile(app, pk, c) } }
     }
 
     // MARK: - Actions
 
     func dispatchAction(namespace: String, json: String) -> String? {
-        guard let app = appPtr else { return nil }
+        guard let app = appForFFI() else { return nil }
         return namespace.withCString { ns in
             json.withCString { j in
                 guard let ptr = nmp_app_dispatch_action(app, ns, j) else { return nil }
@@ -201,31 +201,24 @@ extension NMPBridge {
     // MARK: - Relay management
 
     func addRelay(url: String, role: String) {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         url.withCString { u in role.withCString { r in nmp_app_add_relay(app, u, r) } }
     }
 
     func removeRelay(url: String) {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         url.withCString { nmp_app_remove_relay(app, $0) }
-    }
-
-    // MARK: - Wallet
-
-    func connectWallet(uri: String) {
-        guard let app = appPtr else { return }
-        uri.withCString { nmp_app_wallet_connect(app, $0) }
     }
 
     // MARK: - Lifecycle
 
     func appDidBecomeActive() {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         nmp_app_lifecycle_foreground(app)
     }
 
     func appDidEnterBackground() {
-        guard let app = appPtr else { return }
+        guard let app = appForFFI() else { return }
         nmp_app_lifecycle_background(app)
     }
 }

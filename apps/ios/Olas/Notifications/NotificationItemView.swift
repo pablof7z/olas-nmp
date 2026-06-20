@@ -81,7 +81,7 @@ struct NotificationItemView: View {
         case .follow:    Text("**\(groupedText)** followed you")
         case .repost:    Text("**\(groupedText)** reposted your photo")
         case .zap(let amount):
-            if let amount {
+            if amount > 0 {
                 Text("**\(groupedText)** zapped ⚡ \(amount) sats")
             } else {
                 Text("**\(groupedText)** zapped your photo")

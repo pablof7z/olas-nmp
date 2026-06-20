@@ -10,16 +10,19 @@ final class NMPCallbackSink {
     let onUpdate: (String) -> Void
     let onProfiles: (String) -> Void
     let onActiveAccount: (String) -> Void
+    let onPhotoFeed: (String, String) -> Void
     init(
         onEvent: @escaping (String) -> Void,
         onUpdate: @escaping (String) -> Void,
         onProfiles: @escaping (String) -> Void,
-        onActiveAccount: @escaping (String) -> Void
+        onActiveAccount: @escaping (String) -> Void,
+        onPhotoFeed: @escaping (String, String) -> Void
     ) {
         self.onEvent = onEvent
         self.onUpdate = onUpdate
         self.onProfiles = onProfiles
         self.onActiveAccount = onActiveAccount
+        self.onPhotoFeed = onPhotoFeed
     }
 }
 
@@ -51,6 +54,9 @@ func makeBridgeCallbackSink(bridge: NMPBridge) -> NMPCallbackSink {
             }
             guard changed else { return }
             Task { @MainActor [weak bridge] in bridge?.handleActiveAccountJSON(json) }
+        },
+        onPhotoFeed: { [weak bridge] key, json in
+            Task { @MainActor [weak bridge] in bridge?.handlePhotoFeedJSON(key: key, json: json) }
         }
     )
 }
@@ -65,6 +71,15 @@ let olasEventCallback: NmpEventObserverCallback = { context, eventJson in
 let olasUpdateCallback: NmpUpdateCallback = { context, data, len in
     guard let context, let data, len > 0 else { return }
     let sink = Unmanaged<NMPCallbackSink>.fromOpaque(context).takeUnretainedValue()
+    func decodePhotoFeed(_ key: String) {
+        key.withCString { keyPtr in
+            guard let ptr = olas_decode_snapshot_photo_feed_json(data, len, keyPtr) else { return }
+            if let json = String(validatingCString: ptr) { sink.onPhotoFeed(key, json) }
+            nmp_free_string(ptr)
+        }
+    }
+    decodePhotoFeed("olas.following_feed")
+    decodePhotoFeed("olas.network_feed")
     if let ptr = olas_decode_snapshot_action_results_json(data, len) {
         if let json = String(validatingCString: ptr) { sink.onUpdate(json) }
         nmp_free_string(ptr)
