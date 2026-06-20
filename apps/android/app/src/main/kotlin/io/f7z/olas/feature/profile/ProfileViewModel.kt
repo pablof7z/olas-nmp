@@ -24,6 +24,8 @@ data class ProfileUiState(
     val posts: List<PhotoPost> = emptyList(),
     val isLoading: Boolean = true,
     val isFollowing: Boolean = false,
+    /** Raw Rust JSON for the social-proof row; null until queried or when graph empty. */
+    val socialProofJson: String? = null,
 )
 
 class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
@@ -54,6 +56,15 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             targetPubkey = pk
             NMPBridge.claimProfile(pk, "profile_screen")
             NMPBridge.openAuthorPhotoFeed(pk)
+            // Load social proof for other profiles (own profile has no social proof).
+            if (requestedPubkey != null) {
+                val activePk = NMPBridge.activeAccountPubkey
+                    ?: NMPBridge.activeAccountPubkeyFlow.filterNotNull().first()
+                val proofJson = NMPBridge.socialProofJson(activePk, pk)
+                if (proofJson != null) {
+                    _uiState.value = _uiState.value.copy(socialProofJson = proofJson)
+                }
+            }
         }
 
         // After 10s with no profile, show a minimal stub using the pubkey.

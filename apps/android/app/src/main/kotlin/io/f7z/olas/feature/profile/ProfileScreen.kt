@@ -76,14 +76,15 @@ fun ProfileScreen(
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     ProfileHeader(
-                        profile        = state.profile!!,
-                        isOwnProfile   = isOwnProfile,
-                        isFollowing    = state.isFollowing,
-                        followerCount  = 0,
-                        followingCount = 0,
-                        onFollow       = { vm.toggleFollow() },
-                        onZap          = {},
-                        onEdit         = { navController.navigate("profile_edit") },
+                        profile         = state.profile!!,
+                        isOwnProfile    = isOwnProfile,
+                        isFollowing     = state.isFollowing,
+                        followerCount   = 0,
+                        followingCount  = 0,
+                        socialProofJson = state.socialProofJson,
+                        onFollow        = { vm.toggleFollow() },
+                        onZap           = {},
+                        onEdit          = { navController.navigate("profile_edit") },
                     )
                 }
                 items(state.posts, key = { it.id }) { post ->

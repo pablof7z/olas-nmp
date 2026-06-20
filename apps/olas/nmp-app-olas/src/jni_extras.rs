@@ -251,3 +251,50 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeFeedModeSet(
         crate::olas_feed_mode_set(std::ptr::null_mut(), mode_c.as_ptr());
     }));
 }
+
+// ── P0-E: Social proof ───────────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeSocialProofJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    _handle: jlong,
+    active_pubkey: JString,
+    target_pubkey: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(active_c) = jstring_to_cstring(&mut env, &active_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let Some(target_c) = jstring_to_cstring(&mut env, &target_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let raw = crate::olas_social_proof_json(
+            std::ptr::null_mut(),
+            active_c.as_ptr(),
+            target_c.as_ptr(),
+        );
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+// ── P0-F: Discover sections ──────────────────────────────────────────────────
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDiscoverSectionsJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    _handle: jlong,
+    active_pubkey: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(active_c) = jstring_to_cstring(&mut env, &active_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let raw =
+            crate::olas_discover_sections_json(std::ptr::null_mut(), active_c.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}

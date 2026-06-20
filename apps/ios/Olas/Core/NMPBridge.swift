@@ -402,6 +402,36 @@ import os
         feedMode = mode
     }
 
+    // MARK: - P0-E: Real social proof
+
+    /// Query social proof for `targetPubkey` from `activePubkey`'s follow graph.
+    /// Returns: `{"mutual_followers":[...],"mutual_count":N,"reason_kind":"followed_by_mutuals"|"new_account"}`
+    /// Returns nil when the active account is unknown or the WoT graph is not yet bootstrapped.
+    func socialProofJSON(activePubkey: String, targetPubkey: String) -> String? {
+        guard let app = appPtr, !activePubkey.isEmpty, !targetPubkey.isEmpty else { return nil }
+        return activePubkey.withCString { ap in
+            targetPubkey.withCString { tp in
+                guard let res = olas_social_proof_json(app, ap, tp) else { return nil }
+                defer { nmp_free_string(res) }
+                return String(cString: res)
+            }
+        }
+    }
+
+    // MARK: - P0-F: Ranked discover sections
+
+    /// Return ranked discover sections for `activePubkey` from the WoT follow graph.
+    /// Returns: `[{"title":"...","reason":"...","profiles":[{"pubkey":"...","mutual_count":N}]}]`
+    /// Returns nil when the active account is unknown or the WoT runtime is absent.
+    func discoverSectionsJSON(activePubkey: String) -> String? {
+        guard let app = appPtr, !activePubkey.isEmpty else { return nil }
+        return activePubkey.withCString { ap in
+            guard let res = olas_discover_sections_json(app, ap) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
 }
 
 // MARK: - NostrProfileHost

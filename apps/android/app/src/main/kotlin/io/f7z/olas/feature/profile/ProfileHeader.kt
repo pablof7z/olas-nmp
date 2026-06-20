@@ -31,6 +31,31 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
+import org.json.JSONObject
+
+// ── Social proof helpers ─────────────────────────────────────────────────────
+
+/**
+ * Parse the raw social-proof JSON returned by Rust and produce a display string.
+ *
+ * "followed_by_mutuals" → "Followed by N of your follows"
+ * "new_account"         → null (caller may choose to show nothing)
+ */
+fun parseSocialProofLabel(json: String?): String? {
+    if (json == null) return null
+    return runCatching {
+        val obj = JSONObject(json)
+        val count = obj.optInt("mutual_count", 0)
+        val kind = obj.optString("reason_kind", "new_account")
+        when {
+            kind == "followed_by_mutuals" && count > 0 ->
+                "Followed by $count of your follows"
+            else -> null
+        }
+    }.getOrNull()
+}
+
+// ── ProfileHeader composable ─────────────────────────────────────────────────
 
 @Composable
 fun ProfileHeader(
@@ -39,11 +64,14 @@ fun ProfileHeader(
     isFollowing: Boolean,
     followerCount: Int,
     followingCount: Int,
+    socialProofJson: String?,
     onFollow: () -> Unit,
     onZap: () -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val socialProofLabel = parseSocialProofLabel(socialProofJson)
+
     Column(modifier = modifier.fillMaxWidth()) {
         // Banner — 16:9 aspect
         Box(
@@ -63,7 +91,6 @@ fun ProfileHeader(
         }
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Avatar overlapping banner — with monogram fallback when no picture
             Box(
                 modifier = Modifier
                     .padding(start = 16.dp)
@@ -98,6 +125,12 @@ fun ProfileHeader(
             if (!profile.about.isNullOrBlank()) {
                 Spacer(Modifier.height(6.dp))
                 Text(profile.about, fontSize = 14.sp, color = OlasColors.Text1, maxLines = 5)
+            }
+
+            // Real social proof row (others only) — NOT hardcoded.
+            if (!isOwnProfile && socialProofLabel != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(socialProofLabel, fontSize = 12.sp, color = OlasColors.Text2)
             }
 
             Spacer(Modifier.height(12.dp))

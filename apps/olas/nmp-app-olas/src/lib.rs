@@ -244,12 +244,19 @@ pub use follow_packs::{
     olas_decode_follow_pack_event_json, olas_open_follow_pack_discovery,
 };
 
+// P0-E / P0-F: real social proof and ranked discover sections.
+mod social;
+pub use social::{olas_discover_sections_json, olas_social_proof_json};
+
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
 /// Call this once, before nmp_app_start, after nmp_app_new.
 /// It wires:
 ///   - nmp-defaults (follow/unfollow/react/zap/WoT bootstrap/routing)
 ///   - nmp-blossom upload action ("nmp.blossom.upload")
+///
+/// Also captures the WoT runtime handle so that `olas_social_proof_json` and
+/// `olas_discover_sections_json` can query the live follow graph.
 ///
 /// The caller (Swift or JNI) must also call nmp_app_start after this returns.
 #[no_mangle]
@@ -263,7 +270,17 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
         // SAFETY: caller guarantees a valid pointer from nmp_app_new, no other
         // exclusive reference aliases it here (same pattern as nmp-app-chirp).
         let app_ref = unsafe { &mut *app };
-        nmp_defaults::register_defaults(app_ref);
+        // Use the handles variant so we can capture the WoT runtime for:
+        //   - social proof and discover-section queries (P0-E / P0-F)
+        //   - per-event WoT filtering in olas_filter_photo_post_json
+        let handles = nmp_defaults::register_defaults_with_handles(
+            app_ref,
+            nmp_defaults::NmpDefaults::default(),
+        );
+        if let Some(wot) = handles.wot {
+            photo_feed::install_wot_runtime(Some(std::sync::Arc::clone(&wot)));
+            social::set_wot_runtime(wot);
+        }
         nmp_blossom::register_actions(app_ref);
     }));
 }

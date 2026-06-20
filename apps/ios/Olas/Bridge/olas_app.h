@@ -269,3 +269,22 @@ uint64_t olas_bolt11_amount_sats(const char* bolt11);
 
 // Location geohash (4-char precision; caller must free with nmp_free_string)
 char* olas_location_geohash4(double latitude, double longitude);
+
+// ── P0-E: Real social proof ───────────────────────────────────────────────────
+
+/// Query the real social proof for target_pubkey from active_pubkey's follow graph.
+/// Returns {"mutual_followers":["<hex>"...],"mutual_count":N,"reason_kind":"followed_by_mutuals"|"new_account"}
+/// reason_kind is "followed_by_mutuals" when at least one of the viewer's direct follows also
+/// follows the target.  "new_account" is the honest fallback — NOT a fake claim.
+/// Returns NULL when active_pubkey is empty or the WoT graph is not yet bootstrapped.
+/// Returned string must be freed with nmp_free_string.
+char* olas_social_proof_json(void* app, const char* active_pubkey, const char* target_pubkey);
+
+// ── P0-F: Ranked discover sections ───────────────────────────────────────────
+
+/// Return ranked discover sections for active_pubkey, computed from the WoT follow graph.
+/// JSON: [{"title":"...","reason":"...","profiles":[{"pubkey":"...","mutual_count":N}]}]
+/// reason is "second_degree" (Popular in your circles) or "graph_empty" (honest fallback).
+/// Returns NULL when active_pubkey is empty or the WoT runtime is absent.
+/// Returned string must be freed with nmp_free_string.
+char* olas_discover_sections_json(void* app, const char* active_pubkey);
