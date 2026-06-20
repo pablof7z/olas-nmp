@@ -68,6 +68,7 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.f7z.olas.tests
+        SWIFT_INCLUDE_PATHS: "$(inherited) $(SRCROOT)/Olas/Bridge"
   OlasUITests:
     type: bundle.ui-testing
     platform: iOS
