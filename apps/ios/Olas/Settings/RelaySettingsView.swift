@@ -2,12 +2,7 @@ import SwiftUI
 
 @Observable @MainActor
 final class RelaySettingsViewModel {
-    var relays: [RelayEntry] = [
-        RelayEntry(id: "damus", url: "wss://relay.damus.io", role: "both", isConnected: true, latencyMs: 42),
-        RelayEntry(id: "nos", url: "wss://nos.lol", role: "both", isConnected: true, latencyMs: 87),
-        RelayEntry(id: "primal", url: "wss://relay.primal.net", role: "both", isConnected: true, latencyMs: 55),
-        RelayEntry(id: "purplepages", url: "wss://purplepag.es", role: "indexer", isConnected: true, latencyMs: 120),
-    ]
+    var relays: [RelayEntry] = NMPBridge.shared.defaultRelays()
     var newRelayURL = ""
     var isAdding = false
     var addError: String?
@@ -44,12 +39,7 @@ final class RelaySettingsViewModel {
 
     func resetToRecommended() {
         for relay in relays { NMPBridge.shared.removeRelay(url: relay.url) }
-        relays = [
-            RelayEntry(id: "damus", url: "wss://relay.damus.io", role: "both"),
-            RelayEntry(id: "nos", url: "wss://nos.lol", role: "both"),
-            RelayEntry(id: "primal", url: "wss://relay.primal.net", role: "both"),
-            RelayEntry(id: "purplepages", url: "wss://purplepag.es", role: "indexer"),
-        ]
+        relays = NMPBridge.shared.defaultRelays()
         for relay in relays {
             NMPBridge.shared.addRelay(url: relay.url, role: relay.role)
         }
