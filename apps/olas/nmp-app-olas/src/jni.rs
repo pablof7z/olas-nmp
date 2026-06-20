@@ -211,7 +211,7 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeStart(
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
         let _ = jstring_to_cstring(&mut env, &storage_path);
-        nmp_app_start(app, 0, 50, 4);
+        nmp_app_start(app, 0, 50);
     }));
 }
 
