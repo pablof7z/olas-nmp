@@ -40,7 +40,7 @@ struct CachedImage: View {
 
         let blurImage: AnyView = {
             if let hash = meta.blurhash,
-               let decoded = BlurHashDecoder.decode(hash, width: 32, height: 32) {
+               let decoded = BlurHashDecoder.cachedDecode(hash, width: 32, height: 32) {
                 return AnyView(
                     decoded
                         .resizable()
@@ -119,8 +119,4 @@ struct CachedImage: View {
     }
 }
 
-// MARK: - ImageMeta convenience shim
-// ImageMeta lives in Apps/Olas/Core/Models.swift (Swift struct). Components
-// cannot import that target directly, so we define a minimal protocol here and
-// the primary init above references the full ImageMeta concrete type, which is
-// injected from the app layer. No duplication of model logic.
+// MARK: - ImageMeta
