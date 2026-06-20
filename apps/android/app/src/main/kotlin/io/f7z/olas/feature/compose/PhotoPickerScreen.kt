@@ -5,6 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalContext
+import io.f7z.olas.BuildConfig
+import java.io.File
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +42,7 @@ import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
+    val context = LocalContext.current
     var selectedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
     // Load picker constraints from Rust (max_selection, etc.).
@@ -46,8 +50,18 @@ fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
         val configJson = NMPBridge.pickerConfigJson() ?: """{"max_selection":10}"""
         runCatching { JSONObject(configJson).optInt("max_selection", 10) }.getOrElse { 10 }
     }
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(maxSelection),
+
+    // PickMultipleVisualMedia requires maxItems >= 2; use single-select for maxSelection <= 1.
+    val singleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        uri?.let {
+            selectedUris = listOf(it)
+            onSelected(listOf(it))
+        }
+    }
+    val multiLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxSelection.coerceAtLeast(2)),
     ) { uris ->
         if (uris.isNotEmpty()) {
             selectedUris = uris
@@ -56,9 +70,17 @@ fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        launcher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
-        )
+        // CI bypass: if debug_compose_photo.jpg exists in the app's external files dir, skip the picker.
+        if (BuildConfig.DEBUG) {
+            val debugFile = File(context.getExternalFilesDir(null), "debug_compose_photo.jpg")
+            if (debugFile.exists()) {
+                val uri = Uri.fromFile(debugFile)
+                onSelected(listOf(uri))
+                return@LaunchedEffect
+            }
+        }
+        val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        if (maxSelection <= 1) singleLauncher.launch(request) else multiLauncher.launch(request)
     }
 
     Column(
@@ -74,7 +96,7 @@ fun PhotoPickerScreen(onSelected: (List<Uri>) -> Unit) {
             color      = OlasColors.Text1,
         )
         Text(
-            text     = "Tap to select up to $maxSelection.",
+            text     = if (maxSelection <= 1) "Tap to select a photo." else "Tap to select up to $maxSelection.",
             fontSize = 13.sp,
             color    = OlasColors.Text2,
         )

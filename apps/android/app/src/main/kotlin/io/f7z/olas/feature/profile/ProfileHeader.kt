@@ -1,11 +1,13 @@
 package io.f7z.olas.feature.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -47,7 +50,7 @@ fun ProfileHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp)
-                .background(OlasColors.Surface),
+                .background(if (profile.banner != null) OlasColors.Surface else OlasColors.Background),
         ) {
             if (profile.banner != null) {
                 AsyncImage(
@@ -60,19 +63,30 @@ fun ProfileHeader(
         }
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Avatar overlapping banner
-            AsyncImage(
-                model              = profile.picture,
-                contentDescription = "Avatar of ${profile.displayName ?: profile.name}",
-                modifier           = Modifier
+            // Avatar overlapping banner — with monogram fallback when no picture
+            Box(
+                modifier = Modifier
                     .padding(start = 16.dp)
                     .offset(y = (-40).dp)
                     .size(80.dp)
                     .clip(CircleShape)
                     .border(3.dp, OlasColors.Background, CircleShape)
                     .background(OlasColors.Surface),
-                contentScale       = ContentScale.Crop,
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!profile.picture.isNullOrBlank()) {
+                    AsyncImage(
+                        model              = profile.picture,
+                        contentDescription = "Avatar of ${profile.displayName ?: profile.name}",
+                        modifier           = Modifier.fillMaxSize(),
+                        contentScale       = ContentScale.Crop,
+                    )
+                } else {
+                    val initial = (profile.displayName ?: profile.name ?: profile.pubkey)
+                        .firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+                    Text(initial, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = OlasColors.Text1)
+                }
+            }
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp).offset(y = (-24).dp)) {
@@ -99,10 +113,11 @@ fun ProfileHeader(
 
             // Action buttons
             if (isOwnProfile) {
-                Button(
-                    onClick = onEdit,
+                OutlinedButton(
+                    onClick  = onEdit,
                     modifier = Modifier.fillMaxWidth().height(36.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    border   = BorderStroke(1.dp, OlasColors.Text3),
+                    colors   = ButtonDefaults.outlinedButtonColors(
                         containerColor = Color.Transparent,
                         contentColor   = OlasColors.Text1,
                     ),

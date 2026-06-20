@@ -23,3 +23,8 @@ const val WOT_GAP_NOTIFICATIONS_NOTE =
 
 /** Feed mode label for the network (unfiltered) tab — matches iOS "Your extended network". */
 const val WOT_GAP_NETWORK_FEED_LABEL = "Your extended network"
+
+// Short aliases used by FeedScreen, NotificationsScreen, WoTSettingsScreen.
+const val WOT_NETWORK_FEED_LABEL = WOT_GAP_NETWORK_FEED_LABEL
+const val WOT_NOTIFICATIONS_NOTE = WOT_GAP_NOTIFICATIONS_NOTE
+const val WOT_SETTINGS_NOTE = WOT_GAP_SETTINGS_NOTE

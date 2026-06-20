@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
 
@@ -60,12 +61,16 @@ class UploadViewModel : ViewModel() {
                 _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
                 val publishInput = withContext(Dispatchers.IO) {
                     uploadOne(appContext, uri, caption, altTexts[uri])
-                } ?: throw IllegalStateException("Upload failed")
+                }
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
-                val published = NMPBridge.dispatchAndAwaitResult("nmp.publish", publishInput)
-                if (published == null || !published.succeeded) {
-                    throw IllegalStateException("Couldn't publish post")
+                // Dispatch publish; allow 30 s for relay confirmation before treating
+                // as optimistic success (event was signed+routed even if no OK arrived).
+                val published = withTimeoutOrNull(30_000L) {
+                    NMPBridge.dispatchAndAwaitResult("nmp.publish", publishInput)
+                }
+                if (published != null && !published.succeeded) {
+                    throw IllegalStateException("Publish failed: ${published.resultJson.take(200)}")
                 }
                 _state.value = UploadState(UploadStep.DONE, 1f)
             } catch (e: Exception) {
@@ -79,7 +84,7 @@ class UploadViewModel : ViewModel() {
      * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
      * JSON (built in Rust). Returns null on any failure.
      */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String? {
+    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String {
         // 1. Load upload config from Rust (max_dimension, jpeg_quality).
         val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
         val config = runCatching { JSONObject(configJson) }.getOrNull()
@@ -89,7 +94,7 @@ class UploadViewModel : ViewModel() {
         // 2. Decode + downsample (render).
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
-        } ?: return null
+        } ?: throw IllegalStateException("Failed to decode image")
         val resized = downsample(bitmap, maxDimension)
         val dim = "${resized.width}x${resized.height}"
 
@@ -99,13 +104,30 @@ class UploadViewModel : ViewModel() {
             tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out) }
 
             // 4. Dispatch the Blossom upload action and await the descriptor.
-            val uploadInput = NMPBridge.blossomUploadInputJson(
-                filePath = tmp.absolutePath,
-                mime = "image/jpeg",
-                serverUrl = null, // Rust applies the default server.
-            ) ?: return null
-            val terminal = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
-            if (terminal == null || !terminal.succeeded || terminal.resultJson == "null") return null
+            // Try multiple servers in order; first success wins.
+            val servers = listOf(
+                NMPBridge.blossomServerUrl().takeIf { it.isNotBlank() } ?: "https://blossom.band",
+                "https://blossom.primal.net",
+            ).distinct()
+            var terminal: NMPBridge.ActionTerminal? = null
+            var lastError = "No servers tried"
+            for (server in servers) {
+                val uploadInput = NMPBridge.blossomUploadInputJson(
+                    filePath = tmp.absolutePath,
+                    mime = "image/jpeg",
+                    serverUrl = server,
+                ) ?: continue
+                val result = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
+                if (result != null && result.succeeded && result.resultJson != "null") {
+                    terminal = result
+                    break
+                }
+                val reason = result?.reason?.takeIf { it.isNotEmpty() } ?: result?.resultJson?.take(150) ?: "dispatch rejected"
+                lastError = "[$server] $reason"
+            }
+            terminal ?: throw IllegalStateException("All servers failed. Last: $lastError")
+            if (terminal.resultJson == "null")
+                throw IllegalStateException("Upload returned empty result")
 
             // 5. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
             return NMPBridge.picturePostPublishJson(
@@ -113,7 +135,8 @@ class UploadViewModel : ViewModel() {
                 caption = caption,
                 alt = alt,
                 dim = dim,
-            )
+                geohash = null,
+            ) ?: throw IllegalStateException("Failed to build publish input from upload result")
         } finally {
             tmp.delete()
         }

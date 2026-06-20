@@ -70,3 +70,14 @@ data class FollowPack(
 
 /** Which feed source the user is currently viewing. */
 enum class FeedMode { FOLLOWING, NETWORK }
+
+/** A relay entry from the default relay list. */
+@Serializable
+data class DefaultRelay(
+    val id: String,
+    val name: String,
+    val iconHost: String,
+    val url: String,
+    val role: String,
+    val connected: Boolean,
+)

@@ -23,9 +23,15 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.f7z.olas.core.PhotoPost
 import io.f7z.olas.ui.theme.OlasColors
+import org.nmp.registry.LocalNostrProfileHost
 
 @Composable
 fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Modifier) {
+    val profileHost = LocalNostrProfileHost.current
+    val resolvedProfile = profileHost?.profileForPubkey(post.authorPubkey)
+    val displayName = resolvedProfile?.display ?: post.authorName ?: "${post.authorPubkey.take(8)}..."
+    val avatarUrl = resolvedProfile?.pictureUrl ?: post.authorAvatar
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -34,8 +40,8 @@ fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Mod
     ) {
         // 32dp avatar
         AsyncImage(
-            model             = post.authorAvatar,
-            contentDescription = "Avatar of ${post.authorName ?: post.authorPubkey.take(8)}",
+            model             = avatarUrl,
+            contentDescription = "Avatar of $displayName",
             modifier          = Modifier
                 .size(32.dp)
                 .clip(CircleShape),
@@ -43,7 +49,7 @@ fun PostHeader(post: PhotoPost, onOverflow: () -> Unit, modifier: Modifier = Mod
         Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text       = post.authorName ?: post.authorPubkey.take(8) + "...",
+                text       = displayName,
                 fontSize   = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color      = OlasColors.Text1,

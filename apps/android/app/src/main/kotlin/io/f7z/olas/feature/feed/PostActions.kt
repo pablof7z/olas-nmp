@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Share
@@ -110,12 +111,21 @@ private fun LikeButton(isLiked: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun ZapButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(44.dp)) {
-        // Bolt icon approximation using a text character (Material bolt icon)
-        androidx.compose.material3.Text(
-            text     = "⚡",
-            fontSize = androidx.compose.ui.unit.TextUnit(20f, androidx.compose.ui.unit.TextUnitType.Sp),
-            color    = OlasColors.Zap,
+    var zapped by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue   = if (zapped) 1.2f else 1f,
+        animationSpec = spring(dampingRatio = 0.4f),
+        label         = "zap_scale",
+    )
+    IconButton(
+        onClick  = { zapped = !zapped; onClick() },
+        modifier = Modifier.size(44.dp),
+    ) {
+        Icon(
+            imageVector        = Icons.Filled.Bolt,
+            contentDescription = if (zapped) "Zapped" else "Zap",
+            tint               = if (zapped) OlasColors.Zap else OlasColors.Text1,
+            modifier           = Modifier.size(24.dp).scale(scale),
         )
     }
 }

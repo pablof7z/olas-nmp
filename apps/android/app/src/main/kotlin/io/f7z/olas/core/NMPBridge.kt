@@ -3,8 +3,11 @@ package io.f7z.olas.core
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -20,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 object NMPBridge {
     private const val SETTINGS_PREFS = "olas_settings"
     private const val KEY_WOT_PRESET = "wotPreset"
+    private const val KEY_STORED_NSEC = "stored_nsec"
 
     init {
         System.loadLibrary("nmp_app_olas")
@@ -33,12 +37,19 @@ object NMPBridge {
     val events: SharedFlow<ByteArray> = _events.asSharedFlow()
 
     // JSON-encoded KernelEvent strings delivered by the kernel event observer.
-    private val _nostrEvents = MutableSharedFlow<String>(extraBufferCapacity = 512)
+    private val _nostrEvents = MutableSharedFlow<String>(replay = 100, extraBufferCapacity = 512)
     val nostrEvents: SharedFlow<String> = _nostrEvents.asSharedFlow()
+
+    // JSON array of claimed profile entries, emitted on each snapshot frame that carries them.
+    private val _claimedProfilesJson = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val claimedProfilesJson: SharedFlow<String> = _claimedProfilesJson.asSharedFlow()
 
     @Volatile
     var activeAccountPubkey: String? = null
         private set
+
+    private val _activeAccountPubkeyFlow = MutableStateFlow<String?>(null)
+    val activeAccountPubkeyFlow: StateFlow<String?> = _activeAccountPubkeyFlow.asStateFlow()
 
     // JNI methods — implemented in nmp-app-olas/src/jni.rs
     private external fun nativeNew(): Long
@@ -51,6 +62,8 @@ object NMPBridge {
     private external fun nativeCreateAccount(handle: Long, name: String, username: String)
     private external fun nativeOpenSearchFeed(handle: Long, query: String, consumerId: String)
     private external fun nativeCloseSearchFeed(handle: Long, query: String, consumerId: String)
+    private external fun nativeOpenAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
+    private external fun nativeCloseAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeSignInNsec(handle: Long, nsec: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
     private external fun nativeOpenContactFeed(handle: Long, kindsJson: String)
@@ -106,6 +119,9 @@ object NMPBridge {
     private external fun nativeBlossomServerUrlSet(handle: Long, url: String)
     private external fun nativeFeedModeGet(handle: Long): String?
     private external fun nativeFeedModeSet(handle: Long, mode: String)
+    private external fun nativeClaimProfile(handle: Long, pubkey: String, consumerId: String)
+    private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
+    private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
 
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
@@ -128,21 +144,38 @@ object NMPBridge {
         nativeConsumeAllBuiltinProjections(appHandle)
         val storageDir = File(context.filesDir, "nmp").also { it.mkdirs() }
         nativeSetStoragePath(appHandle, storageDir.absolutePath)
-        // Wire the update callback: emit raw FlatBuffer frames to _events and
-        // parse action_results in each frame.
         nativeSetUpdateListener(appHandle, object : UpdateListener {
             override fun onUpdate(data: ByteArray) {
                 _events.tryEmit(data)
                 handleSnapshotFrame(data)
             }
         })
-        // Wire the kernel event observer: emit decoded JSON strings to _nostrEvents.
         nativeRegisterEventObserver(appHandle, object : EventObserverListener {
             override fun onEvent(json: String) {
                 _nostrEvents.tryEmit(json)
             }
         })
         nativeStart(appHandle, storageDir.absolutePath)
+        // Re-inject stored nsec — NMP's keyring capability is not wired on Android, so
+        // restore_active_session leaves the account absent after a process restart.
+        val storedNsec = context.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_STORED_NSEC, null)
+        if (!storedNsec.isNullOrBlank()) {
+            nativeSignInNsec(appHandle, storedNsec)
+        }
+        // Re-add default relays AFTER start so the actor processes AddRelay commands
+        // while running=true (restore_active_session inside Start can overwrite relay list).
+        val defaultRelays = listOf(
+            "wss://relay.damus.io" to "both",
+            "wss://nos.lol" to "both",
+            "wss://relay.primal.net" to "both",
+            "wss://purplepag.es" to "indexer",
+        )
+        for ((url, role) in defaultRelays) {
+            nativeAddRelay(appHandle, url, role)
+        }
+        // blossom.band (nostr.build CDN) stores files for any NIP-98-authenticated key.
+        nativeBlossomServerUrlSet(appHandle, "https://blossom.band")
     }
 
     fun createAccount(name: String, username: String) =
@@ -154,7 +187,22 @@ object NMPBridge {
     fun closeSearchFeed(query: String, consumerId: String = "olas.search") =
         nativeCloseSearchFeed(appHandle, query, consumerId)
 
-    fun signInNsec(nsec: String) = nativeSignInNsec(appHandle, nsec)
+    fun openAuthorPhotoFeed(pubkey: String, consumerId: String = "olas.author.$pubkey") =
+        nativeOpenAuthorPhotoFeed(appHandle, pubkey, consumerId)
+
+    fun closeAuthorPhotoFeed(pubkey: String, consumerId: String = "olas.author.$pubkey") =
+        nativeCloseAuthorPhotoFeed(appHandle, pubkey, consumerId)
+
+    fun signInNsec(nsec: String) {
+        appContext?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.edit()?.putString(KEY_STORED_NSEC, nsec)?.apply()
+        nativeSignInNsec(appHandle, nsec)
+    }
+
+    fun signOut() {
+        appContext?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+            ?.edit()?.remove(KEY_STORED_NSEC)?.apply()
+    }
 
     /** Following feed — kind 20 scoped to contact list. */
     fun openFollowingFeed() = nativeOpenPhotoFeed(appHandle, true)
@@ -233,8 +281,8 @@ object NMPBridge {
 
     // --- Async-completing actions (await terminal by correlation_id) ----------
 
-    /** Terminal of an async action: status + optional structured result. */
-    data class ActionTerminal(val status: String, val resultJson: String) {
+    /** Terminal of an async action: status + optional structured result + optional reason. */
+    data class ActionTerminal(val status: String, val resultJson: String, val reason: String = "") {
         val succeeded: Boolean get() = status != "failed"
     }
 
@@ -253,12 +301,17 @@ object NMPBridge {
                 runCatching { JSONObject(raw).optString("pubkey") }
                     .getOrNull()
                     ?.takeIf { it.isNotEmpty() }
-                    ?.let { activeAccountPubkey = it }
+                    ?.let { activeAccountPubkey = it; _activeAccountPubkeyFlow.value = it }
             }
+
+        runCatching { nativeDecodeClaimedProfiles(appHandle, frame) }
+            .getOrNull()
+            ?.let { json -> _claimedProfilesJson.tryEmit(json) }
 
         if (actionResultWaiters.isEmpty()) return
         val json = runCatching { nativeDecodeActionResults(appHandle, frame) }
             .getOrNull() ?: return
+        android.util.Log.d("OlasActionResult", "action_results JSON: $json")
         val rows = runCatching { JSONArray(json) }.getOrNull() ?: return
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
@@ -266,7 +319,9 @@ object NMPBridge {
             val waiter = actionResultWaiters.remove(cid) ?: continue
             val status = row.optString("status", "published")
             val resultJson = if (row.isNull("result")) "null" else row.get("result").toString()
-            waiter.complete(ActionTerminal(status, resultJson))
+            val reason = row.optString("error", "")
+            android.util.Log.d("OlasActionResult", "cid=$cid status=$status error=$reason result=$resultJson")
+            waiter.complete(ActionTerminal(status, resultJson, reason))
         }
     }
 
@@ -324,4 +379,12 @@ object NMPBridge {
     fun setBlossomServerUrl(url: String) = nativeBlossomServerUrlSet(appHandle, url)
     fun feedMode(): String = nativeFeedModeGet(appHandle) ?: "network"
     fun setFeedMode(mode: String) = nativeFeedModeSet(appHandle, mode)
+
+    // --- Profile claiming -----------------------------------------------------
+
+    fun claimProfile(pubkey: String, consumerId: String) =
+        nativeClaimProfile(appHandle, pubkey, consumerId)
+
+    fun releaseProfile(pubkey: String, consumerId: String) =
+        nativeReleaseProfile(appHandle, pubkey, consumerId)
 }

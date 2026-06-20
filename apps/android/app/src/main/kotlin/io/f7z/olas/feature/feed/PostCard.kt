@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,11 +42,25 @@ import org.nmp.registry.LocalNostrProfileHost
 fun PostCard(
     post: PhotoPost,
     onImageTap: (url: String) -> Unit,
+    onLike: ((PhotoPost) -> Unit)? = null,
+    onBookmark: ((PhotoPost) -> Unit)? = null,
+    onZap: ((PhotoPost) -> Unit)? = null,
+    onShare: ((PhotoPost) -> Unit)? = null,
+    onComment: ((PhotoPost) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var isLiked by remember { mutableStateOf(false) }
     var isBookmarked by remember { mutableStateOf(false) }
     val profileHost = LocalNostrProfileHost.current
+
+    // Claim profile from NMP so it gets fetched from relays
+    LaunchedEffect(post.authorPubkey) {
+        profileHost?.claimProfile(post.authorPubkey, "feed.${post.id}")
+    }
+    DisposableEffect(post.authorPubkey) {
+        onDispose { profileHost?.releaseProfile(post.authorPubkey, "feed.${post.id}") }
+    }
+
     val resolvedProfile = profileHost?.profileForPubkey(post.authorPubkey)
     val authorDisplay = resolvedProfile?.display ?: post.authorName ?: post.authorPubkey.take(8)
 
@@ -83,19 +100,29 @@ fun PostCard(
             }
         }
 
+        // 6dp breathing room between photo and action row
+        Spacer(Modifier.height(6.dp))
+
         // Action row
         PostActions(
             isLiked      = isLiked,
             isBookmarked = isBookmarked,
-            onLike       = { isLiked = !isLiked },
-            onComment    = {},
-            onZap        = {
-                // Build the zap action JSON in Rust (sats→msats conversion is Rust's responsibility).
-                val zapJson = NMPBridge.buildZapActionJson(post.id, 21L)
-                if (zapJson != null) NMPBridge.dispatchAction("nmp.zap", zapJson)
+            onLike       = {
+                isLiked = !isLiked
+                if (isLiked) onLike?.invoke(post)
             },
-            onShare      = {},
-            onBookmark   = { isBookmarked = !isBookmarked },
+            onComment    = { onComment?.invoke(post) },
+            onZap        = {
+                onZap?.invoke(post) ?: run {
+                    val zapJson = NMPBridge.buildZapActionJson(post.id, 21L)
+                    if (zapJson != null) NMPBridge.dispatchAction("nmp.zap", zapJson)
+                }
+            },
+            onShare      = { onShare?.invoke(post) },
+            onBookmark   = {
+                isBookmarked = !isBookmarked
+                onBookmark?.invoke(post)
+            },
         )
 
         // Reaction count
@@ -124,6 +151,7 @@ fun PostCard(
                 fontSize = 14.sp,
                 color    = OlasColors.Text1,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
@@ -136,14 +164,6 @@ fun PostCard(
                 color    = OlasColors.Text2,
             )
         }
-
-        // Timestamp
-        Text(
-            text     = relativeTime(post.createdAt),
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-            fontSize = 12.sp,
-            color    = OlasColors.Text3,
-        )
 
         Spacer(Modifier.height(4.dp))
         HorizontalDivider(color = OlasColors.Border, thickness = 0.5.dp)

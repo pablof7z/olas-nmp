@@ -30,7 +30,6 @@ class FeedViewModel : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
     init {
-        // Restore feed mode from Rust (persisted across restarts).
         val persistedMode = when (NMPBridge.feedMode()) {
             "following" -> FeedMode.FOLLOWING
             else -> FeedMode.NETWORK
@@ -39,9 +38,9 @@ class FeedViewModel : ViewModel() {
         if (persistedMode == FeedMode.FOLLOWING) NMPBridge.openFollowingFeed() else NMPBridge.openNetworkFeed()
         observeEvents()
         // On cold restart, relay WebSocket connections establish asynchronously.
-        // Re-open the subscription after 6s and 18s if no events have arrived yet.
+        // Re-open the subscription at increasing intervals until events arrive.
         viewModelScope.launch {
-            for (delayMs in listOf(6_000L, 18_000L)) {
+            for (delayMs in listOf(6_000L, 18_000L, 45_000L, 90_000L)) {
                 delay(delayMs)
                 if (_uiState.value.isLoading && _uiState.value.posts.isEmpty()) {
                     NMPBridge.openNetworkFeed()
@@ -57,13 +56,11 @@ class FeedViewModel : ViewModel() {
                 val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
                 val current = _uiState.value
                 if (current.posts.isEmpty()) {
-                    // First batch — show immediately
                     _uiState.value = current.copy(
                         posts     = (listOf(post) + current.posts).distinctBy { it.id },
                         isLoading = false,
                     )
                 } else {
-                    // Subsequent posts — queue behind "new posts" pill
                     val pending = (listOf(post) + current.pendingPosts).distinctBy { it.id }
                     _uiState.value = current.copy(
                         pendingPosts = pending,
@@ -103,5 +100,17 @@ class FeedViewModel : ViewModel() {
 
     fun loadOlderPosts() {
         NMPBridge.loadOlderFeed("photo_feed")
+    }
+
+    fun react(post: io.f7z.olas.core.PhotoPost) {
+        viewModelScope.launch { NMPBridge.reactTo(post) }
+    }
+
+    fun bookmark(post: io.f7z.olas.core.PhotoPost) {
+        viewModelScope.launch { NMPBridge.bookmarkEvent(post, true) }
+    }
+
+    fun zap(post: io.f7z.olas.core.PhotoPost) {
+        viewModelScope.launch { NMPBridge.zapPost(post, 21L) }
     }
 }

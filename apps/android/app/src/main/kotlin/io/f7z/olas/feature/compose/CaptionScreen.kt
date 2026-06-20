@@ -22,10 +22,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,11 +52,20 @@ fun CaptionScreen(
     val context = LocalContext.current
     val state by vm.state.collectAsStateWithLifecycle()
     var caption by remember { mutableStateOf("") }
+    // Delay before Share is interactive to prevent accidental trigger from the
+    // filter→caption transition where "Next" and "Share" occupy the same position.
+    var shareReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(400L); shareReady = true }
     // Blossom server URL comes from Rust-owned server-config projection.
     val blossomUrl = remember { NMPBridge.blossomServerUrl() }
     // Geohash is computed by Rust when location is toggled on (NMPBridge.computeGeohash(lat, lon, 6)).
     var locationEnabled by remember { mutableStateOf(false) }
     val altTexts = remember { mutableMapOf<Uri, String>() }
+
+    // Navigate away only after upload completes — keeps ViewModel alive until then.
+    LaunchedEffect(state.step) {
+        if (state.step == UploadStep.DONE) onShare()
+    }
 
     Column(
         modifier = Modifier
@@ -144,13 +155,10 @@ fun CaptionScreen(
         }
 
         Button(
-            onClick  = {
-                vm.upload(context, uris, caption, altTexts)
-                onShare()
-            },
+            onClick  = { vm.upload(context, uris, caption, altTexts) },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape    = RoundedCornerShape(12.dp),
-            enabled  = state.step == UploadStep.IDLE || state.step == UploadStep.ERROR,
+            enabled  = shareReady && (state.step == UploadStep.IDLE || state.step == UploadStep.ERROR),
             colors   = ButtonDefaults.buttonColors(
                 containerColor = OlasColors.Text1,
                 contentColor   = OlasColors.Background,

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -98,8 +99,9 @@ fun FeedScreen(navController: NavController) {
                 }
                 else -> {
                     LazyColumn(
-                        state    = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        state          = listState,
+                        modifier       = Modifier.fillMaxSize(),
+                        contentPadding = if (state.hasNewPosts) PaddingValues(top = 48.dp) else PaddingValues(),
                     ) {
                         items(state.posts, key = { it.id }) { post ->
                             PostCard(
