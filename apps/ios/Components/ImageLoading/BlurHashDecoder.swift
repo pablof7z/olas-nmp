@@ -10,8 +10,49 @@ import SwiftUI
 
 enum BlurHashDecoder {
 
+    // MARK: - Process-wide memoisation cache
+    //
+    // NSCache is thread-safe: concurrent reads and writes from any queue are
+    // safe without additional locking. We cache the decoded CGImage (a class /
+    // AnyObject) keyed by "<hash>:<w>x<h>" so that SwiftUI re-inits during
+    // scroll — which happen on the main thread — return instantly without
+    // re-running the inverse-DCT.
+    private static let imageCache: NSCache<NSString, AnyObject> = {
+        let c = NSCache<NSString, AnyObject>()
+        c.countLimit = 200   // ~200 × 32×32×4 ≈ 800 KB resident
+        return c
+    }()
+
+    /// Memoised decode: decodes once per unique (hash, size) pair; subsequent
+    /// calls return the cached CGImage-backed Image with no extra work.
+    /// Prefer this over `decode(_:width:height:)` inside SwiftUI view inits.
+    static func cachedDecode(_ hash: String, width: Int = 32, height: Int = 32) -> Image? {
+        let key = "\(hash):\(width)x\(height)" as NSString
+        if let cached = imageCache.object(forKey: key) as? CGImage {
+            return Image(decorative: cached, scale: 1, orientation: .up)
+        }
+        guard let pixels = decodeToPixels(hash, width: width, height: height) else { return nil }
+        let bytesPerRow = width * 4
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let cgImage = CGImage(
+                width: width, height: height,
+                bitsPerComponent: 8, bitsPerPixel: 32,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil, shouldInterpolate: true,
+                intent: .defaultIntent
+              )
+        else { return nil }
+        imageCache.setObject(cgImage, forKey: key)
+        return Image(decorative: cgImage, scale: 1, orientation: .up)
+    }
+
     /// Decode a blurhash string into a SwiftUI Image at the given pixel dimensions.
     /// Returns nil when the hash is invalid or decoding fails.
+    /// For use inside SwiftUI view inits, prefer `cachedDecode` to avoid
+    /// repeating the inverse-DCT on every parent body pass.
     static func decode(_ hash: String, width: Int = 32, height: Int = 32) -> Image? {
         guard let pixels = decodeToPixels(hash, width: width, height: height) else { return nil }
         let bytesPerRow = width * 4
