@@ -5,7 +5,7 @@ private let feedViewDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag"
 
 struct FeedView: View {
     @State private var vm = FeedViewModel()
-    @State private var showFullscreen: (post: PhotoPost, index: Int)?
+    @Environment(PhotoLiftState.self) private var photoLift
 
     private var currentMode: FeedMode {
         NMPBridge.shared.feedMode == "following" ? .following : .network
@@ -39,7 +39,9 @@ struct FeedView: View {
 
                     ForEach(vm.posts) { post in
                         PostCardView(post: post, vm: vm, onImageTap: { idx in
-                            showFullscreen = (post, idx)
+                            withAnimation(.olasStandard) {
+                                photoLift.open(post: post, index: idx, context: "feed")
+                            }
                         })
                         .onAppear {
                             if post.id == vm.posts.last?.id {
@@ -79,12 +81,6 @@ struct FeedView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     feedPickerMenu
                 }
-            }
-            .fullScreenCover(item: Binding(
-                get: { showFullscreen.map { p in FullscreenImageItem(post: p.post, index: p.index) } },
-                set: { _ in showFullscreen = nil }
-            )) { item in
-                FullscreenImageView(post: item.post, initialIndex: item.index)
             }
         }
         .task {
@@ -129,13 +125,6 @@ struct FeedView: View {
         // NMP is always running when the user can interact with the mode picker.
         vm.openFeed()
     }
-}
-
-// Helper for fullscreen cover
-private struct FullscreenImageItem: Identifiable {
-    let id = UUID()
-    let post: PhotoPost
-    let index: Int
 }
 
 // MARK: - Skeleton

@@ -1,5 +1,44 @@
 import SwiftUI
 
+// MARK: - Photo Lift coordinator
+
+/// Shared state owned by ContentView. Any tab can open the fullscreen viewer
+/// by calling open(post:index:context:); ContentView renders the overlay.
+@Observable
+@MainActor
+final class PhotoLiftState {
+    var item: ZoomItem? = nil
+
+    struct ZoomItem: Identifiable {
+        /// Stable ID — must match the source view's matchedGeometryEffect id.
+        let id: String
+        let post: PhotoPost
+        let index: Int
+    }
+
+    func open(post: PhotoPost, index: Int, context: String) {
+        item = ZoomItem(id: "\(context)-\(post.id)-\(index)", post: post, index: index)
+    }
+
+    func close() { item = nil }
+}
+
+// MARK: - Zoom namespace environment key
+
+struct ZoomNamespaceKey: EnvironmentKey {
+    /// nil default — source views skip matchedGeometryEffect when not injected.
+    static let defaultValue: Namespace.ID? = nil
+}
+
+extension EnvironmentValues {
+    var zoomNamespace: Namespace.ID? {
+        get { self[ZoomNamespaceKey.self] }
+        set { self[ZoomNamespaceKey.self] = newValue }
+    }
+}
+
+// MARK: - ContentView
+
 struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("firstPostCoachmarkSeen") private var firstPostCoachmarkSeen = false
@@ -9,6 +48,9 @@ struct ContentView: View {
     @State private var selectedTab: Int = 0
     @State private var prevTab: Int = 0
     @State private var showCompose: Bool = false
+    @State private var photoLift = PhotoLiftState()
+    @Namespace private var zoomNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let queue = UploadQueue.shared
 
     var body: some View {
@@ -81,6 +123,28 @@ struct ContentView: View {
             }
         }
         .animation(.olasStandard, value: firstPostCoachmarkSeen)
+        // Zoom overlay: covers tab bar + nav bar. matchedGeometryEffect animates
+        // the image from its source slot to fullscreen and back on dismiss.
+        .overlay {
+            if let item = photoLift.item {
+                FullscreenImageView(
+                    post: item.post,
+                    initialIndex: item.index,
+                    namespace: reduceMotion ? nil : zoomNamespace,
+                    sourceId: item.id,
+                    onDismiss: {
+                        withAnimation(.olasStandard) { photoLift.item = nil }
+                    }
+                )
+                // Reduce Motion: plain crossfade; otherwise identity (matched geometry
+                // handles the zoom animation implicitly).
+                .transition(reduceMotion ? .opacity : .identity)
+                .zIndex(100)
+            }
+        }
+        // Inject state and namespace so any tab can trigger the viewer.
+        .environment(photoLift)
+        .environment(\.zoomNamespace, zoomNamespace)
     }
 
     // MARK: - Open-compose intent

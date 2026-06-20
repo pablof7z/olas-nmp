@@ -9,6 +9,7 @@ struct PostCardView: View {
     @State private var showHeartBurst = false
     @State private var heartBurstLocation: CGPoint = .zero
     @State private var isExpanded = false
+    @Environment(\.zoomNamespace) private var zoomNamespace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,7 +33,7 @@ struct PostCardView: View {
                 if post.images.count == 1 {
                     singleImage(post.images[0], width: geo.size.width)
                         .onTapGesture { onImageTap?(0) }
-                        .onTapGesture(count: 2) { location in
+                        .onTapGesture(count: 2) { _ in
                             triggerHeartBurst(at: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2))
                             vm.toggleLike(postId: post.id)
                         }
@@ -49,10 +50,14 @@ struct PostCardView: View {
         .aspectRatio(imageAspectRatio, contentMode: .fit)
     }
 
+    @ViewBuilder
     private func singleImage(_ image: ImageMeta, width: CGFloat) -> some View {
+        let sourceId = "feed-\(post.id)-0"
         CachedImage(url: URL(string: image.url), meta: image)
             .frame(width: width)
             .clipped()
+            // Mark this thumbnail as the zoom source for the fullscreen viewer.
+            .zoomSource(id: sourceId, namespace: zoomNamespace)
     }
 
     private func carouselImages(width: CGFloat) -> some View {
@@ -65,6 +70,8 @@ struct PostCardView: View {
                         CachedImage(url: URL(string: image.url), meta: image)
                             .frame(width: width)
                             .clipped()
+                            // Each page is an independent zoom source.
+                            .zoomSource(id: "feed-\(post.id)-\(idx)", namespace: zoomNamespace)
                             .onTapGesture { onImageTap?(idx) }
                     }
                 }
