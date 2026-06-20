@@ -10,38 +10,24 @@ license = "MIT"
 repository = "https://github.com/pablof7z/olas"
 version = "0.1.0"
 
-# NMP crates — patched to the local checkout at ../nostr-multi-platform so that
-# nmp-nip68 (not yet published to git at the pinned rev) resolves correctly.
-# To switch back to a pinned git rev, remove the [patch] section below and
-# restore the rev = "..." entries here.
+# NMP crates: consumed from NMP `master` via git so Olas always tracks the
+# moving upstream branch rather than a frozen rev. Cargo records the exact
+# resolved commit in `Cargo.lock`; bump it deliberately with `cargo update -p
+# <crate>`.
 [workspace.dependencies]
-nmp-core     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-ffi      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-blossom  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-feed     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-nip57    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-nip02    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-planner  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-wot      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-nip68       = { path = "../nostr-multi-platform/crates/nmp-nip68" }
-nmp-nip92-types = { path = "../nostr-multi-platform/crates/nmp-nip92-types" }
+nmp-core        = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-defaults    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-ffi         = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-blossom     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-feed        = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip57       = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip02       = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip68       = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip92-types = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-planner     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-wot         = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 
 nostr      = "0.44"
 serde      = "1.0"
 serde_json = "1.0"
 jni        = { version = "0.21", features = ["invocation"] }
-
-# Override all pinned git deps with the local checkout so every NMP crate
-# resolves to the same source tree — required when nmp-nip68 (a path dep)
-# transitively depends on nmp-core from local paths.
-[patch."https://github.com/pablof7z/nostr-multi-platform.git"]
-nmp-core     = { path = "../nostr-multi-platform/crates/nmp-core" }
-nmp-defaults = { path = "../nostr-multi-platform/crates/nmp-defaults" }
-nmp-ffi      = { path = "../nostr-multi-platform/crates/nmp-ffi" }
-nmp-blossom  = { path = "../nostr-multi-platform/crates/nmp-blossom" }
-nmp-feed     = { path = "../nostr-multi-platform/crates/nmp-feed" }
-nmp-nip57    = { path = "../nostr-multi-platform/crates/nmp-nip57" }
-nmp-nip02    = { path = "../nostr-multi-platform/crates/nmp-nip02" }
-nmp-planner  = { path = "../nostr-multi-platform/crates/nmp-planner" }
-nmp-wot      = { path = "../nostr-multi-platform/crates/nmp-wot" }

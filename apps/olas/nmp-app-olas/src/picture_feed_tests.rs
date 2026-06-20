@@ -18,8 +18,7 @@ fn acquisition_filter_derives_kind16_from_primary_picture_kind() {
         .collect::<Vec<_>>();
     assert_eq!(values[0]["kinds"], serde_json::json!([20]));
     assert_eq!(values[0]["limit"], 50);
-    assert_eq!(values[1]["kinds"], serde_json::json!([5]));
-    assert_eq!(values[2]["kinds"], serde_json::json!([16]));
+    assert_eq!(values[1]["kinds"], serde_json::json!([16]));
 }
 
 #[test]
@@ -36,8 +35,7 @@ fn author_acquisition_filter_derives_kind16_and_keeps_author_perspective() {
         .map(|filter| serde_json::from_str::<serde_json::Value>(filter).expect("json"))
         .collect::<Vec<_>>();
     assert_eq!(values[0]["kinds"], serde_json::json!([20]));
-    assert_eq!(values[1]["kinds"], serde_json::json!([5]));
-    assert_eq!(values[2]["kinds"], serde_json::json!([16]));
+    assert_eq!(values[1]["kinds"], serde_json::json!([16]));
     for value in values {
         assert_eq!(value["authors"], serde_json::json!(["alice"]));
         assert_eq!(value["limit"], 50);
@@ -52,8 +50,7 @@ fn search_acquisition_filter_derives_kind16_and_keeps_search_perspective() {
         .map(|filter| serde_json::from_str::<serde_json::Value>(filter).expect("json"))
         .collect::<Vec<_>>();
     assert_eq!(values[0]["kinds"], serde_json::json!([20]));
-    assert_eq!(values[1]["kinds"], serde_json::json!([5]));
-    assert_eq!(values[2]["kinds"], serde_json::json!([16]));
+    assert_eq!(values[1]["kinds"], serde_json::json!([16]));
     for value in values {
         assert_eq!(value["search"], "nostr photos");
         assert_eq!(value["limit"], 50);
@@ -64,21 +61,21 @@ fn search_acquisition_filter_derives_kind16_and_keeps_search_perspective() {
 #[test]
 fn author_shape_uses_picture_acquisition_kinds_for_single_source_author() {
     let shape = author_shape("alice").expect("shape");
-    assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
+    assert_eq!(shape.kinds, [16, 20].into_iter().collect());
     assert_eq!(shape.authors, ["alice".to_string()].into_iter().collect());
 }
 
 #[test]
 fn network_shape_has_no_author_filter() {
     let shape = network_shape().expect("shape");
-    assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
+    assert_eq!(shape.kinds, [16, 20].into_iter().collect());
     assert!(shape.authors.is_empty());
 }
 
 #[test]
 fn search_shape_has_no_author_filter_and_carries_relay_search() {
     let shape = search_shape("nostr photos").expect("shape");
-    assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
+    assert_eq!(shape.kinds, [16, 20].into_iter().collect());
     assert!(shape.authors.is_empty());
     assert_eq!(shape.search.as_deref(), Some("nostr photos"));
     assert_eq!(shape.limit, Some(50));
@@ -185,7 +182,7 @@ fn current_photo_feed_json_replays_loaded_network_projection() {
     assert!(!app.is_null());
     crate::olas_app_register(app);
     nmp_ffi::nmp_app_consume_all_builtin_projections(app);
-    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+    nmp_ffi::nmp_app_start(app, 0, 100);
 
     let signal = Arc::new(EventSignal::default());
     let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
@@ -216,7 +213,7 @@ fn repeated_network_open_preserves_loaded_projection() {
     assert!(!app.is_null());
     crate::olas_app_register(app);
     nmp_ffi::nmp_app_consume_all_builtin_projections(app);
-    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+    nmp_ffi::nmp_app_start(app, 0, 100);
 
     let signal = Arc::new(EventSignal::default());
     let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
@@ -248,7 +245,7 @@ fn network_feed_reopens_from_store_after_perspective_switch() {
     assert!(!app.is_null());
     crate::olas_app_register(app);
     nmp_ffi::nmp_app_consume_all_builtin_projections(app);
-    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+    nmp_ffi::nmp_app_start(app, 0, 100);
 
     let signal = Arc::new(EventSignal::default());
     let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
@@ -282,7 +279,7 @@ fn search_feed_open_hydrates_typed_picture_projection() {
     assert!(!app.is_null());
     crate::olas_app_register(app);
     nmp_ffi::nmp_app_consume_all_builtin_projections(app);
-    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+    nmp_ffi::nmp_app_start(app, 0, 100);
 
     let signal = Arc::new(EventSignal::default());
     let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
@@ -324,7 +321,7 @@ fn real_relay_network_feed_hydrates_kind20_projection() {
     nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), Some(capture_frame_callback));
     crate::olas_app_register(app);
     nmp_ffi::nmp_app_consume_all_builtin_projections(app);
-    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+    nmp_ffi::nmp_app_start(app, 0, 100);
 
     let signal = Arc::new(EventSignal::default());
     let observer_id = unsafe { &*app }.register_event_observer(signal.clone());

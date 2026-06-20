@@ -228,29 +228,29 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
 
     let provider = mode.provider(runtime);
     let apply_observer = observer.clone();
-    let apply_feed = feed.clone();
     let apply: FeedApply = Arc::new(move |event: &KernelEvent| {
-        let before_len = apply_feed.len();
-        let before_window = apply_feed.snapshot_current_window();
         KernelEventObserver::on_kernel_event(&*apply_observer, event);
-        apply_feed.len() > before_len || apply_feed.snapshot_current_window() != before_window
     });
     let replace_feed = feed.clone();
     let replace: nmp_feed::FeedReplace = Arc::new(move |source_id| {
-        replace_feed.remove_source_id(source_id);
+        replace_feed.remove_sources_if(|item| item.source_id == source_id);
     });
+    let reset_feed = feed.clone();
+    let reset: nmp_feed::FeedReset = Arc::new(move || reset_feed.reset_for_perspective_change());
     let advance_feed = feed.clone();
     let advance: FeedAdvance = Arc::new(move || {
         advance_feed.grow_visible_window();
     });
-    let controller = PullFeedController::new_with_replacement(
+    let controller = PullFeedController::new_with_perspective(
         provider,
         app.feed_pull_fn(),
         apply,
-        replace,
+        Some(replace),
+        Some(reset),
         advance,
     );
     let _ = controller.load_older();
+    record_picture_feed(&key, &mode, controller.clone());
     app.register_feed_with_observer(key.clone(), controller, observer);
 
     let projection_feed = feed.clone();
@@ -267,8 +267,6 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
             ..Default::default()
         })
     });
-
-    record_picture_feed(&key, &mode, feed);
 }
 
 fn current_runtime() -> Option<FeedRuntime> {
