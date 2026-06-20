@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.OlasHaptics
+import io.f7z.olas.core.OlasSound
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
@@ -50,6 +53,7 @@ fun CaptionScreen(
 ) {
     val vm: UploadViewModel = viewModel()
     val context = LocalContext.current
+    val view = LocalView.current
     val state by vm.state.collectAsStateWithLifecycle()
     var caption by remember { mutableStateOf("") }
     // Delay before Share is interactive to prevent accidental trigger from the
@@ -64,7 +68,11 @@ fun CaptionScreen(
 
     // Navigate away only after upload completes — keeps ViewModel alive until then.
     LaunchedEffect(state.step) {
-        if (state.step == UploadStep.DONE) onShare()
+        if (state.step == UploadStep.DONE) {
+            OlasHaptics.notificationSuccess(view)
+            OlasSound.shutterSoft(context)
+            onShare()
+        }
     }
 
     Column(

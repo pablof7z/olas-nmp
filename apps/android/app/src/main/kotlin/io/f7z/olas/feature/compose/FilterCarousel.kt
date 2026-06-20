@@ -31,11 +31,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.OlasHaptics
 import io.f7z.olas.ui.theme.OlasColors
 import org.json.JSONArray
 
@@ -126,9 +128,13 @@ private fun FilterThumbnail(
     intensity: Float,
     onClick: () -> Unit,
 ) {
+    val view = LocalView.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier            = Modifier.clickable { onClick() },
+        modifier            = Modifier.clickable {
+            OlasHaptics.impactRigid(view)
+            onClick()
+        },
     ) {
         Box(
             modifier = Modifier

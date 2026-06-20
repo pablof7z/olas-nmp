@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var showAdvanced = false
+    @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled = false
 
     private struct SettingItem: Decodable { let id: String; let label: String }
 
@@ -98,6 +99,10 @@ struct SettingsView: View {
             }
             Section("Data") {
                 Toggle("Data Saver", isOn: .constant(false))
+            }
+            Section("Sound") {
+                Toggle("Sound Effects", isOn: $soundEffectsEnabled)
+                    .tint(Color.olasBlue)
             }
         }
         .scrollContentBackground(.hidden)
