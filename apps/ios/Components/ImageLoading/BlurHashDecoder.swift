@@ -17,8 +17,10 @@ enum BlurHashDecoder {
     // AnyObject) keyed by "<hash>:<w>x<h>" so that SwiftUI re-inits during
     // scroll — which happen on the main thread — return instantly without
     // re-running the inverse-DCT.
-    private static let imageCache: NSCache<NSString, AnyObject> = {
-        let c = NSCache<NSString, AnyObject>()
+    // NSCache is internally thread-safe; the annotation just satisfies Swift 6's
+    // Sendable check on the static (the type itself can't be marked Sendable).
+    nonisolated(unsafe) private static let imageCache: NSCache<NSString, CGImage> = {
+        let c = NSCache<NSString, CGImage>()
         c.countLimit = 200   // ~200 × 32×32×4 ≈ 800 KB resident
         return c
     }()
@@ -28,7 +30,7 @@ enum BlurHashDecoder {
     /// Prefer this over `decode(_:width:height:)` inside SwiftUI view inits.
     static func cachedDecode(_ hash: String, width: Int = 32, height: Int = 32) -> Image? {
         let key = "\(hash):\(width)x\(height)" as NSString
-        if let cached = imageCache.object(forKey: key) as? CGImage {
+        if let cached = imageCache.object(forKey: key) {
             return Image(decorative: cached, scale: 1, orientation: .up)
         }
         guard let pixels = decodeToPixels(hash, width: width, height: height) else { return nil }
