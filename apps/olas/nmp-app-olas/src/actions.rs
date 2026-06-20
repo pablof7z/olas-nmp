@@ -169,7 +169,13 @@ pub extern "C" fn olas_picture_post_publish_json(
                 .filter(|s| !s.is_empty())
             {
                 Some(u) => u.to_string(),
-                None => continue, // skip malformed entries
+                None => {
+                    eprintln!(
+                        "[olas] olas_picture_post_publish_json: skipping image entry \
+                         missing required `url` field — entry: {descriptor}"
+                    );
+                    continue; // skip malformed entries
+                }
             };
             let sha256 = match descriptor
                 .get("sha256")
@@ -177,7 +183,13 @@ pub extern "C" fn olas_picture_post_publish_json(
                 .filter(|s| !s.is_empty())
             {
                 Some(h) => h.to_string(),
-                None => continue,
+                None => {
+                    eprintln!(
+                        "[olas] olas_picture_post_publish_json: skipping image entry \
+                         missing required `sha256` field — url: {url:?}"
+                    );
+                    continue;
+                }
             };
 
             let mut image = ImageMeta::new(url).sha256(sha256);

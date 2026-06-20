@@ -18,7 +18,11 @@
 // AGENTS.md compliance:
 //   * No business logic in Swift/Kotlin — pubkey dedup + self-exclusion + feed
 //     default decision all live here in Rust.
-//   * No native follow loop — Rust owns the dispatch loop.
+//   * No native follow loop — Rust dispatches ONE nmp.follow_many action that
+//     produces a single kind:3 event containing all selected pubkeys. This
+//     eliminates the last-write-wins race that N sequential nmp.follow
+//     dispatches create (each would read kind:3 before the prior signed event
+//     is ingested, publishing only +1 p-tag and dropping all prior follows).
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -188,14 +192,31 @@ pub extern "C" fn olas_decode_follow_pack_event_json(
     result.unwrap_or(std::ptr::null_mut())
 }
 
-/// Apply the selected follow packs by dispatching one `nmp.follow` action per
-/// unique pubkey in `pubkeys_json`.
+/// Apply the selected follow packs by dispatching a SINGLE `nmp.follow_many`
+/// action that produces ONE kind:3 event containing all selected pubkeys.
+///
+/// This is race-free: a single `nmp.follow_many` dispatch enqueues one
+/// `ActorCommand::FollowMany` on the actor's command channel. The actor
+/// processes it atomically on its exclusive execution slot — it reads the
+/// current kind:3 ONCE, folds every pubkey in via `kind3_tags_after_add`
+/// (idempotent, preserves relay hints + petnames), and signs+publishes a
+/// single kind:3 event. There is no window between a read and a publish where
+/// a concurrent command could interleave another kind:3 write.
+///
+/// This replaces the old loop that dispatched one `nmp.follow` per pubkey.
+/// That loop raced: each call to `nmp_app_dispatch_action("nmp.follow", ...)`
+/// is non-blocking; the actor enqueues each as a separate `Follow` command.
+/// If the kind:3 sign+publish round-trip is slower than the dispatch loop
+/// (almost always true), every command reads the SAME stale kind:3, each
+/// produces a kind:3 with only +1 p-tag, and last-write-wins silently drops
+/// all follows except the last.
 ///
 /// pubkeys_json: JSON array of hex pubkey strings — the union of all `p` tags
-///   from the selected kind:30000 events, deduplicated and with the active
-///   account's own pubkey already removed by the caller.
+///   from the selected kind:30000 events. Dedup + self-exclusion happen here
+///   in Rust before dispatch; the actor also validates + deduplicates
+///   per-entry via `kind3_tags_after_add`.
 /// active_pubkey: the active account's hex pubkey (used to guard against
-///   self-follow in case the caller missed any). Pass empty string if unknown.
+///   self-follow). Pass empty string or NULL if unknown.
 ///
 /// Returns: `{"follow_count":N,"feed_default":"following|network"}` where
 ///   feed_default is "following" when N >= 15, "network" otherwise.
@@ -229,7 +250,10 @@ pub extern "C" fn olas_apply_follow_pack_pubkeys(
             Err(_) => return std::ptr::null_mut(),
         };
 
-        // Dedup while preserving order; exclude self.
+        // Dedup while preserving order; exclude self and malformed entries.
+        // The actor also validates and deduplicates (kind3_tags_after_add is
+        // idempotent), but doing it here keeps the action payload clean and
+        // the follow_count accurate before dispatch.
         let mut seen = std::collections::HashSet::new();
         let deduped: Vec<String> = pubkeys
             .into_iter()
@@ -241,20 +265,21 @@ pub extern "C" fn olas_apply_follow_pack_pubkeys(
             return std::ptr::null_mut();
         }
 
-        // Dispatch one nmp.follow per pubkey. The NMP kernel owns the follow-list
-        // write path and will merge each into the active kind:3 contact list.
-        let follow_ns = match CString::new("nmp.follow") {
+        let count = deduped.len();
+
+        // Dispatch ONE nmp.follow_many action. The actor reads kind:3 once,
+        // merges all pubkeys in a single pass, and publishes one kind:3 event.
+        let action_json = match serde_json::to_string(&serde_json::json!({
+            "pubkeys": deduped,
+        })) {
             Ok(s) => s,
             Err(_) => return std::ptr::null_mut(),
         };
-        let count = deduped.len();
-        for pk in &deduped {
-            let action_json = format!("{{\"pubkey\":\"{}\"}}", pk);
-            let Ok(json_c) = CString::new(action_json) else { continue };
-            let raw = nmp_ffi::nmp_app_dispatch_action(app, follow_ns.as_ptr(), json_c.as_ptr());
-            if !raw.is_null() {
-                nmp_ffi::nmp_free_string(raw);
-            }
+        let Ok(ns_c) = CString::new("nmp.follow_many") else { return std::ptr::null_mut() };
+        let Ok(json_c) = CString::new(action_json) else { return std::ptr::null_mut() };
+        let raw = nmp_ffi::nmp_app_dispatch_action(app, ns_c.as_ptr(), json_c.as_ptr());
+        if !raw.is_null() {
+            nmp_ffi::nmp_free_string(raw);
         }
 
         let feed_default = if count >= 15 { "following" } else { "network" };
