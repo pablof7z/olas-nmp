@@ -138,32 +138,95 @@ struct FeedSkeletonView: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<3, id: \.self) { _ in
-                skeletonCard
+                SkeletonCard()
                 Rectangle().fill(Color.olasBackground).frame(height: 8)
             }
         }
     }
+}
 
-    private var skeletonCard: some View {
+// Each card gets its own shimmer phase so sibling cards animate independently.
+private struct SkeletonCard: View {
+    @State private var shimmerPhase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Header row
             HStack(spacing: OlasSpacing.sm) {
-                Circle().fill(Color.olasSurface2).frame(width: 32, height: 32)
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 100, height: 14)
+                Circle()
+                    .fill(Color.olasSurface2)
+                    .frame(width: 32, height: 32)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 100, height: 14)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
                 Spacer()
             }
             .padding(.horizontal, OlasSpacing.sm)
             .padding(.vertical, OlasSpacing.sm)
 
+            // Image placeholder — 4:5 aspect ratio matches feed default
             Rectangle()
                 .fill(Color.olasSurface2)
                 .frame(maxWidth: .infinity)
-                .aspectRatio(4.0/5.0, contentMode: .fill)
+                .aspectRatio(4.0 / 5.0, contentMode: .fill)
+                .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
 
+            // Caption lines
             VStack(alignment: .leading, spacing: OlasSpacing.xs) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 120, height: 13)
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 200, height: 13)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 120, height: 13)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 200, height: 13)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
             }
             .padding(OlasSpacing.sm)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(
+                .linear(duration: 1.4).repeatForever(autoreverses: false)
+            ) {
+                shimmerPhase = 1
+            }
+        }
+    }
+}
+
+// MARK: - Shimmer modifier
+
+private extension View {
+    /// Sweeps a highlight band left → right over the receiver.
+    /// When `reduceMotion` is true the modifier is a no-op (static surface only).
+    @ViewBuilder
+    func shimmer(phase: CGFloat, reduceMotion: Bool) -> some View {
+        if reduceMotion {
+            self
+        } else {
+            self.overlay(
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: Color.white.opacity(0.10), location: 0.4),
+                            .init(color: Color.white.opacity(0.18), location: 0.5),
+                            .init(color: Color.white.opacity(0.10), location: 0.6),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: w * 2)
+                    .offset(x: phase * w * 2 - w)
+                }
+                .clipped()
+            )
         }
     }
 }
