@@ -24,6 +24,7 @@ struct ProfileGridView: View {
                     gridCell(post)
                 }
             }
+            .padding(.bottom, 100) // clear floating tab bar
         }
     }
 

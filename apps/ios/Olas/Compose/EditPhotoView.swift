@@ -84,6 +84,7 @@ struct EditPhotoView: View {
             .padding(.horizontal, OlasSpacing.xl)
             .padding(.bottom, OlasSpacing.xl)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.olasBackground)
     }
 

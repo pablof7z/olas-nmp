@@ -114,7 +114,7 @@ struct PostCardView: View {
 
     private var imageAspectRatio: CGFloat {
         guard let first = post.images.first,
-              let w = first.width, let h = first.height, w > 0, h > 0 else {
+              let w = first.dimensions?.width, let h = first.dimensions?.height, w > 0, h > 0 else {
             return 4.0 / 5.0 // default portrait
         }
         let ratio = CGFloat(w) / CGFloat(h)

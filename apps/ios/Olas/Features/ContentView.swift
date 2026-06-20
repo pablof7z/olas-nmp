@@ -42,6 +42,8 @@ struct ContentView: View {
         .animation(.olasStandard, value: queue.active != nil)
         .sheet(isPresented: $showCompose) {
             ComposeNavigator()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
         }
         .overlay(alignment: .bottom) {
             if let active = queue.active {
