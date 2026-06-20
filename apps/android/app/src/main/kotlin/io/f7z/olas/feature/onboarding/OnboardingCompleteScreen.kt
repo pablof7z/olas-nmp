@@ -3,7 +3,6 @@ package io.f7z.olas.feature.onboarding
 import android.content.Context
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -59,15 +59,13 @@ fun OnboardingCompleteScreen(navController: NavController) {
             ) {
                 Canvas(modifier = Modifier.size(48.dp)) {
                     val stroke = Stroke(width = 4f, cap = StrokeCap.Round)
-                    // Circle
                     drawArc(
-                        color     = OlasColors.Success,
+                        color      = OlasColors.Success,
                         startAngle = -90f,
                         sweepAngle = 360f * progress.value,
                         useCenter  = false,
                         style      = stroke,
                     )
-                    // Checkmark drawn when circle is complete
                     if (progress.value > 0.8f) {
                         val alpha = ((progress.value - 0.8f) / 0.2f).coerceIn(0f, 1f)
                         drawLine(
@@ -92,20 +90,22 @@ fun OnboardingCompleteScreen(navController: NavController) {
             Text("You're all set!", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = OlasColors.Text1)
             Spacer(Modifier.height(12.dp))
             Text(
-                text     = "Your account is ready. Start sharing and following people you love.",
+                text     = "Your account is ready. Share your first photo!",
                 fontSize = 16.sp,
                 color    = OlasColors.Text2,
             )
             Spacer(Modifier.height(48.dp))
 
+            // Primary CTA — share first photo
             Button(
                 onClick  = {
-                    context
-                        .getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
+                    markOnboardingComplete(context)
+                    // Mark coachmark seen — compose opens directly so the hint is redundant.
+                    context.getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
                         .edit()
-                        .putBoolean("onboarding_complete", true)
+                        .putBoolean("first_post_coachmark_seen", true)
                         .apply()
-                    navController.navigate(Routes.HOME) {
+                    navController.navigate(Routes.COMPOSE) {
                         popUpTo(Routes.ONBOARDING_WELCOME) { inclusive = true }
                     }
                 },
@@ -117,12 +117,38 @@ fun OnboardingCompleteScreen(navController: NavController) {
                 ),
             ) {
                 Text(
-                    "Explore Olas",
-                    color = OlasColors.Background,
-                    fontSize = 17.sp,
+                    "Share your first photo",
+                    color      = OlasColors.Background,
+                    fontSize   = 17.sp,
                     fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Secondary CTA — go to feed
+            TextButton(
+                onClick = {
+                    markOnboardingComplete(context)
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.ONBOARDING_WELCOME) { inclusive = true }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+            ) {
+                Text(
+                    "Look around first",
+                    color    = OlasColors.Text2,
+                    fontSize = 15.sp,
                 )
             }
         }
     }
+}
+
+private fun markOnboardingComplete(context: Context) {
+    context.getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean("onboarding_complete", true)
+        .apply()
 }
