@@ -111,6 +111,85 @@ pub extern "C" fn olas_close_search_feed(
     }));
 }
 
+/// Open a kind:20 photo feed scoped to a specific author pubkey.
+///
+/// consumer_id identifies this subscription; close with olas_close_author_photo_feed
+/// using the same pubkey and consumer_id. Scope 1 = global.
+#[no_mangle]
+pub extern "C" fn olas_open_author_photo_feed(
+    app: *mut NmpApp,
+    pubkey: *const c_char,
+    consumer_id: *const c_char,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if app.is_null() || pubkey.is_null() {
+            return;
+        }
+        let pk = match unsafe { CStr::from_ptr(pubkey) }.to_str() {
+            Ok(s) if !s.is_empty() => s,
+            _ => return,
+        };
+        let consumer = if consumer_id.is_null() {
+            "olas.author_feed".to_string()
+        } else {
+            unsafe { CStr::from_ptr(consumer_id) }
+                .to_str()
+                .unwrap_or("olas.author_feed")
+                .to_string()
+        };
+        let filter = match serde_json::to_string(&serde_json::json!({
+            "kinds": [20],
+            "authors": [pk],
+            "limit": 50
+        })) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let Ok(filter_c) = CString::new(filter) else { return };
+        let Ok(consumer_c) = CString::new(consumer) else { return };
+        nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
+    }));
+}
+
+/// Close an author photo feed opened with olas_open_author_photo_feed.
+///
+/// Must be called with the same pubkey and consumer_id as the matching open call.
+#[no_mangle]
+pub extern "C" fn olas_close_author_photo_feed(
+    app: *mut NmpApp,
+    pubkey: *const c_char,
+    consumer_id: *const c_char,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if app.is_null() || pubkey.is_null() {
+            return;
+        }
+        let pk = match unsafe { CStr::from_ptr(pubkey) }.to_str() {
+            Ok(s) if !s.is_empty() => s,
+            _ => return,
+        };
+        let consumer = if consumer_id.is_null() {
+            "olas.author_feed".to_string()
+        } else {
+            unsafe { CStr::from_ptr(consumer_id) }
+                .to_str()
+                .unwrap_or("olas.author_feed")
+                .to_string()
+        };
+        let filter = match serde_json::to_string(&serde_json::json!({
+            "kinds": [20],
+            "authors": [pk],
+            "limit": 50
+        })) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let Ok(filter_c) = CString::new(filter) else { return };
+        let Ok(consumer_c) = CString::new(consumer) else { return };
+        nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
+    }));
+}
+
 /// Create a new account with the given display name and username (nip05 suffix).
 ///
 /// Constructs profile JSON ({name, nip05: <username>@olas.app}) and calls

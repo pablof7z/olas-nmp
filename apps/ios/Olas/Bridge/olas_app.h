@@ -118,6 +118,13 @@ void olas_app_register(void* app);
 /// consumer_id identifies this subscription; close with nmp_app_close_interest.
 void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* consumer_id);
 
+/// Open a kind:20 photo feed filtered to a single author (profile grid).
+/// consumer_id identifies this subscription; close with olas_close_author_photo_feed.
+void olas_open_author_photo_feed(void* app, const char* pubkey, const char* consumer_id);
+
+/// Close an author photo feed opened with olas_open_author_photo_feed.
+void olas_close_author_photo_feed(void* app, const char* pubkey, const char* consumer_id);
+
 /// Open a NIP-51 kind:30000 follow pack by NIP-19 address (naddr1... or bare coord).
 /// Used during onboarding to hydrate follow pack contents.
 void olas_open_follow_pack(void* app, const char* pack_addr);

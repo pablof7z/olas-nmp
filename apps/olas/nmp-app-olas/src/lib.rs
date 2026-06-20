@@ -46,6 +46,9 @@ pub extern "C" fn olas_decode_snapshot_action_results_json(
                     "correlation_id": row.correlation_id,
                     "status": row.status,
                 });
+                if let Some(error_str) = row.error {
+                    obj["error"] = serde_json::Value::String(error_str);
+                }
                 if let Some(result_str) = row.result {
                     // result is already a serialised JSON string — parse it into
                     // a Value so it embeds cleanly (not double-encoded).
@@ -188,7 +191,8 @@ mod jni_extras;
 // Relay seeding, search feed, and account creation helpers.
 mod extras;
 pub use extras::{
-    olas_close_search_feed, olas_create_account, olas_open_search_feed, olas_seed_default_relays,
+    olas_close_author_photo_feed, olas_close_search_feed, olas_create_account,
+    olas_open_author_photo_feed, olas_open_search_feed, olas_seed_default_relays,
 };
 
 // New event-decoder, BOLT11, geohash and config FFI helpers.
@@ -207,6 +211,31 @@ pub use extras_state::{
     olas_feed_mode_set,
 };
 
+// Geohash location utilities — exports olas_location_geohash4 and is_valid_geohash4.
+mod location;
+pub use location::olas_location_geohash4;
+
+// BOLT11 invoice utilities — exports olas_bolt11_amount_sats.
+mod zaps;
+pub use zaps::olas_bolt11_amount_sats;
+
+// Nostr event model decoders — profile, notifications, contact list, relay list.
+mod event_models;
+pub use event_models::{
+    olas_contact_list_pubkeys_json, olas_default_relays_json, olas_notification_json,
+    olas_profile_json,
+};
+
+// Per-event WoT filter for kind:20 photo posts.
+mod photo_feed;
+pub use photo_feed::olas_filter_photo_post_json;
+
+// Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.
+mod actions;
+pub use actions::{
+    olas_blossom_upload_input_json, olas_bookmark_event_action_json,
+    olas_picture_post_publish_json, olas_react_action_json, olas_zap_action_json,
+};
 
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
@@ -306,194 +335,3 @@ pub extern "C" fn olas_open_follow_pack(app: *mut NmpApp, pack_addr: *const c_ch
     }));
 }
 
-/// Returns the JSON string for the Blossom upload action input.
-///
-/// Caller dispatches via nmp_app_dispatch_action(app, "nmp.blossom.upload", json).
-/// This helper constructs the correct UploadInput JSON from the given parameters.
-///
-/// Parameters match nmp-blossom's UploadInput struct:
-///   file_path  — local path to the blob (required).
-///   mime_type  — MIME type, e.g. "image/jpeg" (optional; NULL → omit, kernel sniffs).
-///   server_url — BUD-02 server base URL (optional; NULL → "https://blossom.primal.net").
-///
-/// Returned string must be freed via nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_blossom_upload_input_json(
-    file_path: *const c_char,
-    mime_type: *const c_char,
-    server_url: *const c_char,
-) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        if file_path.is_null() {
-            return std::ptr::null_mut();
-        }
-        let path = match unsafe { CStr::from_ptr(file_path) }.to_str() {
-            Ok(s) if !s.is_empty() => s,
-            _ => return std::ptr::null_mut(),
-        };
-
-        // content_type: None when caller passes null (kernel sniffs from extension).
-        let content_type: Option<&str> = if mime_type.is_null() {
-            None
-        } else {
-            unsafe { CStr::from_ptr(mime_type) }.to_str().ok()
-        };
-
-        let server = if server_url.is_null() {
-            "https://blossom.primal.net"
-        } else {
-            unsafe { CStr::from_ptr(server_url) }
-                .to_str()
-                .unwrap_or("https://blossom.primal.net")
-        };
-
-        // Build JSON matching nmp-blossom UploadInput:
-        //   { "file_path": "...", "content_type": "...", "servers": ["..."] }
-        let json = match content_type {
-            Some(ct) => serde_json::json!({
-                "file_path": path,
-                "content_type": ct,
-                "servers": [server]
-            }),
-            None => serde_json::json!({
-                "file_path": path,
-                "servers": [server]
-            }),
-        };
-
-        let s = match serde_json::to_string(&json) {
-            Ok(s) => s,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        CString::new(s)
-            .map(|cs| cs.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-/// Build the `nmp.publish` action input for a NIP-68 (kind:20) picture post from
-/// a finished Blossom upload.
-///
-/// This is the single canonical entry point both platforms use to publish a
-/// picture post. It does NOT construct or sign an event — it only assembles the
-/// `PublishAction::PublishRaw` envelope (the registered `nmp.publish` verb's wire
-/// shape). The kernel's `nmp.publish` action fills `pubkey`, stamps `created_at`
-/// (D7 — kernel owns the wall clock), signs with the active account, and routes
-/// the kind:20 through the NIP-65 outbox. No event JSON, no `imeta` string, and
-/// no signing live in Swift/Kotlin.
-///
-/// Parameters:
-///   blossom_result_json — the JSON from the `nmp.blossom.upload` terminal row
-///     (`projections.action_results[cid].result`): a BUD-02 blob descriptor with
-///     at least `url` and `sha256` (and optionally `type`). Required.
-///   caption — the post body (kind:20 `content`). NULL → empty caption.
-///   alt — accessibility alt text for the `imeta` `alt` field. NULL → omitted.
-///   dim — pixel dimensions as `"WxH"` for the `imeta` `dim` field (a render fact
-///     the capability layer measured). NULL → omitted.
-///
-/// The `imeta` tag is emitted as a NIP-68 multi-element array
-/// (`["imeta", "url …", "x …", "m …", "dim WxH", "alt …"]`), matching the
-/// shared `PhotoPostParser` reader on both platforms.
-///
-/// Returns the `nmp.publish` action JSON to dispatch via
-/// `nmp_app_dispatch_action(app, "nmp.publish", json)`, or NULL on malformed
-/// input. Returned string must be freed via `nmp_free_string`.
-#[no_mangle]
-pub extern "C" fn olas_picture_post_publish_json(
-    blossom_result_json: *const c_char,
-    caption: *const c_char,
-    alt: *const c_char,
-    dim: *const c_char,
-    geohash: *const c_char, // nullable — 4-char NIP-52 "g" tag; NULL → omitted
-) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| -> *mut c_char {
-        if blossom_result_json.is_null() {
-            return std::ptr::null_mut();
-        }
-        let descriptor_str = match unsafe { CStr::from_ptr(blossom_result_json) }.to_str() {
-            Ok(s) if !s.trim().is_empty() => s,
-            _ => return std::ptr::null_mut(),
-        };
-        let descriptor: serde_json::Value = match serde_json::from_str(descriptor_str) {
-            Ok(v) => v,
-            Err(_) => return std::ptr::null_mut(),
-        };
-
-        // BUD-02 descriptor fields. `url` + `sha256` are required for a usable
-        // imeta tag; `type` (MIME) is optional.
-        let url = descriptor.get("url").and_then(|v| v.as_str());
-        let sha256 = descriptor.get("sha256").and_then(|v| v.as_str());
-        let (url, sha256) = match (url, sha256) {
-            (Some(u), Some(x)) if !u.is_empty() && !x.is_empty() => (u, x),
-            _ => return std::ptr::null_mut(),
-        };
-        let mime = descriptor.get("type").and_then(|v| v.as_str());
-
-        let opt_str = |p: *const c_char| -> Option<String> {
-            if p.is_null() {
-                return None;
-            }
-            unsafe { CStr::from_ptr(p) }
-                .to_str()
-                .ok()
-                .map(str::to_string)
-                .filter(|s| !s.is_empty())
-        };
-        let caption = opt_str(caption).unwrap_or_default();
-        let alt = opt_str(alt);
-        let dim = opt_str(dim);
-        let geohash = opt_str(geohash);
-
-        // NIP-68 imeta as a multi-element tag array (matches PhotoPostParser).
-        let mut imeta: Vec<String> = vec![
-            "imeta".to_string(),
-            format!("url {url}"),
-            format!("x {sha256}"),
-        ];
-        if let Some(m) = mime {
-            imeta.push(format!("m {m}"));
-        }
-        if let Some(d) = &dim {
-            imeta.push(format!("dim {d}"));
-        }
-        if let Some(a) = &alt {
-            imeta.push(format!("alt {a}"));
-        }
-
-        // NIP-52 geohash location tag — only the 4-char precision the host
-        // computes from a coarse CoreLocation fix. EXIF GPS is stripped in the
-        // native encoding step; location appears only as a Nostr tag when the
-        // user explicitly enables it.
-        let extra_tags: Vec<serde_json::Value> = if let Some(gh) = &geohash {
-            vec![serde_json::json!(["g", gh])]
-        } else {
-            vec![]
-        };
-
-        // The registered `nmp.publish` verb's `PublishRaw` wire shape. The actor
-        // fills pubkey, stamps created_at, signs, and routes via NIP-65 (Auto).
-        let mut tags: Vec<serde_json::Value> = vec![serde_json::Value::Array(
-            imeta.into_iter().map(serde_json::Value::String).collect(),
-        )];
-        tags.extend(extra_tags);
-
-        let action = serde_json::json!({
-            "PublishRaw": {
-                "kind": 20,
-                "tags": tags,
-                "content": caption,
-                "target": "Auto"
-            }
-        });
-
-        let s = match serde_json::to_string(&action) {
-            Ok(s) => s,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        CString::new(s)
-            .map(|cs| cs.into_raw())
-            .unwrap_or(std::ptr::null_mut())
-    });
-    result.unwrap_or(std::ptr::null_mut())
-}

@@ -37,6 +37,9 @@ pub extern "C" fn olas_decode_snapshot_action_results_json(
                     "correlation_id": row.correlation_id,
                     "status": row.status,
                 });
+                if let Some(error_str) = row.error {
+                    obj["error"] = serde_json::Value::String(error_str);
+                }
                 if let Some(result_str) = row.result {
                     obj["result"] = serde_json::from_str::<serde_json::Value>(&result_str)
                         .unwrap_or(serde_json::Value::Null);

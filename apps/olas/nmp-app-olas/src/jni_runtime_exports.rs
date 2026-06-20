@@ -6,12 +6,16 @@ use jni::objects::{JByteArray, JClass, JObject, JString};
 use jni::sys::{jboolean, jlong, jstring};
 use jni::JNIEnv;
 use nmp_ffi::{
-    nmp_app_dispatch_action, nmp_app_lifecycle_background, nmp_app_lifecycle_foreground,
-    nmp_app_load_older_feed, nmp_app_open_contact_feed, nmp_app_register_event_observer,
-    nmp_app_wallet_connect, nmp_free_string,
+    nmp_app_claim_profile, nmp_app_dispatch_action, nmp_app_lifecycle_background,
+    nmp_app_lifecycle_foreground, nmp_app_load_older_feed, nmp_app_open_contact_feed,
+    nmp_app_register_event_observer, nmp_app_release_profile, nmp_app_wallet_connect,
+    nmp_free_string,
 };
 
-use crate::{olas_close_search_feed, olas_open_photo_feed, olas_open_search_feed};
+use crate::{
+    olas_close_author_photo_feed, olas_close_search_feed, olas_open_author_photo_feed,
+    olas_open_photo_feed, olas_open_search_feed,
+};
 
 use super::{
     cstring_into_jstring, jstring_to_cstring, on_event, unpack, EventObserverCtx,
@@ -273,4 +277,101 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWalletConnect(
         };
         nmp_app_wallet_connect(app, uri.as_ptr());
     }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenAuthorPhotoFeed(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    pubkey: JString,
+    consumer_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else { return };
+        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        olas_open_author_photo_feed(app, pk.as_ptr(), cid.as_ptr());
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeCloseAuthorPhotoFeed(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    pubkey: JString,
+    consumer_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else { return };
+        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        olas_close_author_photo_feed(app, pk.as_ptr(), cid.as_ptr());
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeClaimProfile(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    pubkey: JString,
+    consumer_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else { return };
+        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        nmp_app_claim_profile(app, pk_c.as_ptr(), cid_c.as_ptr(), 1, 0);
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeReleaseProfile(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    pubkey: JString,
+    consumer_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else { return };
+        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        nmp_app_release_profile(app, pk_c.as_ptr(), cid_c.as_ptr());
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodeClaimedProfiles(
+    mut env: JNIEnv,
+    _class: JClass,
+    _handle: jlong,
+    frame: JByteArray,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let bytes: Vec<u8> = match env.convert_byte_array(&frame) {
+            Ok(b) => b,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        if bytes.is_empty() {
+            return std::ptr::null_mut();
+        }
+        let raw = crate::olas_decode_snapshot_claimed_profiles_json(bytes.as_ptr(), bytes.len());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
 }
