@@ -11,6 +11,17 @@ struct OlasApp: App {
                 .environment(\.nostrProfileHost, NMPBridge.shared)
                 .task {
                     await NMPBridge.shared.initialize()
+                    #if DEBUG
+                    // Auto-sign-in for testing: write nsec to debug_nsec.txt in Documents.
+                    if NMPBridge.shared.activeAccountPubkey == nil,
+                       let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                        let nsecFile = docs.appendingPathComponent("debug_nsec.txt")
+                        if let nsec = try? String(contentsOf: nsecFile, encoding: .utf8)
+                            .trimmingCharacters(in: .whitespacesAndNewlines), !nsec.isEmpty {
+                            NMPBridge.shared.signInNsec(nsec)
+                        }
+                    }
+                    #endif
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in

@@ -5,7 +5,7 @@ struct PhotoSelectionScreen: View {
     let onDone: ([UIImage]) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var isPresented = true
+    @State private var isPresented = false
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var isLoading = false
 
@@ -30,6 +30,24 @@ struct PhotoSelectionScreen: View {
             maxSelectionCount: maxSelection,
             matching: .images
         )
+        .onAppear {
+            #if DEBUG
+            // CI bypass: if debug_compose_photo.jpg exists in Documents, skip the picker.
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let debugPhoto = docs.appendingPathComponent("debug_compose_photo.jpg")
+                if FileManager.default.fileExists(atPath: debugPhoto.path),
+                   let img = UIImage(contentsOfFile: debugPhoto.path) {
+                    isLoading = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        isLoading = false
+                        onDone([img])
+                    }
+                    return
+                }
+            }
+            #endif
+            isPresented = true
+        }
         .onChange(of: isPresented) { _, newValue in
             if !newValue && selectedItems.isEmpty {
                 dismiss()
