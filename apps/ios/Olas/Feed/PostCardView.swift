@@ -50,24 +50,9 @@ struct PostCardView: View {
     }
 
     private func singleImage(_ image: ImageMeta, width: CGFloat) -> some View {
-        CachedImage(
-            url: URL(string: image.url),
-            loading: {
-                Rectangle().fill(Color.olasSurface2).overlay {
-                    ProgressView().tint(Color.olasText3)
-                }
-            },
-            failure: {
-                ZStack {
-                    Rectangle().fill(Color.olasSurface2)
-                    Image(systemName: "photo")
-                        .font(.system(size: 40, weight: .thin))
-                        .foregroundStyle(Color.olasText3)
-                }
-            }
-        )
-        .frame(width: width)
-        .clipped()
+        CachedImage(url: URL(string: image.url), meta: image)
+            .frame(width: width)
+            .clipped()
     }
 
     private func carouselImages(width: CGFloat) -> some View {
@@ -77,25 +62,10 @@ struct PostCardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(Array(post.images.enumerated()), id: \.offset) { idx, image in
-                        CachedImage(
-                            url: URL(string: image.url),
-                            loading: {
-                                Rectangle().fill(Color.olasSurface2).overlay {
-                                    ProgressView().tint(Color.olasText3)
-                                }
-                            },
-                            failure: {
-                                ZStack {
-                                    Rectangle().fill(Color.olasSurface2)
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 40, weight: .thin))
-                                        .foregroundStyle(Color.olasText3)
-                                }
-                            }
-                        )
-                        .frame(width: width)
-                        .clipped()
-                        .onTapGesture { onImageTap?(idx) }
+                        CachedImage(url: URL(string: image.url), meta: image)
+                            .frame(width: width)
+                            .clipped()
+                            .onTapGesture { onImageTap?(idx) }
                     }
                 }
             }

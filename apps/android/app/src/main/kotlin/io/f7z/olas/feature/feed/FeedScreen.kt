@@ -6,14 +6,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -32,7 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import io.f7z.olas.core.FeedMode
-import io.f7z.olas.navigation.Routes
+import io.f7z.olas.ui.components.shimmer
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
 
@@ -45,12 +52,22 @@ fun FeedScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Mirror iOS: honour system Reduce Motion so shimmer + crossfade are suppressed.
+    val reduceMotion = androidx.compose.ui.platform.LocalContext.current.let {
+        val mgr = it.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        val animScale = android.provider.Settings.Global.getFloat(
+            it.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        )
+        animScale == 0f || mgr?.isEnabled == true && mgr.isTouchExplorationEnabled
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(OlasColors.Background),
     ) {
-        // Feed mode tabs
         TabRow(
             selectedTabIndex  = if (state.feedMode == FeedMode.FOLLOWING) 0 else 1,
             containerColor    = OlasColors.Background,
@@ -78,10 +95,8 @@ fun FeedScreen(navController: NavController) {
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color    = OlasColors.Text1,
-                    )
+                    // Shimmer skeleton replaces the bare CircularProgressIndicator
+                    FeedSkeletonView(reduceMotion = reduceMotion)
                 }
                 state.posts.isEmpty() -> {
                     Text(
@@ -95,27 +110,28 @@ fun FeedScreen(navController: NavController) {
                     LazyColumn(
                         state          = listState,
                         modifier       = Modifier.fillMaxSize(),
-                        contentPadding = if (state.hasNewPosts) PaddingValues(top = 48.dp) else PaddingValues(),
+                        contentPadding = if (state.hasNewPosts) PaddingValues(top = 48.dp)
+                                         else PaddingValues(),
                     ) {
                         items(state.posts, key = { it.id }) { post ->
                             PostCard(
-                                post       = post,
-                                onImageTap = { /* fullscreen */ },
-                                onLike     = vm::react,
-                                onBookmark = vm::bookmark,
-                                onZap      = { vm.zap(it) },
-                                onShare    = {
+                                post         = post,
+                                onImageTap   = { /* fullscreen */ },
+                                reduceMotion = reduceMotion,
+                                onLike       = vm::react,
+                                onBookmark   = vm::bookmark,
+                                onZap        = { vm.zap(it) },
+                                onShare      = {
                                     val share = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, "https://njump.me/${it.id}")
                                     }
                                     context.startActivity(Intent.createChooser(share, "Share post"))
                                 },
-                                onComment  = {},
+                                onComment    = {},
                             )
                         }
                         item {
-                            // Load older trigger
                             androidx.compose.runtime.LaunchedEffect(Unit) {
                                 vm.loadOlderPosts()
                             }
@@ -148,5 +164,78 @@ fun FeedScreen(navController: NavController) {
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton screen
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FeedSkeletonView(reduceMotion: Boolean) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(3) {
+            SkeletonCard(reduceMotion = reduceMotion)
+            HorizontalDivider(color = OlasColors.Border, thickness = 0.5.dp)
+        }
+    }
+}
+
+@Composable
+private fun SkeletonCard(reduceMotion: Boolean) {
+    Column(modifier = Modifier.fillMaxWidth().background(OlasColors.Background)) {
+        // Header row
+        Row(
+            modifier          = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(OlasColors.Surface2)
+                    .shimmer(reduceMotion),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .height(14.dp)
+                    .width(100.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(OlasColors.Surface2)
+                    .shimmer(reduceMotion),
+            )
+        }
+
+        // Image placeholder — 4:5 matches feed default, layout reserved up-front
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 5f)
+                .background(OlasColors.Surface2)
+                .shimmer(reduceMotion),
+        )
+
+        // Caption lines
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .height(13.dp)
+                    .width(120.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(OlasColors.Surface2)
+                    .shimmer(reduceMotion),
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .height(13.dp)
+                    .width(200.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(OlasColors.Surface2)
+                    .shimmer(reduceMotion),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
     }
 }
