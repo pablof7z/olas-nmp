@@ -213,8 +213,10 @@ extension NMPBridge {
     // MARK: - Wallet
 
     func connectWallet(uri: String) {
-        guard let app = appPtr else { return }
-        uri.withCString { nmp_app_wallet_connect(app, $0) }
+        // NMP-GAP: nmp_app_wallet_connect was removed from the FFI surface;
+        // dispatch via the action bus until the NMP wallet projection lands.
+        let escaped = uri.replacingOccurrences(of: "\"", with: "\\\"")
+        _ = dispatchAction(namespace: "nmp.wallet_connect", json: "{\"uri\":\"\(escaped)\"}")
     }
 
     // MARK: - Lifecycle

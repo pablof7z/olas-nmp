@@ -81,10 +81,6 @@ char* nmp_app_encode_profile(void* app, const char* pubkey_hex);
 void nmp_app_lifecycle_foreground(void* app);
 void nmp_app_lifecycle_background(void* app);
 
-// Wallet (NWC — Nostr Wallet Connect)
-void nmp_app_wallet_connect(void* app, const char* nwc_uri);
-char* nmp_app_wallet_pay_invoice(void* app, const char* bolt11);
-
 // Free — every char* returned by any nmp_app_* or olas_* function must be freed here
 void nmp_free_string(char* s);
 
