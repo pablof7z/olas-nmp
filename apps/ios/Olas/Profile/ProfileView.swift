@@ -8,8 +8,8 @@ struct ProfileView: View {
     @State private var posts: [PhotoPost] = []
     @State private var followingCount = 0
     @State private var followerCount = 0
-    @State private var selectedPost: PhotoPost?
     @State private var showSignIn = false
+    @Environment(PhotoLiftState.self) private var photoLift
 
     private var resolvedPubkey: String {
         pubkey ?? NMPBridge.shared.activeAccountPubkey ?? ""
@@ -52,7 +52,10 @@ struct ProfileView: View {
                             .frame(height: 1)
                             .padding(.vertical, OlasSpacing.sm)
                         ProfileGridView(posts: posts) { post in
-                            selectedPost = post
+                            // Open via zoom transition to the same fullscreen viewer as the feed.
+                            withAnimation(.olasStandard) {
+                                photoLift.open(post: post, index: 0, context: "profile")
+                            }
                         }
                     }
                 }
@@ -93,9 +96,6 @@ struct ProfileView: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack { SettingsView() }
         }
-        .sheet(item: $selectedPost) { post in
-            PostDetailView(post: post)
-        }
     }
 
     private var signInPrompt: some View {
@@ -106,7 +106,7 @@ struct ProfileView: View {
                 .foregroundStyle(Color.olasText3)
             VStack(spacing: OlasSpacing.xs) {
                 Text("Sign in to Olas")
-                    .font(OlasFont.title2())
+                    .font(OlasFont.title1())
                     .foregroundStyle(Color.olasText1)
                 Text("Use your Nostr key to access your profile and post photos.")
                     .font(OlasFont.body())
@@ -376,31 +376,6 @@ struct ManualKeySheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.foregroundStyle(Color.olasText2)
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-// MARK: - Post Detail
-
-struct PostDetailView: View {
-    let post: PhotoPost
-    @Environment(\.dismiss) private var dismiss
-    @State private var vm = FeedViewModel()
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                PostCardView(post: post, vm: vm)
-            }
-            .background(Color.olasBackground)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Color.olasText2)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)

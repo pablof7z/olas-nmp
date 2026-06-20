@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -46,6 +48,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.f7z.olas.feature.compose.ComposeScreen
 import io.f7z.olas.feature.feed.FeedScreen
+import io.f7z.olas.feature.feed.FullscreenImageScreen
 import io.f7z.olas.feature.notifications.NotificationsScreen
 import io.f7z.olas.feature.onboarding.CreateAccountScreen
 import io.f7z.olas.feature.onboarding.FollowPacksScreen
@@ -97,9 +100,18 @@ fun OlasApp() {
     val backEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backEntry?.destination?.route
 
-    // One-time first-post coachmark: shown only for brand-new accounts (is_new_account=true)
-    // that haven't yet dismissed it. Existing users signing in via nsec/bunker never set
-    // is_new_account, so they never see the coachmark even on second launch.
+    // Reduce Motion: when animator scale is 0 use crossfade-only (no zoom).
+    val reduceMotion = remember {
+        android.provider.Settings.Global.getFloat(
+            context.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) == 0f
+    }
+
+    // Photo Lift overlay: shown above the tab bar for a full-screen zoom effect.
+    var fullscreenUrl by remember { mutableStateOf<String?>(null) }
+
     var coachmarkVisible by remember {
         mutableStateOf(
             isOnboardingComplete(context) && !isCoachmarkSeen(context) && isNewAccount(context)
@@ -110,6 +122,9 @@ fun OlasApp() {
         Routes.HOME, Routes.SEARCH, Routes.NOTIFICATIONS,
         Routes.PROFILE_OWN, Routes.SETTINGS,
     ) || currentRoute?.startsWith("profile/") == true
+
+    // Callback forwarded from feed and profile screens.
+    val onImageTap: (String) -> Unit = { url -> fullscreenUrl = url }
 
     CompositionLocalProvider(LocalNostrProfileHost provides OlasProfileHost) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -145,19 +160,21 @@ fun OlasApp() {
                     composable(Routes.SIGN_IN)             { SignInScreen(navController) }
 
                     // Main tabs
-                    composable(Routes.HOME)          { FeedScreen(navController) }
+                    composable(Routes.HOME)          { FeedScreen(navController, onImageTap = onImageTap) }
                     composable(Routes.SEARCH)        { SearchScreen(navController) }
                     composable(Routes.NOTIFICATIONS) { NotificationsScreen(navController) }
                     composable(Routes.COMPOSE)       { ComposeScreen(navController) }
 
                     // Profile — own (no args) and others (pubkey arg)
-                    composable(Routes.PROFILE_OWN) { ProfileScreen(navController, pubkey = null) }
+                    composable(Routes.PROFILE_OWN) {
+                        ProfileScreen(navController, pubkey = null, onImageTap = onImageTap)
+                    }
                     composable(
                         route = Routes.PROFILE,
                         arguments = listOf(navArgument("pubkey") { type = NavType.StringType }),
                     ) { back ->
                         val pubkey = back.arguments?.getString("pubkey")
-                        ProfileScreen(navController, pubkey = pubkey)
+                        ProfileScreen(navController, pubkey = pubkey, onImageTap = onImageTap)
                     }
 
                     // Settings
@@ -190,6 +207,24 @@ fun OlasApp() {
                         navController.navigate(Routes.COMPOSE)
                     },
                 )
+            }
+
+            // Photo Lift overlay — covers tab bar for full-screen zoom feel.
+            // Reduce Motion: crossfade only. Normal: scale-zoom in/out.
+            AnimatedVisibility(
+                visible  = fullscreenUrl != null,
+                modifier = Modifier.fillMaxSize(),
+                enter    = if (reduceMotion) fadeIn()
+                           else scaleIn(initialScale = 0.88f) + fadeIn(),
+                exit     = if (reduceMotion) fadeOut()
+                           else scaleOut(targetScale = 0.88f) + fadeOut(),
+            ) {
+                fullscreenUrl?.let { url ->
+                    FullscreenImageScreen(
+                        url       = url,
+                        onDismiss = { fullscreenUrl = null },
+                    )
+                }
             }
         }
     }

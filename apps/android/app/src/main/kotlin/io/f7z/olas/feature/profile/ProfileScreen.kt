@@ -34,7 +34,11 @@ import androidx.navigation.NavController
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
-fun ProfileScreen(navController: NavController, pubkey: String?) {
+fun ProfileScreen(
+    navController: NavController,
+    pubkey: String?,
+    onImageTap: (url: String) -> Unit = { _ -> },
+) {
     val vm: ProfileViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -83,7 +87,11 @@ fun ProfileScreen(navController: NavController, pubkey: String?) {
                     )
                 }
                 items(state.posts, key = { it.id }) { post ->
-                    ProfileGridCell(post = post)
+                    val thumbnailUrl = post.images.firstOrNull()?.url
+                    ProfileGridCell(
+                        post  = post,
+                        onTap = { if (thumbnailUrl != null) onImageTap(thumbnailUrl) },
+                    )
                 }
                 if (state.posts.isEmpty() && !state.isLoading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {

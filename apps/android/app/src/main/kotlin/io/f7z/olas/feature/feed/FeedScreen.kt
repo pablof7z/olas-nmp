@@ -45,22 +45,24 @@ import kotlinx.coroutines.launch
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
-fun FeedScreen(navController: NavController) {
+fun FeedScreen(
+    navController: NavController,
+    onImageTap: (url: String) -> Unit = { _ -> },
+) {
     val vm: FeedViewModel = viewModel()
     val state by vm.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // Mirror iOS: honour system Reduce Motion so shimmer + crossfade are suppressed.
-    val reduceMotion = androidx.compose.ui.platform.LocalContext.current.let {
-        val mgr = it.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+    // Mirror iOS: honour system Reduce Motion so shimmer + transitions are suppressed.
+    val reduceMotion = context.let {
         val animScale = android.provider.Settings.Global.getFloat(
             it.contentResolver,
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
             1f,
         )
-        animScale == 0f || mgr?.isEnabled == true && mgr.isTouchExplorationEnabled
+        animScale == 0f
     }
 
     Column(
@@ -95,7 +97,6 @@ fun FeedScreen(navController: NavController) {
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 state.isLoading -> {
-                    // Shimmer skeleton replaces the bare CircularProgressIndicator
                     FeedSkeletonView(reduceMotion = reduceMotion)
                 }
                 state.posts.isEmpty() -> {
@@ -116,7 +117,7 @@ fun FeedScreen(navController: NavController) {
                         items(state.posts, key = { it.id }) { post ->
                             PostCard(
                                 post         = post,
-                                onImageTap   = { /* fullscreen */ },
+                                onImageTap   = onImageTap,
                                 reduceMotion = reduceMotion,
                                 onLike       = vm::react,
                                 onBookmark   = vm::bookmark,

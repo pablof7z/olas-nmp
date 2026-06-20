@@ -17,10 +17,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import coil.compose.AsyncImage
-import androidx.navigation.NavController
 
+/**
+ * Full-screen image viewer. Invoked as an animated overlay (not a nav destination)
+ * so that the zoom-lift enter / exit animations can play above the tab bar.
+ *
+ * [onDismiss] is called when the drag threshold is exceeded or the user taps the
+ * background; the caller is responsible for animating the overlay away.
+ */
 @Composable
-fun FullscreenImageScreen(navController: NavController, url: String) {
+fun FullscreenImageScreen(url: String, onDismiss: () -> Unit) {
     var scale by remember { mutableStateOf(1f) }
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
@@ -55,7 +61,10 @@ fun FullscreenImageScreen(navController: NavController, url: String) {
                     detectVerticalDragGestures(
                         onDragEnd = {
                             if (kotlin.math.abs(dragOffsetY) > 150f) {
-                                navController.popBackStack()
+                                // Reset before dismiss so the exit scale animation
+                                // starts from center rather than the dragged position.
+                                dragOffsetY = 0f
+                                onDismiss()
                             } else {
                                 dragOffsetY = 0f
                             }

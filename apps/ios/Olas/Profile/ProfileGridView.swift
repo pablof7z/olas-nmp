@@ -4,6 +4,8 @@ struct ProfileGridView: View {
     let posts: [PhotoPost]
     let onSelect: (PhotoPost) -> Void
 
+    @Environment(\.zoomNamespace) private var zoomNamespace
+
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 1), count: 3)
 
     var body: some View {
@@ -48,6 +50,8 @@ struct ProfileGridView: View {
                     )
                     .frame(width: geo.size.width, height: geo.size.width)
                     .clipped()
+                    // Mark as zoom source; id matches what ProfileView passes to photoLift.
+                    .zoomSource(id: "profile-\(post.id)-0", namespace: zoomNamespace)
 
                     if post.images.count > 1 {
                         HStack(spacing: 2) {

@@ -3,6 +3,7 @@ package io.f7z.olas.feature.feed
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image as FoundationImage
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,22 +76,22 @@ fun PostCard(
     Column(modifier = modifier.fillMaxWidth().background(OlasColors.Background)) {
         PostHeader(post = post, onOverflow = {})
 
-        // Image(s) — full bleed, aspect ratio reserved up-front from dimensions
         val firstImage = post.images.firstOrNull()
         if (firstImage != null) {
             val displayRatio = computeDisplayRatio(firstImage)
 
             if (post.images.size == 1) {
                 PostImage(
-                    image = firstImage,
-                    aspectRatio = displayRatio,
+                    image        = firstImage,
+                    aspectRatio  = displayRatio,
                     reduceMotion = reduceMotion,
+                    onClick      = { onImageTap(firstImage.url) },
                 )
             } else {
                 CarouselImages(
-                    images = post.images,
-                    aspectRatio = displayRatio,
-                    onTap = onImageTap,
+                    images       = post.images,
+                    aspectRatio  = displayRatio,
+                    onTap        = onImageTap,
                     reduceMotion = reduceMotion,
                 )
             }
@@ -161,36 +162,33 @@ fun PostCard(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Single image with blurhash placeholder
-// ---------------------------------------------------------------------------
+// Single image with blurhash placeholder and tap-to-fullscreen support.
 
 @Composable
 private fun PostImage(
     image: ImageMeta,
     aspectRatio: Float,
     reduceMotion: Boolean,
+    onClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    // Decode blurhash once per unique hash; null-safe.
     val blurBitmap: ImageBitmap? = remember(image.blurhash) {
         image.blurhash?.let { BlurHashDecoder.decode(it, 32, 32) }
     }
-
     val altLabel = image.alt ?: "Photo"
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(aspectRatio)              // reserved up-front — no layout shift
+            .aspectRatio(aspectRatio)
             .background(OlasColors.Surface)
-            .semantics { contentDescription = altLabel },
+            .semantics { contentDescription = altLabel }
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
     ) {
-        // Show decoded blur while the full image loads
         if (blurBitmap != null) {
             FoundationImage(
                 bitmap            = blurBitmap,
-                contentDescription = null,          // real alt is on outer Box
+                contentDescription = null,
                 modifier          = Modifier.fillMaxWidth().aspectRatio(aspectRatio),
                 contentScale      = ContentScale.Crop,
             )
@@ -203,16 +201,14 @@ private fun PostImage(
 
         AsyncImage(
             model              = request,
-            contentDescription = null,              // real alt on outer Box
+            contentDescription = null,
             modifier           = Modifier.fillMaxWidth().aspectRatio(aspectRatio),
             contentScale       = ContentScale.Crop,
         )
     }
 }
 
-// ---------------------------------------------------------------------------
-// Carousel with per-page blurhash placeholders
-// ---------------------------------------------------------------------------
+// Carousel with per-page blurhash placeholders and tap-to-fullscreen support.
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -240,7 +236,8 @@ private fun CarouselImages(
                     .fillMaxWidth()
                     .aspectRatio(aspectRatio)
                     .background(OlasColors.Surface)
-                    .semantics { contentDescription = altLabel },
+                    .semantics { contentDescription = altLabel }
+                    .clickable { onTap(image.url) },
             ) {
                 if (blurBitmap != null) {
                     androidx.compose.foundation.Image(
@@ -285,11 +282,7 @@ private fun CarouselImages(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Compute display aspect ratio capped at 4:5 portrait / 3:2 landscape. */
+// Compute display aspect ratio capped at 4:5 portrait / 3:2 landscape.
 private fun computeDisplayRatio(image: ImageMeta): Float {
     val native = image.dimensions
         ?.takeIf { it.height > 0 }
