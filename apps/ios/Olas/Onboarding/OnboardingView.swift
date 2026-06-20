@@ -28,6 +28,10 @@ final class OnboardingViewModel {
 
     func createAndContinue() {
         NMPBridge.shared.createAccount(name: createdName, username: createdUsername)
+        // Mark this as a fresh account so the first-post coachmark is eligible.
+        // Sign-in paths (nsec/bunker) do NOT set this flag, preventing the coachmark
+        // from appearing for existing users who already have posts.
+        UserDefaults.standard.set(true, forKey: "coachmarkEligible")
         advance(to: .followPacks)
     }
 

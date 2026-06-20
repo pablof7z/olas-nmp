@@ -74,7 +74,13 @@ private fun isCoachmarkSeen(context: Context): Boolean {
     return prefs.getBoolean("first_post_coachmark_seen", false)
 }
 
-private fun markCoachmarkSeen(context: Context) {
+/** True only when the account was freshly created (not signed in via nsec/bunker). */
+private fun isNewAccount(context: Context): Boolean {
+    val prefs = context.getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
+    return prefs.getBoolean("is_new_account", false)
+}
+
+internal fun markCoachmarkSeen(context: Context) {
     context.getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
         .edit()
         .putBoolean("first_post_coachmark_seen", true)
@@ -91,9 +97,13 @@ fun OlasApp() {
     val backEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backEntry?.destination?.route
 
-    // One-time first-post coachmark: shown when onboarding complete and not yet seen.
+    // One-time first-post coachmark: shown only for brand-new accounts (is_new_account=true)
+    // that haven't yet dismissed it. Existing users signing in via nsec/bunker never set
+    // is_new_account, so they never see the coachmark even on second launch.
     var coachmarkVisible by remember {
-        mutableStateOf(isOnboardingComplete(context) && !isCoachmarkSeen(context))
+        mutableStateOf(
+            isOnboardingComplete(context) && !isCoachmarkSeen(context) && isNewAccount(context)
+        )
     }
 
     val showBottomBar = currentRoute in setOf(

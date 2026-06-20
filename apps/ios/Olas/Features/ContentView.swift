@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("firstPostCoachmarkSeen") private var firstPostCoachmarkSeen = false
+    /// True only when the account was freshly created (not signed in via nsec/bunker).
+    /// Set in OnboardingViewModel.createAndContinue(); sign-in paths never set it.
+    @AppStorage("coachmarkEligible") private var coachmarkEligible = false
     @State private var selectedTab: Int = 0
     @State private var prevTab: Int = 0
     @State private var showCompose: Bool = false
@@ -66,7 +69,7 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if !firstPostCoachmarkSeen {
+            if !firstPostCoachmarkSeen && coachmarkEligible {
                 FirstPostCoachmark(onDismiss: { firstPostCoachmarkSeen = true }) {
                     firstPostCoachmarkSeen = true
                     showCompose = true

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import io.f7z.olas.navigation.Routes
+import io.f7z.olas.ui.markCoachmarkSeen
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
@@ -101,13 +102,13 @@ fun OnboardingCompleteScreen(navController: NavController) {
                 onClick  = {
                     markOnboardingComplete(context)
                     // Mark coachmark seen — compose opens directly so the hint is redundant.
-                    context.getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putBoolean("first_post_coachmark_seen", true)
-                        .apply()
-                    navController.navigate(Routes.COMPOSE) {
+                    markCoachmarkSeen(context)
+                    // Navigate HOME first (clears onboarding back-stack), then open COMPOSE
+                    // on top so dismissing/posting returns to the feed — not a blank screen.
+                    navController.navigate(Routes.HOME) {
                         popUpTo(Routes.ONBOARDING_WELCOME) { inclusive = true }
                     }
+                    navController.navigate(Routes.COMPOSE)
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
