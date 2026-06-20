@@ -1,0 +1,188 @@
+schema_version = 1
+
+[[components]]
+id = "swiftui/user-avatar"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/ProfileWire.swift"
+role = "source"
+source = "swiftui/user-avatar/ProfileWire.swift"
+source_sha256 = "407e25e00b4a05d6eb7d4d7b11221e3c4dcd1591f7f07d3a81aabb161aa76c46"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileHost.swift"
+role = "source"
+source = "swiftui/user-avatar/NostrProfileHost.swift"
+source_sha256 = "c619939b5158324e428e95ad9638cf48f74b4df3f95158eca61fe8c9b453b81b"
+
+[[components.files]]
+path = "Components/NostrUser/NostrAvatar.swift"
+role = "source"
+source = "swiftui/user-avatar/NostrAvatar.swift"
+source_sha256 = "be3a4fe36868e30d64742df622050062e5513e76484366d7890320a55cc86c32"
+
+[[components]]
+id = "swiftui/user-name"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileName.swift"
+role = "source"
+source = "swiftui/user-name/NostrProfileName.swift"
+source_sha256 = "41fe9fb863f38d398aab06e6a0ad7a31168fdc7fad586f3b5610d7bb34d6ffd7"
+
+[[components]]
+id = "swiftui/user-nip05"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/NostrNip05Badge.swift"
+role = "source"
+source = "swiftui/user-nip05/NostrNip05Badge.swift"
+source_sha256 = "208db985a104aaa54c6b93da3544197efe386163baac125231cda01a724d8a6f"
+
+[[components]]
+id = "swiftui/user-card"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/NostrUserCard.swift"
+role = "source"
+source = "swiftui/user-card/NostrUserCard.swift"
+source_sha256 = "f2163a476741263f7b1d144c7a45b37a6da7bfede87fc06d5a807f4f72722eb9"
+
+[[components]]
+id = "swiftui/render-identity"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/SwiftUI/RenderIdentifiable.swift"
+role = "source"
+source = "swiftui/render-identity/RenderIdentifiable.swift"
+source_sha256 = "f35b49c6cfda58e6e456ae4a80925dfcb64e797032bff12270d56c6c812b3ec8"
+
+[[components]]
+id = "swiftui/relay-list"
+version = "0.2.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrRelays/NostrRelayList.swift"
+role = "source"
+source = "swiftui/relay-list/NostrRelayList.swift"
+source_sha256 = "c4bdf68f332068fae63123425dd1af4dd91adaafa8ddf724bd898c4b89bd6e88"
+
+[[components]]
+id = "swiftui/content-core"
+version = "0.2.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentRenderer.swift"
+role = "source"
+source = "swiftui/content-core/NostrContentRenderer.swift"
+source_sha256 = "fdba2cb60810549b7f64b3696b6215d7c73c21099419ab3d1ed05fc5fe9f6b7f"
+
+[[components.files]]
+path = "Components/NostrContent/ContentTreeWire.swift"
+role = "source"
+source = "swiftui/content-core/ContentTreeWire.swift"
+source_sha256 = "e3d931302d17a2677df247a2d4ef372c8b60b03c2f5a2bfe4d3866a683d15064"
+
+[[components]]
+id = "swiftui/login-block"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/Auth/NostrLoginBlock.swift"
+role = "source"
+source = "swiftui/login-block/NostrLoginBlock.swift"
+source_sha256 = "2113fa77e45386772b930a8cf66c111a38ed9100b2c03fd5e387b8f71cd5311b"
+
+[[components.files]]
+path = "Components/Auth/KnownSigners.generated.swift"
+role = "source"
+source = "swiftui/login-block/KnownSigners.generated.swift"
+source_sha256 = "aafac6e9ac9f1fa867ae0b8fa6cdab2b9fba6705e421eb5d9abc629cd5565294"
+
+[[components]]
+id = "swiftui/content-media-grid"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrMediaGrid.swift"
+role = "source"
+source = "swiftui/content-media-grid/NostrMediaGrid.swift"
+source_sha256 = "c3e51bb7b57c0eacc2c7e1c3c763fb51354003289580783cfdf6c7d275ad8a70"
+
+[[components]]
+id = "swiftui/content-quote-card"
+version = "0.1.1"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrQuoteCard.swift"
+role = "source"
+source = "swiftui/content-quote-card/NostrQuoteCard.swift"
+source_sha256 = "c944fcf5fb5f2d2d1dfea10bf8f0386366179bfa1b90e8c87567a80ea0fbc879"
+
+[[components]]
+id = "swiftui/content-view"
+version = "0.1.1"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentView.swift"
+role = "source"
+source = "swiftui/content-view/NostrContentView.swift"
+source_sha256 = "5d5cfaa9732aa6e0c4f8f8a8e7a4cec6d61b4bcacdd580d37e2571701a4b8174"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentGrouping.swift"
+role = "source"
+source = "swiftui/content-view/NostrContentGrouping.swift"
+source_sha256 = "d55375c02fa86eea4b3eb77098d043c607f55abc753514f9d182cd4a70833e9e"
+
+[[components]]
+id = "swiftui/content-minimal"
+version = "0.2.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrMinimalContentView.swift"
+role = "source"
+source = "swiftui/content-minimal/NostrMinimalContentView.swift"
+source_sha256 = "e53a1adee25d686e91f668c194be123f307fb2822c0a94863ead20655de89712"
+
+[[components]]
+id = "swiftui/content-mention-chip"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrContent/NostrMentionChip.swift"
+role = "source"
+source = "swiftui/content-mention-chip/NostrMentionChip.swift"
+source_sha256 = "e42e86dcf10c7ba93295fc7882d1050476412c80e7b7225aec6ea07df42796c2"
+

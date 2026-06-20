@@ -1,0 +1,170 @@
+schema_version = 1
+
+[[components]]
+id = "compose/user-avatar"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrUser/ProfileWire.kt"
+role = "source"
+source = "compose/user-avatar/ProfileWire.kt"
+source_sha256 = "fda6d227363801a474a391b9b9c132fc9fa90c119e41a7a8ae4e91e6c489ceed"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileHost.kt"
+role = "source"
+source = "compose/user-avatar/NostrProfileHost.kt"
+source_sha256 = "47ec37d82fff4866300259386c3fe4523af6dcf567449bebaccd658a4adc3048"
+
+[[components.files]]
+path = "Components/NostrUser/NostrAvatar.kt"
+role = "source"
+source = "compose/user-avatar/NostrAvatar.kt"
+source_sha256 = "bec94acefbc353f6167dce4e061b149babecf3dee51d95778440b9501e3e54bb"
+
+[[components]]
+id = "compose/user-name"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileName.kt"
+role = "source"
+source = "compose/user-name/NostrProfileName.kt"
+source_sha256 = "4a3b287efe7ab48db8f56e3af4b3617e3b402d26abd8b2c4b82cb7c561816681"
+
+[[components]]
+id = "compose/user-nip05"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrUser/NostrNip05Badge.kt"
+role = "source"
+source = "compose/user-nip05/NostrNip05Badge.kt"
+source_sha256 = "b91b4c109f6fb186100f01f24cfe14499a45668a059a633ac1c9421ae843eca7"
+
+[[components]]
+id = "compose/user-card"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrUser/NostrUserCard.kt"
+role = "source"
+source = "compose/user-card/NostrUserCard.kt"
+source_sha256 = "b35021193171988c5c6c2fc0450ff899e59b7aeee80b35b3bb5ed0f28b13dbcd"
+
+[[components]]
+id = "compose/login-block"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/Auth/NostrLoginBlock.kt"
+role = "source"
+source = "compose/login-block/NostrLoginBlock.kt"
+source_sha256 = "9ad3f4138f7a63b906ce85b8dcf97d2c6c258e37768a4a0d079b27d2c6288043"
+
+[[components.files]]
+path = "Components/Auth/ExternalSignerCapabilityBridge.kt"
+role = "source"
+source = "compose/login-block/ExternalSignerCapabilityBridge.kt"
+source_sha256 = "54dc472bfbb28afd9f3b6bec00d604903f4feab76ec5a5ad5bd2364e31fbf084"
+
+[[components.files]]
+path = "Components/Auth/ExternalSignerWire.kt"
+role = "source"
+source = "compose/login-block/ExternalSignerWire.kt"
+source_sha256 = "22353ca3d3d701046c059650704fdafda509d1257ff3f1f7d99c1e64b9d7cdc7"
+
+[[components.files]]
+path = "Components/Auth/KnownSigners.generated.kt"
+role = "source"
+source = "compose/login-block/KnownSigners.generated.kt"
+source_sha256 = "304ffdc174897aadefd17226174a2c01a77ffb10b26196179574ca6b8b15ccc8"
+
+[[components.files]]
+path = "Components/Auth/AmberIntentCodec.kt"
+role = "source"
+source = "compose/login-block/AmberIntentCodec.kt"
+source_sha256 = "955683f263745f76d5222d9efd64f8620d1ef918bb46e9263afaebeeed815c73"
+
+[[components]]
+id = "compose/content-core"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentRenderer.kt"
+role = "source"
+source = "compose/content-core/NostrContentRenderer.kt"
+source_sha256 = "a3c880a27e0ee08d3e6a84ec9995fa9c4ce68889084956532624f634a3457c58"
+
+[[components.files]]
+path = "Components/NostrContent/ContentTreeWire.kt"
+role = "source"
+source = "compose/content-core/ContentTreeWire.kt"
+source_sha256 = "9286761684e2ef2f36b85c78b2856d372170555e117d3abfa81489813e73e39f"
+
+[[components]]
+id = "compose/content-media-grid"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrContent/NostrMediaGrid.kt"
+role = "source"
+source = "compose/content-media-grid/NostrMediaGrid.kt"
+source_sha256 = "d2d711a77206edbb7fdc6c0781d4e58bd8171c7885e43ba1c7696ab1d90fc54d"
+
+[[components]]
+id = "compose/content-quote-card"
+version = "0.1.1"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrContent/NostrQuoteCard.kt"
+role = "source"
+source = "compose/content-quote-card/NostrQuoteCard.kt"
+source_sha256 = "ee6f6abf96e0c2b23b2ca420081b2e6b26adb5b8eae63e31009beb2f993289a7"
+
+[[components]]
+id = "compose/content-view"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentView.kt"
+role = "source"
+source = "compose/content-view/NostrContentView.kt"
+source_sha256 = "c1cef34233fd5dcd7d114f011a842de9ad9ef4020c46a8af8c9d1f2e8e1fa27f"
+
+[[components.files]]
+path = "Components/NostrContent/NostrContentGrouping.kt"
+role = "source"
+source = "compose/content-view/NostrContentGrouping.kt"
+source_sha256 = "2a10e1773cc53655b4fbeff32b6cb07922f881988deed66be54d89f92b492b4e"
+
+[[components]]
+id = "compose/content-mention-chip"
+version = "0.1.0"
+registry = "nmp-local"
+target = "compose"
+
+[[components.files]]
+path = "Components/NostrContent/NostrMentionChip.kt"
+role = "source"
+source = "compose/content-mention-chip/NostrMentionChip.kt"
+source_sha256 = "4eec96ed0aaececafb2b267137dabbaa691fcf6704e37085f7c3c959d30f95eb"
+
