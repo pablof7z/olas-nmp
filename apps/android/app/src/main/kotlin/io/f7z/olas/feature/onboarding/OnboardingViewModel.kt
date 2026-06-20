@@ -50,6 +50,10 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
                     username = state.username.trim().ifEmpty { state.displayName.trim().lowercase() },
                 )
                 markOnboardingComplete()
+                // Flag that this is a brand-new account so the first-post coachmark is eligible.
+                // Sign-in paths (nsec/bunker) do NOT set this flag, preventing the coachmark
+                // from appearing for existing users who already have posts.
+                markNewAccount()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     step      = OnboardingStep.FOLLOW_PACKS,
@@ -92,6 +96,14 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
             .getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
             .edit()
             .putBoolean("onboarding_complete", true)
+            .apply()
+    }
+
+    private fun markNewAccount() {
+        getApplication<Application>()
+            .getSharedPreferences("olas_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("is_new_account", true)
             .apply()
     }
 }
