@@ -18,63 +18,67 @@ struct ProfileView: View {
     @State private var showSettings = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Group {
-                if isOwn && resolvedPubkey.isEmpty {
-                    signInPrompt
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            Color.clear.frame(height: 44)
-                            ProfileHeaderView(
-                                profile: profile,
-                                isOwn: isOwn,
-                                followingCount: followingCount,
-                                followerCount: followerCount
-                            )
-                            Rectangle()
-                                .fill(Color.olasBorder)
-                                .frame(height: 1)
-                                .padding(.vertical, OlasSpacing.sm)
-                            ProfileGridView(posts: posts) { post in
-                                selectedPost = post
-                            }
+        // Own profile is a tab root and owns its NavigationStack; when pushed
+        // from another screen (e.g. Search) it inherits the pusher's stack and
+        // must NOT nest a second one.
+        if isOwn {
+            NavigationStack { profileContent }
+        } else {
+            profileContent
+        }
+    }
+
+    private var navigationTitleText: String {
+        if isOwn { return "Profile" }
+        let name = profile.displayNameOrName
+        return name.isEmpty ? "Profile" : name
+    }
+
+    private var profileContent: some View {
+        Group {
+            if isOwn && resolvedPubkey.isEmpty {
+                signInPrompt
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ProfileHeaderView(
+                            profile: profile,
+                            isOwn: isOwn,
+                            followingCount: followingCount,
+                            followerCount: followerCount
+                        )
+                        Rectangle()
+                            .fill(Color.olasBorder)
+                            .frame(height: 1)
+                            .padding(.vertical, OlasSpacing.sm)
+                        ProfileGridView(posts: posts) { post in
+                            selectedPost = post
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.olasBackground)
-
-            // Custom nav bar — no NavigationStack to avoid UIKitAdaptableTabView on iOS 26
-            HStack {
-                Spacer()
-                Text("Profile")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.olasText1)
-                Spacer()
-                if isOwn && !resolvedPubkey.isEmpty {
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.olasBackground)
+        .navigationTitle(navigationTitleText)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if isOwn && !resolvedPubkey.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundStyle(Color.olasText1)
                     }
-                    .padding(.trailing, OlasSpacing.md)
-                } else {
-                    Color.clear.frame(width: 44, height: 44)
                 }
             }
-            .frame(height: 44)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.olasBorder).frame(height: 0.5)
-            }
         }
-        .background(Color.olasBackground)
         .onAppear { loadProfile() }
-        .onChange(of: NMPBridge.shared.activeAccountPubkey) { _, _ in
+        .onChange(of: NMPBridge.shared.activeAccountPubkey) { _, newValue in
             // Re-load when sign-in completes so the handler sees the correct pubkey.
             if isOwn { loadProfile() }
+            // Logout: account cleared → close Settings so we land on the sign-in prompt.
+            if isOwn, newValue == nil { showSettings = false }
         }
         .onDisappear {
             let pk = resolvedPubkey

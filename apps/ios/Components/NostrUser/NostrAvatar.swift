@@ -51,14 +51,7 @@ public struct NostrAvatar: View {
 
         Group {
             if let url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        identicon
-                    }
-                }
+                CachedImage(url: url, loading: { identicon }, failure: { identicon })
             } else {
                 identicon
             }

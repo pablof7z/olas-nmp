@@ -15,11 +15,9 @@ struct NotificationItemView: View {
                             .foregroundStyle(Color.olasText2)
                     }
                     if let url = notification.actorAvatar.flatMap(URL.init) {
-                        AsyncImage(url: url) { phase in
-                            if case .success(let img) = phase {
-                                img.resizable().scaledToFill()
-                            }
-                        }
+                        // Transparent placeholder so the initial/circle behind shows
+                        // until (and unless) the avatar loads.
+                        CachedImage(url: url) { Color.clear }
                     }
                 }
                 .frame(width: 36, height: 36)
@@ -43,9 +41,7 @@ struct NotificationItemView: View {
 
             // Post thumbnail
             if let thumbnail = notification.postThumbnail {
-                AsyncImage(url: URL(string: thumbnail)) { img in
-                    img.resizable().scaledToFill()
-                } placeholder: {
+                CachedImage(url: URL(string: thumbnail)) {
                     Rectangle().fill(Color.olasSurface2)
                 }
                 .frame(width: 44, height: 44)

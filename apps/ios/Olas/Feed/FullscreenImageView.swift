@@ -62,16 +62,12 @@ struct FullscreenImageView: View {
     }
 
     private func singleImageView(_ image: ImageMeta) -> some View {
-        AsyncImage(url: URL(string: image.url)) { img in
-            img
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(max(1.0, min(4.0, magnification)))
-                .gesture(magnifyGesture)
-        } placeholder: {
+        CachedImage(url: URL(string: image.url), contentMode: .fit) {
             ProgressView()
                 .tint(.white)
         }
+        .scaleEffect(max(1.0, min(4.0, magnification)))
+        .gesture(magnifyGesture)
     }
 
     @State private var scrollPosition: Int? = nil
@@ -80,15 +76,11 @@ struct FullscreenImageView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
                 ForEach(Array(post.images.enumerated()), id: \.offset) { idx, image in
-                    AsyncImage(url: URL(string: image.url)) { img in
-                        img
-                            .resizable()
-                            .scaledToFit()
-                            .scaleEffect(max(1.0, min(4.0, idx == currentIndex ? magnification : 1.0)))
-                            .gesture(magnifyGesture)
-                    } placeholder: {
+                    CachedImage(url: URL(string: image.url), contentMode: .fit) {
                         ProgressView().tint(.white)
                     }
+                    .scaleEffect(max(1.0, min(4.0, idx == currentIndex ? magnification : 1.0)))
+                    .gesture(magnifyGesture)
                     .containerRelativeFrame(.horizontal)
                 }
             }

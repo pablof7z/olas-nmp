@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ElectricBolt
@@ -18,10 +19,15 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +44,26 @@ import io.f7z.olas.ui.theme.OlasColors
 fun SettingsScreen(navController: NavController) {
     // Settings catalog loaded from Rust; local structure mirrors the canonical Rust catalog.
     val settingsCatalog = remember { NMPBridge.settingsCatalogJson() }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title   = { Text("Log out of Olas?") },
+            text    = { Text("You'll need your Nostr key to sign back in.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutConfirm = false
+                    NMPBridge.signOut()
+                }) { Text("Log out", color = OlasColors.Destructive) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) { Text("Cancel") }
+            },
+            containerColor = OlasColors.Surface,
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -77,7 +103,37 @@ fun SettingsScreen(navController: NavController) {
                 navController.navigate(Routes.WALLET_SETTINGS)
             }
         }
+        item {
+            Spacer(Modifier.height(16.dp))
+            DestructiveRow(
+                icon = Icons.AutoMirrored.Filled.Logout,
+                label = "Log out",
+            ) { showLogoutConfirm = true }
+        }
         item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+@Composable
+private fun DestructiveRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = OlasColors.Destructive)
+        Text(
+            text     = label,
+            fontSize = 17.sp,
+            color    = OlasColors.Destructive,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
     }
 }
 

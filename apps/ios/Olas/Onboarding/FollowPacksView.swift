@@ -58,7 +58,7 @@ struct FollowPacksView: View {
 
                 Button {
                     followSelectedPacks()
-                    vm.advance(to: .mediaServer)
+                    vm.advance(to: .complete)
                 } label: {
                     Text(selectedCount > 0 ? "Continue" : "Skip")
                         .font(OlasFont.headline())
@@ -125,9 +125,7 @@ struct FollowPackCard: View {
                     // Preview avatars
                     HStack(spacing: -10) {
                         ForEach(previewAvatars.prefix(6), id: \.self) { url in
-                            AsyncImage(url: URL(string: url)) { img in
-                                img.resizable().scaledToFill()
-                            } placeholder: {
+                            CachedImage(url: URL(string: url)) {
                                 Circle().fill(Color.olasSurface2)
                             }
                             .frame(width: 28, height: 28)

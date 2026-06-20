@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let feedDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag")
 
 @Observable @MainActor
 final class FeedViewModel {
@@ -11,7 +14,13 @@ final class FeedViewModel {
     private var handlerRegistered = false
     private var loadingTimeoutTask: Task<Void, Never>?
 
+    let diagId = UInt32.random(in: 1000...9999)
+    init() {
+        feedDiag.error("FEEDDIAG vm.init id=\(self.diagId)")
+    }
+
     func start(mode: FeedMode) {
+        feedDiag.error("FEEDDIAG vm.start id=\(self.diagId) mode=\(String(describing: mode)) prevPosts=\(self.posts.count) callstack=\(Thread.callStackSymbols.prefix(14).joined(separator: " | "))")
         self.mode = mode
         self.posts = []
         self.seenIds = []

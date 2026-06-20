@@ -167,6 +167,8 @@ struct SettingsView: View {
 // MARK: - Account Settings
 
 struct AccountSettingsView: View {
+    @State private var showLogoutConfirm = false
+
     var body: some View {
         List {
             Section {
@@ -178,9 +180,17 @@ struct AccountSettingsView: View {
                 }
             }
             Section {
-                Button("Log out") {}
+                Button("Log out") { showLogoutConfirm = true }
                     .foregroundStyle(Color.olasDestructive)
             }
+        }
+        .confirmationDialog("Log out of Olas?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button("Log out", role: .destructive) {
+                NMPBridge.shared.signOut()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll need your Nostr key to sign back in.")
         }
         .scrollContentBackground(.hidden)
         .background(Color.olasBackground)

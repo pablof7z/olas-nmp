@@ -13,9 +13,7 @@ struct ProfileHeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Banner
-            AsyncImage(url: URL(string: profile.banner ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+            CachedImage(url: URL(string: profile.banner ?? "")) {
                 Rectangle().fill(Color.olasSurface2)
             }
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)

@@ -65,6 +65,7 @@ object NMPBridge {
     private external fun nativeOpenAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeCloseAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeSignInNsec(handle: Long, nsec: String)
+    private external fun nativeRemoveAccount(handle: Long, identityId: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
     private external fun nativeOpenContactFeed(handle: Long, kindsJson: String)
     private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean)
@@ -174,8 +175,9 @@ object NMPBridge {
         for ((url, role) in defaultRelays) {
             nativeAddRelay(appHandle, url, role)
         }
-        // blossom.band (nostr.build CDN) stores files for any NIP-98-authenticated key.
-        nativeBlossomServerUrlSet(appHandle, "https://blossom.band")
+        // Default media server: blossom.primal.net (matches Rust default; chosen silently
+        // during onboarding). Users can change this later in Server Settings.
+        nativeBlossomServerUrlSet(appHandle, "https://blossom.primal.net")
     }
 
     fun createAccount(name: String, username: String) =
@@ -200,8 +202,15 @@ object NMPBridge {
     }
 
     fun signOut() {
+        // Remove the active account from the kernel (identity_id is the hex
+        // pubkey). A removed active account emits no active_account snapshot
+        // frame, so clear the local state ourselves so the UI reverts to the
+        // signed-out state. Mirrors iOS NMPBridge.signOut().
+        activeAccountPubkey?.let { nativeRemoveAccount(appHandle, it) }
         appContext?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             ?.edit()?.remove(KEY_STORED_NSEC)?.apply()
+        activeAccountPubkey = null
+        _activeAccountPubkeyFlow.value = null
     }
 
     /** Following feed — kind 20 scoped to contact list. */

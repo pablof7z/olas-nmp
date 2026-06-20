@@ -34,21 +34,18 @@ struct ProfileGridView: View {
         } label: {
             GeometryReader { geo in
                 ZStack(alignment: .topTrailing) {
-                    AsyncImage(url: URL(string: post.images.first?.url ?? "")) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().scaledToFill()
-                        case .failure:
+                    CachedImage(
+                        url: URL(string: post.images.first?.url ?? ""),
+                        loading: { Rectangle().fill(Color.olasSurface2) },
+                        failure: {
                             ZStack {
                                 Rectangle().fill(Color.olasSurface2)
                                 Image(systemName: "photo")
                                     .font(.system(size: 20, weight: .thin))
                                     .foregroundStyle(Color.olasText3)
                             }
-                        default:
-                            Rectangle().fill(Color.olasSurface2)
                         }
-                    }
+                    )
                     .frame(width: geo.size.width, height: geo.size.width)
                     .clipped()
 

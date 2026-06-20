@@ -77,11 +77,7 @@ struct WelcomeView: View {
         GeometryReader { geo in
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(72), spacing: 8), count: 5), spacing: 8) {
                 ForEach(Array(avatarURLs.prefix(25).enumerated()), id: \.offset) { _, url in
-                    AsyncImage(url: URL(string: url)) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
+                    CachedImage(url: URL(string: url)) {
                         Circle().fill(Color.olasSurface)
                     }
                     .frame(width: 72, height: 72)

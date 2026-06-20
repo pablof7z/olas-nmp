@@ -8,9 +8,7 @@ struct SuggestedAccountCard: View {
     var body: some View {
         VStack(spacing: 0) {
             // Avatar
-            AsyncImage(url: URL(string: profile.picture ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+            CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)
             }
             .frame(width: 72, height: 72)

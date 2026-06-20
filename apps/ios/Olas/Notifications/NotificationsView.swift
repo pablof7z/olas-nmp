@@ -91,62 +91,55 @@ struct NotificationsView: View {
     @State private var selectedTab: NotificationsTab = .all
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Custom header — no NavigationStack
-            HStack {
-                Spacer()
-                Text("Notifications")
-                    .font(OlasFont.headline())
-                    .foregroundStyle(Color.olasText1)
-                Spacer()
-                Button {} label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color.olasText2)
+        NavigationStack {
+            VStack(spacing: 0) {
+                tabBar
+
+                HStack(spacing: OlasSpacing.xs) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(wotGapNotificationsNote)
+                        .font(OlasFont.caption())
                 }
-                .padding(.trailing, OlasSpacing.md)
-            }
-            .frame(height: 44)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.olasBorder).frame(height: 0.5)
-            }
+                .foregroundStyle(Color.olasText2)
+                .padding(.horizontal, OlasSpacing.sm)
+                .padding(.vertical, 5)
+                .background(Color.olasSurface, in: Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, OlasSpacing.md)
+                .padding(.vertical, OlasSpacing.xs)
+                Divider().overlay(Color.olasBorder)
 
-            tabBar
-
-            HStack(spacing: OlasSpacing.xs) {
-                Image(systemName: "clock")
-                    .font(.system(size: 11, weight: .medium))
-                Text(wotGapNotificationsNote)
-                    .font(OlasFont.caption())
-            }
-            .foregroundStyle(Color.olasText2)
-            .padding(.horizontal, OlasSpacing.sm)
-            .padding(.vertical, 5)
-            .background(Color.olasSurface, in: Capsule())
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, OlasSpacing.md)
-            .padding(.vertical, OlasSpacing.xs)
-            Divider().overlay(Color.olasBorder)
-
-            if vm.isLoading && vm.notifications.isEmpty {
-                Spacer()
-                ProgressView().tint(Color.olasText2)
-                Spacer()
-            } else if vm.filtered(by: selectedTab).isEmpty {
-                emptyState
-            } else {
-                List(vm.filtered(by: selectedTab)) { notification in
-                    NotificationItemView(notification: notification)
-                        .listRowBackground(Color.olasBackground)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparatorTint(Color.olasBorder)
+                if vm.isLoading && vm.notifications.isEmpty {
+                    Spacer()
+                    ProgressView().tint(Color.olasText2)
+                    Spacer()
+                } else if vm.filtered(by: selectedTab).isEmpty {
+                    emptyState
+                } else {
+                    List(vm.filtered(by: selectedTab)) { notification in
+                        NotificationItemView(notification: notification)
+                            .listRowBackground(Color.olasBackground)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparatorTint(Color.olasBorder)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+            }
+            .background(Color.olasBackground)
+            .navigationTitle("Notifications")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {} label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(Color.olasText2)
+                    }
+                }
             }
         }
-        .background(Color.olasBackground)
         .onAppear { vm.start() }
     }
 

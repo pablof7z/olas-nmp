@@ -137,44 +137,25 @@ struct SearchView: View {
     @State private var selectedResultTab: SearchResultTab = .people
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Custom search bar header — no NavigationStack
-            HStack(spacing: OlasSpacing.sm) {
-                HStack(spacing: OlasSpacing.xs) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(Color.olasText3)
-                        .font(.system(size: 15))
-                    TextField("Search people, photos, tags", text: $vm.query)
-                        .font(OlasFont.body())
-                        .foregroundStyle(Color.olasText1)
-                        .autocorrectionDisabled()
-                        .autocapitalization(.none)
-                        .submitLabel(.search)
-                    if !vm.query.isEmpty {
-                        Button { vm.query = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(Color.olasText3)
-                        }
-                    }
+        NavigationStack {
+            Group {
+                if vm.query.isEmpty {
+                    DiscoverView()
+                } else {
+                    searchResults
                 }
-                .padding(.horizontal, OlasSpacing.sm)
-                .padding(.vertical, 8)
-                .background(Color.olasSurface2, in: RoundedRectangle(cornerRadius: 10))
             }
-            .padding(.horizontal, OlasSpacing.md)
-            .padding(.vertical, OlasSpacing.xs)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.olasBorder).frame(height: 0.5)
-            }
-
-            if vm.query.isEmpty {
-                DiscoverView()
-            } else {
-                searchResults
-            }
+            .background(Color.olasBackground)
+            .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(
+                text: $vm.query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search people, photos, tags"
+            )
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
         }
-        .background(Color.olasBackground)
         .onChange(of: vm.query) { _, newQuery in
             vm.onQueryChanged(newQuery)
         }
@@ -246,9 +227,7 @@ struct SearchView: View {
                     LazyVGrid(columns: columns, spacing: 1) {
                         ForEach(vm.postResults) { post in
                             NavigationLink(destination: Text(post.id)) {
-                                AsyncImage(url: URL(string: post.images.first?.url ?? "")) { img in
-                                    img.resizable().scaledToFill()
-                                } placeholder: {
+                                CachedImage(url: URL(string: post.images.first?.url ?? "")) {
                                     Rectangle().fill(Color.olasSurface2)
                                 }
                                 .aspectRatio(1, contentMode: .fill)
@@ -285,9 +264,7 @@ struct SearchView: View {
 
     private func profileRow(_ profile: OlasProfile) -> some View {
         HStack(spacing: OlasSpacing.md) {
-            AsyncImage(url: URL(string: profile.picture ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+            CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)
             }
             .frame(width: 44, height: 44)

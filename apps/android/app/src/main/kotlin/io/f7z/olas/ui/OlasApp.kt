@@ -24,7 +24,6 @@ import io.f7z.olas.feature.feed.FeedScreen
 import io.f7z.olas.feature.notifications.NotificationsScreen
 import io.f7z.olas.feature.onboarding.CreateAccountScreen
 import io.f7z.olas.feature.onboarding.FollowPacksScreen
-import io.f7z.olas.feature.onboarding.MediaServerScreen
 import io.f7z.olas.feature.onboarding.OnboardingCompleteScreen
 import io.f7z.olas.feature.onboarding.SignInScreen
 import io.f7z.olas.feature.onboarding.WelcomeScreen
@@ -84,7 +83,6 @@ fun OlasApp() {
             composable(Routes.ONBOARDING_WELCOME)  { WelcomeScreen(navController) }
             composable(Routes.ONBOARDING_CREATE)   { CreateAccountScreen(navController) }
             composable(Routes.ONBOARDING_FOLLOWS)  { FollowPacksScreen(navController) }
-            composable(Routes.ONBOARDING_SERVER)   { MediaServerScreen(navController) }
             composable(Routes.ONBOARDING_COMPLETE) { OnboardingCompleteScreen(navController) }
             composable(Routes.SIGN_IN)             { SignInScreen(navController) }
 

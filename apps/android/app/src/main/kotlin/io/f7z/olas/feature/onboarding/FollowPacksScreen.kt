@@ -56,7 +56,7 @@ fun FollowPacksScreen(navController: NavController) {
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ProgressDots(currentStep = 1, totalSteps = 3)
+            ProgressDots(currentStep = 1, totalSteps = 2)
             Spacer(Modifier.height(24.dp))
             Text("Follow some people", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = OlasColors.Text1)
             Spacer(Modifier.height(8.dp))
@@ -94,7 +94,7 @@ fun FollowPacksScreen(navController: NavController) {
                 Spacer(Modifier.height(8.dp))
             }
             Button(
-                onClick  = { navController.navigate(Routes.ONBOARDING_SERVER) },
+                onClick  = { navController.navigate(Routes.ONBOARDING_COMPLETE) },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(

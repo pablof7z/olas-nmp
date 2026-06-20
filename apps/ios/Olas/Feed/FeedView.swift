@@ -1,4 +1,7 @@
 import SwiftUI
+import os
+
+private let feedViewDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag")
 
 struct FeedView: View {
     @State private var vm = FeedViewModel()
@@ -80,12 +83,14 @@ struct FeedView: View {
             }
         }
         .task {
+            feedViewDiag.error("FEEDDIAG FeedView.task fired vmId=\(vm.diagId) isRunning=\(NMPBridge.shared.isRunning)")
             vm.start(mode: currentMode)
             // If NMP was already running when the view appeared (e.g. tab revisit),
             // open the feed immediately.
             if NMPBridge.shared.isRunning { vm.openFeed() }
         }
         .onChange(of: NMPBridge.shared.isRunning) { _, running in
+            feedViewDiag.error("FEEDDIAG FeedView.onChange isRunning=\(running) vmId=\(vm.diagId)")
             // Open the feed the moment the bridge transitions to running — zero polling.
             if running { vm.openFeed() }
         }

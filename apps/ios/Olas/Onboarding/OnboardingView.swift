@@ -5,7 +5,6 @@ enum OnboardingStep: Hashable {
     case signIn
     case createAccount
     case followPacks
-    case mediaServer
     case complete
 }
 
@@ -90,14 +89,6 @@ struct OnboardingView: View {
                         removal: .move(edge: .leading)
                     ))
                     .id(OnboardingStep.followPacks)
-
-            case .mediaServer:
-                MediaServerView(vm: vm)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
-                    .id(OnboardingStep.mediaServer)
 
             case .complete:
                 OnboardingCompleteView()

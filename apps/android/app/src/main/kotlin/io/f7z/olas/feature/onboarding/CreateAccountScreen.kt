@@ -57,8 +57,8 @@ fun CreateAccountScreen(navController: NavController) {
             .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Progress dots (step 1 of 3)
-        ProgressDots(currentStep = 0, totalSteps = 3)
+        // Progress dots (step 1 of 2)
+        ProgressDots(currentStep = 0, totalSteps = 2)
         Spacer(Modifier.height(32.dp))
 
         Text(

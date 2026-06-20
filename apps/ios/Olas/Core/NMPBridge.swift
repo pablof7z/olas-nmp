@@ -2,6 +2,7 @@ import Foundation
 import OlasFFI
 import SwiftUI
 import Combine
+import os
 
 // ── Bridge ───────────────────────────────────────────────────────────────────
 
@@ -161,10 +162,14 @@ import Combine
     }
 
     func handleActiveAccountJSON(_ json: String) {
+        os.Logger(subsystem: "io.f7z.olas", category: "feeddiag").error("FEEDDIAG activeAccountJSON raw=\(json) current=\(self.activeAccountPubkey ?? "nil")")
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let pubkey = obj["pubkey"], !pubkey.isEmpty else { return }
-        if activeAccountPubkey != pubkey { activeAccountPubkey = pubkey }
+        if activeAccountPubkey != pubkey {
+            os.Logger(subsystem: "io.f7z.olas", category: "feeddiag").error("FEEDDIAG activeAccountPubkey CHANGED \(self.activeAccountPubkey ?? "nil") -> \(pubkey)")
+            activeAccountPubkey = pubkey
+        }
     }
 
     private func handleClaimedProfilesJSON(_ json: String) {
@@ -260,6 +265,17 @@ import Combine
     func signInBunker(_ uri: String) {
         guard let app = appPtr else { return }
         uri.withCString { nmp_app_signin_bunker(app, $0, 1) }
+    }
+
+    /// Sign out of the active account: remove its signer from the kernel and
+    /// clear local active-account state so the UI reverts to the sign-in prompt.
+    /// `identity_id` is the active account's hex pubkey (nmp-core keys accounts
+    /// by pubkey hex). A removed active account produces no `active_account`
+    /// snapshot frame, so nothing clears `activeAccountPubkey` for us — do it here.
+    func signOut() {
+        guard let app = appPtr, let pubkey = activeAccountPubkey, !pubkey.isEmpty else { return }
+        pubkey.withCString { nmp_app_remove_account(app, $0) }
+        activeAccountPubkey = nil
     }
 
     // MARK: - Feed
