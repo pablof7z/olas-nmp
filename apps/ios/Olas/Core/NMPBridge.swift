@@ -119,8 +119,8 @@ import Combine
 
     // Fast-path dedup for snapshot ticks (~100ms cadence): skip the MainActor hop
     // when the JSON payload hasn't changed since the last tick.
-    nonisolated(unsafe) var lastProfilesJSON = ""
-    nonisolated(unsafe) var lastActiveAccountJSON = ""
+    var lastProfilesJSON = ""
+    var lastActiveAccountJSON = ""
     let tickLock = NSLock()
 
     func scheduleProfileFlush(_ json: String) {
