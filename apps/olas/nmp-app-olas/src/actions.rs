@@ -1,6 +1,9 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+use nmp_nip68::build::PicturePost;
+use nmp_nip68::imeta::ImageMeta;
+
 use crate::location::is_valid_geohash4;
 
 /// Returns the JSON string for the Blossom upload action input.
@@ -111,7 +114,8 @@ pub extern "C" fn olas_bookmark_event_action_json(
 }
 
 /// Build the `nmp.publish` action input for a NIP-68 picture post from a
-/// finished Blossom upload. Event construction, signing, time, and routing stay
+/// finished Blossom upload. Uses `nmp_nip68::PicturePostBuilder` to assemble
+/// the canonical NIP-68 tag set. Event signing, timestamp, and routing stay
 /// in the NMP publish action.
 #[no_mangle]
 pub extern "C" fn olas_picture_post_publish_json(
@@ -129,47 +133,46 @@ pub extern "C" fn olas_picture_post_publish_json(
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
-        let url = descriptor.get("url").and_then(|v| v.as_str());
-        let sha256 = descriptor.get("sha256").and_then(|v| v.as_str());
-        let (Some(url), Some(sha256)) = (url, sha256) else {
-            return std::ptr::null_mut();
+        let url = match descriptor.get("url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+            Some(u) => u.to_string(),
+            None => return std::ptr::null_mut(),
         };
-        if url.is_empty() || sha256.is_empty() {
-            return std::ptr::null_mut();
-        }
+        let sha256 = match descriptor.get("sha256").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+            Some(h) => h.to_string(),
+            None => return std::ptr::null_mut(),
+        };
 
-        let caption = opt_cstr_owned(caption).unwrap_or_default();
-        let alt = opt_cstr_owned(alt);
-        let dim = opt_cstr_owned(dim);
-        let geohash = opt_cstr_owned(geohash).filter(|gh| is_valid_geohash4(gh));
-
-        let mut imeta: Vec<String> = vec![
-            "imeta".to_string(),
-            format!("url {url}"),
-            format!("x {sha256}"),
-        ];
+        let mut image = ImageMeta::new(url).sha256(sha256);
         if let Some(mime) = descriptor.get("type").and_then(|v| v.as_str()) {
-            imeta.push(format!("m {mime}"));
+            image = image.mime(mime);
         }
-        if let Some(d) = &dim {
-            imeta.push(format!("dim {d}"));
+        if let Some(dim_str) = opt_cstr_owned(dim) {
+            if let Some((w, h)) = dim_str.split_once('x') {
+                if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                    image = image.dimensions(w, h);
+                }
+            }
         }
-        if let Some(a) = &alt {
-            imeta.push(format!("alt {a}"));
+        if let Some(alt_str) = opt_cstr_owned(alt) {
+            image = image.alt(alt_str);
         }
 
-        let mut tags: Vec<serde_json::Value> = vec![serde_json::Value::Array(
-            imeta.into_iter().map(serde_json::Value::String).collect(),
-        )];
-        if let Some(gh) = geohash {
-            tags.push(serde_json::json!(["g", gh]));
+        let mut builder = PicturePost::new(image)
+            .content(opt_cstr_owned(caption).unwrap_or_default());
+        if let Some(gh) = opt_cstr_owned(geohash).filter(|gh| is_valid_geohash4(gh)) {
+            builder = builder.geohash(gh);
         }
+
+        let draft = match builder.build() {
+            Ok(d) => d,
+            Err(_) => return std::ptr::null_mut(),
+        };
 
         json_value_to_cstring(serde_json::json!({
             "PublishRaw": {
-                "kind": 20,
-                "tags": tags,
-                "content": caption,
+                "kind": draft.kind,
+                "tags": draft.tags,
+                "content": draft.content,
                 "target": "Auto"
             }
         }))

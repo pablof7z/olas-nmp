@@ -18,34 +18,45 @@ struct NostrEvent: Codable {
 
 // MARK: - Photo Post
 
+// Mirrors nmp_nip68::PictureEventRecord JSON exactly.
 struct PhotoPost: Identifiable, Codable {
-    let id: String
-    let authorPubkey: String
+    let id: String           // JSON: "event_id"
+    let authorPubkey: String // JSON: "author"
     var authorName: String?
     var authorAvatar: String?
     let images: [ImageMeta]
-    let caption: String
+    let content: String      // JSON: "content" (caption text)
     let hashtags: [String]
+    let createdAt: Int64     // JSON: "created_at"
+    // Client-only state — not in Rust JSON output, excluded from CodingKeys.
     var reactionCount: Int = 0
     var commentCount: Int = 0
     var zapTotal: Int64 = 0
-    let createdAt: Int64
-    // Client-only state — not in Rust JSON output, excluded from CodingKeys.
     var isLiked: Bool = false
     var isBookmarked: Bool = false
 
+    var caption: String { content }
+
     enum CodingKeys: String, CodingKey {
-        case id, authorPubkey, authorName, authorAvatar, images, caption, hashtags
-        case reactionCount, commentCount, zapTotal, createdAt
+        case id = "event_id"
+        case authorPubkey = "author"
+        case authorName, authorAvatar, images, content, hashtags
+        case createdAt = "created_at"
     }
 }
 
+// Mirrors nmp_nip92_types::MediaDimensions JSON.
+struct ImageDimensions: Codable {
+    let width: Int
+    let height: Int
+}
+
+// Mirrors nmp_nip92_types::MediaMeta JSON (aliased as ImageMeta in nmp_nip68).
 struct ImageMeta: Codable {
     let url: String
     let sha256: String?
     let mime: String?
-    let width: Int?
-    let height: Int?
+    let dimensions: ImageDimensions?
     let blurhash: String?
     let alt: String?
 }

@@ -16,33 +16,39 @@ data class NostrEvent(
     val created_at: Long,
 )
 
-/** Parsed metadata for a single image within a post. */
+/** Mirrors nmp_nip92_types::MediaDimensions JSON. */
+@Serializable
+data class ImageDimensions(val width: Int, val height: Int)
+
+/** Mirrors nmp_nip92_types::MediaMeta JSON (aliased as ImageMeta in nmp_nip68). */
 @Serializable
 data class ImageMeta(
     val url: String,
     val sha256: String? = null,
     val mime: String? = null,
-    val width: Int? = null,
-    val height: Int? = null,
+    val dimensions: ImageDimensions? = null,
     val blurhash: String? = null,
     val alt: String? = null,
 )
 
-/** A fully-parsed kind-20 photo post ready for rendering. */
+/** Mirrors nmp_nip68::PictureEventRecord JSON. */
 @Serializable
 data class PhotoPost(
-    val id: String,
-    val authorPubkey: String,
+    @SerialName("event_id") val id: String,
+    @SerialName("author") val authorPubkey: String,
     val authorName: String? = null,
     val authorAvatar: String? = null,
     val images: List<ImageMeta>,
-    val caption: String,
+    @SerialName("content") val content: String,
     val hashtags: List<String>,
-    val reactionCount: Int,
-    val commentCount: Int,
-    val zapTotal: Long,
-    val createdAt: Long,
-)
+    @SerialName("created_at") val createdAt: Long,
+    // Client-only counters — not in Rust JSON output.
+    val reactionCount: Int = 0,
+    val commentCount: Int = 0,
+    val zapTotal: Long = 0L,
+) {
+    val caption: String get() = content
+}
 
 /** A Nostr profile (kind-0). */
 @Serializable

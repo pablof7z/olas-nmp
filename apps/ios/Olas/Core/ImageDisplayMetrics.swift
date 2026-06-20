@@ -2,7 +2,7 @@ import Foundation
 
 enum ImageDisplayMetrics {
     static func aspectRatio(for image: ImageMeta) -> CGFloat {
-        guard let w = image.width, let h = image.height, w > 0, h > 0 else {
+        guard let w = image.dimensions?.width, let h = image.dimensions?.height, w > 0, h > 0 else {
             return 4.0 / 5.0 // default portrait
         }
         let ratio = CGFloat(w) / CGFloat(h)

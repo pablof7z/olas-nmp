@@ -10,12 +10,10 @@ license = "MIT"
 repository = "https://github.com/pablof7z/olas"
 version = "0.1.0"
 
-# NMP crates — pin all to the same rev so the workspace compiles exactly
-# one copy of each NMP type. When bumping NMP:
-#   1. Bump all rev entries below to the new rev.
-#   2. Bump the [patch] paths if still using local checkout.
-#
-# Current rev: 4d65f241ebc4a2e320046364e5e3fe4a5443466f (NMP v0.8.0)
+# NMP crates — patched to the local checkout at ../nostr-multi-platform so that
+# nmp-nip68 (not yet published to git at the pinned rev) resolves correctly.
+# To switch back to a pinned git rev, remove the [patch] section below and
+# restore the rev = "..." entries here.
 [workspace.dependencies]
 nmp-core     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
 nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
@@ -24,19 +22,22 @@ nmp-blossom  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-mul
 nmp-nip57    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
 nmp-nip02    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
 nmp-wot      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
+nmp-nip68       = { path = "../nostr-multi-platform/crates/nmp-nip68" }
+nmp-nip92-types = { path = "../nostr-multi-platform/crates/nmp-nip92-types" }
 
 nostr      = "0.44"
 serde      = "1.0"
 serde_json = "1.0"
 jni        = { version = "0.21", features = ["invocation"] }
 
-# Uncomment during local NMP development to use the checkout at ../nostr-multi-platform
-# instead of fetching from git. Keep all paths in sync with workspace.dependencies above.
-#[patch."https://github.com/pablof7z/nostr-multi-platform.git"]
-#nmp-core     = { path = "../nostr-multi-platform/crates/nmp-core" }
-#nmp-defaults = { path = "../nostr-multi-platform/crates/nmp-defaults" }
-#nmp-ffi      = { path = "../nostr-multi-platform/crates/nmp-ffi" }
-#nmp-blossom  = { path = "../nostr-multi-platform/crates/nmp-blossom" }
-#nmp-nip57    = { path = "../nostr-multi-platform/crates/nmp-nip57" }
-#nmp-nip02    = { path = "../nostr-multi-platform/crates/nmp-nip02" }
-#nmp-wot      = { path = "../nostr-multi-platform/crates/nmp-wot" }
+# Override all pinned git deps with the local checkout so every NMP crate
+# resolves to the same source tree — required when nmp-nip68 (a path dep)
+# transitively depends on nmp-core from local paths.
+[patch."https://github.com/pablof7z/nostr-multi-platform.git"]
+nmp-core     = { path = "../nostr-multi-platform/crates/nmp-core" }
+nmp-defaults = { path = "../nostr-multi-platform/crates/nmp-defaults" }
+nmp-ffi      = { path = "../nostr-multi-platform/crates/nmp-ffi" }
+nmp-blossom  = { path = "../nostr-multi-platform/crates/nmp-blossom" }
+nmp-nip57    = { path = "../nostr-multi-platform/crates/nmp-nip57" }
+nmp-nip02    = { path = "../nostr-multi-platform/crates/nmp-nip02" }
+nmp-wot      = { path = "../nostr-multi-platform/crates/nmp-wot" }

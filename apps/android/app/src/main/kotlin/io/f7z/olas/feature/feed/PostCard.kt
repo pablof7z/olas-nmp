@@ -71,10 +71,10 @@ fun PostCard(
         // Image(s) — full bleed, aspect ratio capped at 4:5
         val firstImage = post.images.firstOrNull()
         if (firstImage != null) {
-            val nativeRatio = if (firstImage.width != null && firstImage.height != null && firstImage.height > 0)
-                firstImage.width.toFloat() / firstImage.height.toFloat()
-            else
-                1f
+            val nativeRatio = firstImage.dimensions
+                ?.takeIf { it.height > 0 }
+                ?.let { it.width.toFloat() / it.height.toFloat() }
+                ?: 1f
             // Cap portrait ratio at 4:5 (0.8), landscape at 3:2 (1.5)
             val displayRatio = nativeRatio.coerceIn(0.8f, 1.5f)
 

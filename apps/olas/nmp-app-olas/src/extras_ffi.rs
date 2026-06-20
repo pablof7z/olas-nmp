@@ -5,10 +5,13 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+use nmp_core::substrate::KernelEvent;
+
 // ─── Event decoders ──────────────────────────────────────────────────────────
 
-/// Parses a raw Nostr kind:20 event JSON and returns a PhotoPost JSON string.
-/// Returns NULL if no "imeta" tag has a "url" key.
+/// Decodes a KernelEvent JSON string for a kind:20 picture event into a
+/// `PictureEventRecord` JSON string (nmp_nip68 canonical shape).
+/// Returns NULL if the event is not a valid NIP-68 kind:20 with at least one imeta image.
 /// Returned string must be freed with nmp_free_string.
 #[no_mangle]
 pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *mut c_char {
@@ -20,109 +23,16 @@ pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *m
             Ok(s) => s,
             Err(_) => return std::ptr::null_mut(),
         };
-        let event: serde_json::Value = match serde_json::from_str(json_str) {
+        let event: KernelEvent = match serde_json::from_str(json_str) {
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
-
-        let id = event.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let author = event.get("author").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let created_at = event.get("created_at").and_then(|v| v.as_i64()).unwrap_or(0);
-        let caption = event.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
-
-        let tags = match event.get("tags").and_then(|v| v.as_array()) {
-            Some(t) => t,
+        let record = match nmp_nip68::try_from_kernel_event(&event) {
+            Some(r) => r,
             None => return std::ptr::null_mut(),
         };
-
-        // Extract hashtags from "t" tags
-        let hashtags: Vec<serde_json::Value> = tags
-            .iter()
-            .filter_map(|tag| {
-                let arr = tag.as_array()?;
-                if arr.first()?.as_str()? == "t" {
-                    arr.get(1)?.as_str().map(|s| serde_json::Value::String(s.to_string()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Parse "imeta" tags
-        let mut images: Vec<serde_json::Value> = Vec::new();
-        for tag in tags {
-            let arr = match tag.as_array() {
-                Some(a) => a,
-                None => continue,
-            };
-            if arr.first().and_then(|v| v.as_str()) != Some("imeta") {
-                continue;
-            }
-            // Each subsequent element is "key value"
-            let mut url: Option<String> = None;
-            let mut sha256: Option<String> = None;
-            let mut mime: Option<String> = None;
-            let mut width: Option<i64> = None;
-            let mut height: Option<i64> = None;
-            let mut blurhash: Option<String> = None;
-            let mut alt: Option<String> = None;
-
-            for elem in arr.iter().skip(1) {
-                let s = match elem.as_str() {
-                    Some(s) => s,
-                    None => continue,
-                };
-                if let Some(val) = s.strip_prefix("url ") {
-                    url = Some(val.to_string());
-                } else if let Some(val) = s.strip_prefix("x ") {
-                    sha256 = Some(val.to_string());
-                } else if let Some(val) = s.strip_prefix("m ") {
-                    mime = Some(val.to_string());
-                } else if let Some(val) = s.strip_prefix("dim ") {
-                    // "WxH"
-                    let parts: Vec<&str> = val.splitn(2, 'x').collect();
-                    if parts.len() == 2 {
-                        width = parts[0].parse().ok();
-                        height = parts[1].parse().ok();
-                    }
-                } else if let Some(val) = s.strip_prefix("blurhash ") {
-                    blurhash = Some(val.to_string());
-                } else if let Some(val) = s.strip_prefix("alt ") {
-                    alt = Some(val.to_string());
-                }
-            }
-
-            if let Some(u) = url {
-                images.push(serde_json::json!({
-                    "url": u,
-                    "sha256": sha256,
-                    "mime": mime,
-                    "width": width,
-                    "height": height,
-                    "blurhash": blurhash,
-                    "alt": alt,
-                }));
-            }
-        }
-
-        if images.is_empty() {
-            return std::ptr::null_mut();
-        }
-
-        let photo_post = serde_json::json!({
-            "id": id,
-            "authorPubkey": author,
-            "images": images,
-            "caption": caption,
-            "hashtags": hashtags,
-            "reactionCount": 0,
-            "commentCount": 0,
-            "zapTotal": 0,
-            "createdAt": created_at,
-        });
-
-        match serde_json::to_string(&photo_post) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+        match CString::new(serde_json::to_string(&record).unwrap_or_default()) {
+            Ok(c) => c.into_raw(),
             Err(_) => std::ptr::null_mut(),
         }
     }));
