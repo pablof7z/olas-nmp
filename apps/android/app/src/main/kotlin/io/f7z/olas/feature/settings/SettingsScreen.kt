@@ -19,9 +19,12 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,12 +34,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.remember
 import androidx.navigation.NavController
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.OlasSound
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
@@ -45,6 +50,8 @@ fun SettingsScreen(navController: NavController) {
     // Settings catalog loaded from Rust; local structure mirrors the canonical Rust catalog.
     val settingsCatalog = remember { NMPBridge.settingsCatalogJson() }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var soundEffectsEnabled by remember { mutableStateOf(OlasSound.isEnabled(context)) }
 
     if (showLogoutConfirm) {
         AlertDialog(
@@ -87,6 +94,19 @@ fun SettingsScreen(navController: NavController) {
             SettingsRow(icon = Icons.Filled.Tune, label = "Web of Trust") {
                 navController.navigate(Routes.WOT_SETTINGS)
             }
+        }
+        item {
+            Spacer(Modifier.height(16.dp))
+            SettingsSectionHeader("Sound")
+        }
+        item {
+            SoundEffectsRow(
+                enabled = soundEffectsEnabled,
+                onToggle = { enabled ->
+                    soundEffectsEnabled = enabled
+                    OlasSound.setEnabled(context, enabled)
+                },
+            )
         }
         item {
             Spacer(Modifier.height(16.dp))
@@ -172,6 +192,34 @@ fun SettingsRow(
             imageVector        = Icons.Filled.ChevronRight,
             contentDescription = null,
             tint               = OlasColors.Text3,
+        )
+    }
+    HorizontalDivider(color = OlasColors.Border.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 52.dp))
+}
+
+@Composable
+private fun SoundEffectsRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = Icons.Filled.VolumeUp, contentDescription = null, tint = OlasColors.Text2)
+        Text(
+            text     = "Sound Effects",
+            fontSize = 17.sp,
+            color    = OlasColors.Text1,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
+        Switch(
+            checked         = enabled,
+            onCheckedChange = onToggle,
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor   = OlasColors.Background,
+                checkedTrackColor   = OlasColors.Text1,
+                uncheckedTrackColor = OlasColors.Surface2,
+            ),
         )
     }
     HorizontalDivider(color = OlasColors.Border.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 52.dp))

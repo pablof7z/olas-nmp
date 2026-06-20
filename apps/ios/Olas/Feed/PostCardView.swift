@@ -96,6 +96,7 @@ struct PostCardView: View {
     }
 
     private func triggerHeartBurst(at point: CGPoint) {
+        OlasHaptics.impactLight()
         heartBurstLocation = point
         withAnimation(.olasBouncy, completionCriteria: .logicallyComplete) {
             showHeartBurst = true

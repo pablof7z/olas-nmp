@@ -18,6 +18,7 @@ struct FeedView: View {
                     // New posts pill
                     if vm.pendingNewCount > 0 {
                         Button {
+                            OlasHaptics.impactSoft()
                             withAnimation(.olasStandard) {
                                 vm.revealNewPosts()
                             }
@@ -63,6 +64,10 @@ struct FeedView: View {
             }
             .refreshable { vm.refresh() }
             .background(Color.olasBackground)
+            .onChange(of: vm.pendingNewCount) { oldValue, newValue in
+                // Fire a subtle selection tick the moment the first new-posts batch arrives.
+                if oldValue == 0 && newValue > 0 { OlasHaptics.selectionChanged() }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -118,6 +123,7 @@ struct FeedView: View {
 
     private func switchMode(_ mode: FeedMode) {
         guard mode != currentMode else { return }
+        OlasHaptics.selectionChanged()
         NMPBridge.shared.setFeedMode(mode == .following ? "following" : "network")
         vm.start(mode: mode)
         // NMP is always running when the user can interact with the mode picker.

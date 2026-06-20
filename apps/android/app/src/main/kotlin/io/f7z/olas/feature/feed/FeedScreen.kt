@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import io.f7z.olas.core.FeedMode
+import io.f7z.olas.core.OlasHaptics
 import io.f7z.olas.ui.components.shimmer
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
@@ -51,6 +53,7 @@ fun FeedScreen(navController: NavController) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val view = LocalView.current
 
     // Mirror iOS: honour system Reduce Motion so shimmer + crossfade are suppressed.
     val reduceMotion = androidx.compose.ui.platform.LocalContext.current.let {
@@ -82,12 +85,18 @@ fun FeedScreen(navController: NavController) {
         ) {
             Tab(
                 selected = state.feedMode == FeedMode.FOLLOWING,
-                onClick  = { vm.switchMode(FeedMode.FOLLOWING) },
+                onClick  = {
+                    OlasHaptics.selectionChanged(view)
+                    vm.switchMode(FeedMode.FOLLOWING)
+                },
                 text     = { Text("Following", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) },
             )
             Tab(
                 selected = state.feedMode == FeedMode.NETWORK,
-                onClick  = { vm.switchMode(FeedMode.NETWORK) },
+                onClick  = {
+                    OlasHaptics.selectionChanged(view)
+                    vm.switchMode(FeedMode.NETWORK)
+                },
                 text     = { Text("Network", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) },
             )
         }
@@ -142,6 +151,10 @@ fun FeedScreen(navController: NavController) {
 
             // "N new posts" pill
             if (state.hasNewPosts) {
+                // Fire a subtle selection tick when the pill first appears.
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    OlasHaptics.selectionChanged(view)
+                }
                 val count = state.pendingPosts.size
                 Box(
                     modifier = Modifier
@@ -150,6 +163,7 @@ fun FeedScreen(navController: NavController) {
                         .clip(RoundedCornerShape(100.dp))
                         .background(OlasColors.Text1)
                         .clickable {
+                            OlasHaptics.impactSoft(view)
                             vm.showNewPosts()
                             scope.launch { listState.animateScrollToItem(0) }
                         }

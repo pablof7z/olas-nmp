@@ -90,6 +90,8 @@ final class UploadQueue {
         }
 
         setStep(.done)
+        OlasHaptics.notificationSuccess()
+        OlasSound.shutterSoft()
         Task { try? await Task.sleep(for: .seconds(3)); clearTerminal() }
     }
 

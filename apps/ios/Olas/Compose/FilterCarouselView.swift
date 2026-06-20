@@ -160,6 +160,7 @@ struct FilterCarouselView: View {
     private func filterCell(_ filter: FilterDefinition) -> some View {
         let isSelected = selectedFilterId == filter.id
         return Button {
+            OlasHaptics.impactRigid()
             selectedFilterId = filter.id
             applySelected()
         } label: {
