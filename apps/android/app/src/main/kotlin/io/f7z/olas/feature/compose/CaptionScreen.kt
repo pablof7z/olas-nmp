@@ -155,7 +155,10 @@ fun CaptionScreen(
         }
 
         Button(
-            onClick  = { vm.upload(context, uris, caption, altTexts) },
+            onClick  = {
+                val geohash = if (locationEnabled) currentCoarseGeohash4(context) else null
+                vm.upload(context, uris, caption, altTexts, geohash)
+            },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape    = RoundedCornerShape(12.dp),
             enabled  = shareReady && (state.step == UploadStep.IDLE || state.step == UploadStep.ERROR),

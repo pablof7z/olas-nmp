@@ -132,10 +132,24 @@ struct NotificationsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {} label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    Menu {
+                        ForEach(NotificationsTab.allCases, id: \.self) { tab in
+                            Button {
+                                withAnimation(.olasStandard) { selectedTab = tab }
+                            } label: {
+                                if selectedTab == tab {
+                                    Label(tab.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(tab.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: selectedTab == .all
+                              ? "line.3.horizontal.decrease.circle"
+                              : "line.3.horizontal.decrease.circle.fill")
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(Color.olasText2)
+                            .foregroundStyle(selectedTab == .all ? Color.olasText2 : Color.olasText1)
                     }
                 }
             }

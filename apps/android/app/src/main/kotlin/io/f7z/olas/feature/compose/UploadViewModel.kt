@@ -47,7 +47,7 @@ class UploadViewModel : ViewModel() {
      * event JSON, no signing, no imeta assembly happen here. D8: no polling —
      * each Rust action terminal resolves a suspended awaiter.
      */
-    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>) {
+    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>, geohash: String? = null) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
@@ -60,7 +60,7 @@ class UploadViewModel : ViewModel() {
                 val uri = uris.first()
                 _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
                 val publishInput = withContext(Dispatchers.IO) {
-                    uploadOne(appContext, uri, caption, altTexts[uri])
+                    uploadOne(appContext, uri, caption, altTexts[uri], geohash)
                 }
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
@@ -84,7 +84,7 @@ class UploadViewModel : ViewModel() {
      * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
      * JSON (built in Rust). Returns null on any failure.
      */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String {
+    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?, geohash: String?): String {
         // 1. Load upload config from Rust (max_dimension, jpeg_quality).
         val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
         val config = runCatching { JSONObject(configJson) }.getOrNull()
@@ -135,7 +135,7 @@ class UploadViewModel : ViewModel() {
                 caption = caption,
                 alt = alt,
                 dim = dim,
-                geohash = null,
+                geohash = geohash,
             ) ?: throw IllegalStateException("Failed to build publish input from upload result")
         } finally {
             tmp.delete()
