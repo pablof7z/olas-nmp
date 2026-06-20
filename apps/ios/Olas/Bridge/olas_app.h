@@ -86,17 +86,21 @@ void nmp_free_string(char* s);
 
 // ── Olas-specific additions ───────────────────────────────────────────────────
 
-/// Seed the four canonical Olas relays (call once after nmp_app_start).
+/// Declare the four canonical Olas relays before nmp_app_start.
+/// Normal startup gets this through olas_app_register.
+uint32_t olas_declare_initial_relays(void* app);
+
+/// Seed the four canonical Olas relays on a running app after an explicit reset.
 /// Adds relay.damus.io, nos.lol, relay.primal.net (role "both") and
 /// purplepag.es (role "indexer"). Safe to call again after a relay-config reset.
 void olas_seed_default_relays(void* app);
 
-/// Open a NIP-50 search interest (kinds 0 + 20) for the given query string.
-/// Scope is global (1). Close with olas_close_search_feed using the same
-/// query and consumer_id.
+/// Open Olas search interests for the given query string. Profile search keeps
+/// a profile-only kind:0 interest; photo search is a typed kind:20 photo-feed
+/// projection under consumer_id.
 void olas_open_search_feed(void* app, const char* query, const char* consumer_id);
 
-/// Close the NIP-50 search interest opened with olas_open_search_feed.
+/// Close the search interests opened with olas_open_search_feed.
 /// Must be called with the same query and consumer_id as the matching open call.
 void olas_close_search_feed(void* app, const char* query, const char* consumer_id);
 
@@ -108,11 +112,19 @@ void olas_create_account(void* app, const char* name, const char* username);
 /// Wires nmp-defaults (follow/unfollow/react/zap/routing) and nmp-blossom upload action.
 void olas_app_register(void* app);
 
-/// Open NIP-68 kind:20 photo feed.
-/// contact_list_only=1 → Following feed (contact-list scoped, scope 0).
-/// contact_list_only=0 → Network feed (global, scope 1).
-/// consumer_id identifies this subscription; close with nmp_app_close_interest.
+/// Open NIP-68 primary kind:20 photo feed.
+/// contact_list_only=1 -> Following feed (reactive active-account follow set).
+/// contact_list_only=0 -> Network feed (global relay pull with Rust WoT filter).
+/// NMP derives kind:16 repost-wrapper acquisition from the primary declaration.
 void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* consumer_id);
+
+/// Decode the Rust-owned photo-feed projection for the requested feed key.
+/// Returned string is a JSON array of PhotoPost rows; caller frees with nmp_free_string.
+char* olas_decode_snapshot_photo_feed_json(const uint8_t* frame, size_t len, const char* key);
+
+/// Read the current Rust-owned photo-feed projection for the requested feed key.
+/// Returned string is a JSON array of PhotoPost rows; caller frees with nmp_free_string.
+char* olas_current_photo_feed_json(void* app, const char* key);
 
 /// Open a kind:20 photo feed filtered to a single author (profile grid).
 /// consumer_id identifies this subscription; close with olas_close_author_photo_feed.
@@ -180,12 +192,23 @@ char* olas_picture_post_publish_json(const char* blossom_result_json, const char
 // Event decoders (caller must free with nmp_free_string)
 char* olas_decode_kind20_event_json(const char* event_json);
 char* olas_decode_kind0_event_json(const char* event_json);
+char* olas_profile_json(const char* event_json);
+char* olas_notification_json(const char* event_json);
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
+char* olas_default_relays_json(void);
+
+// Action builders (caller must free with nmp_free_string)
+char* olas_react_action_json(const char* target_event_id, const char* target_author_pubkey);
+char* olas_zap_action_json(const char* recipient_pubkey, const char* target_event_id, uint64_t amount_msats, const char* comment);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
 
 // Bolt11 parsing (returns msats or -1 on error; no memory to free)
 long long olas_bolt11_amount_msats(const char* bolt11);
+uint64_t olas_bolt11_amount_sats(const char* bolt11);
 
 // Geohash (caller must free with nmp_free_string)
 char* olas_compute_geohash(double lat, double lon, int precision);
+char* olas_location_geohash4(double latitude, double longitude);
 
 // Zap action builder (caller must free with nmp_free_string)
 char* olas_build_zap_action_json(const char* event_id, long long sats);
@@ -209,28 +232,6 @@ void  olas_blossom_server_url_set(void* app, const char* url);
 char* olas_feed_mode_get(void* app);
 void  olas_feed_mode_set(void* app, const char* mode);
 
-// Default relay list (caller must free with nmp_free_string)
-// Returns JSON array of DefaultRelay objects: [{id, url, role, connected}]
-char* olas_default_relays_json(void);
-
-// Social action builders (caller must free with nmp_free_string)
-// These return JSON suitable for nmp_app_dispatch_action.
-char* olas_react_action_json(const char* event_id, const char* author_pubkey);
-char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
-char* olas_zap_action_json(const char* recipient_pubkey, const char* event_id, uint64_t amount_msats, const char* comment);
-
-// Event model decoders (caller must free with nmp_free_string)
-// Filter and decode a kind:20 event; returns PhotoPost JSON or NULL if filtered out.
-char* olas_filter_photo_post_json(const char* event_json, uint8_t contact_list_only, const char* wot_preset);
-// Decode a kind:0 profile event to OlasProfile JSON (NULL if invalid).
-char* olas_profile_json(const char* event_json);
-// Decode a notification event to OlasNotification JSON (NULL if invalid).
-char* olas_notification_json(const char* event_json);
-// Extract contact list pubkeys from a kind:3 event; returns JSON array of pubkey strings.
-char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
-
-// Bolt11 amount in satoshis (returns 0 on error; no memory to free)
-uint64_t olas_bolt11_amount_sats(const char* bolt11);
-
-// Location geohash (4-char precision; caller must free with nmp_free_string)
-char* olas_location_geohash4(double latitude, double longitude);
+// Network-feed WoT preset (caller must free get result with nmp_free_string)
+char* olas_wot_preset_get(void* app);
+void  olas_wot_preset_set(void* app, const char* preset);

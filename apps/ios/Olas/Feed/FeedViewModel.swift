@@ -7,31 +7,23 @@ final class FeedViewModel {
     var isLoading = false
     var pendingNewCount = 0
     private var pendingPosts: [PhotoPost] = []
-    private var seenIds: Set<String> = []
     private var handlerRegistered = false
-    private var loadingTimeoutTask: Task<Void, Never>?
 
     func start(mode: FeedMode) {
+        let shouldReset = !handlerRegistered || self.mode != mode
         self.mode = mode
-        self.posts = []
-        self.seenIds = []
-        self.pendingNewCount = 0
-        self.pendingPosts = []
-        isLoading = true
-
-        // Clear the feed after 12s if no decodable posts arrived — avoids infinite skeleton.
-        loadingTimeoutTask?.cancel()
-        loadingTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
-            guard !Task.isCancelled else { return }
-            self?.isLoading = false
+        if shouldReset {
+            self.posts = []
+            self.pendingNewCount = 0
+            self.pendingPosts = []
+            isLoading = true
         }
 
         // Register only once — each call to start() must not stack handlers.
         if !handlerRegistered {
             handlerRegistered = true
-            NMPBridge.shared.addEventHandler { [weak self] json in
-                self?.handleEvent(json)
+            NMPBridge.shared.addPhotoFeedUpdateHandler { [weak self] key, posts in
+                self?.handlePhotoFeedSnapshot(key: key, posts: posts)
             }
             NMPBridge.shared.addProfileUpdateHandler { [weak self] cache in
                 self?.applyProfileCache(cache)
@@ -48,63 +40,36 @@ final class FeedViewModel {
         case .following: NMPBridge.shared.openFollowingFeed()
         case .network:   NMPBridge.shared.openNetworkFeed()
         }
+        applyCurrentProjectionIfLoaded()
     }
 
-    func handleEvent(_ json: String) {
-        guard let data = json.data(using: .utf8),
-              let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
-        switch event.kind {
-        case 20:
-            guard let postJSON = NMPBridge.shared.decodeKind20Event(json),
-                  let postData = postJSON.data(using: .utf8),
-                  var post = try? JSONDecoder().decode(PhotoPost.self, from: postData) else { return }
-            guard !seenIds.contains(post.id) else { return }
-            seenIds.insert(post.id)
-            isLoading = false
-            loadingTimeoutTask?.cancel()
-            // Apply any already-cached profile for this author immediately.
-            if let cached = NMPBridge.shared.profileCache[event.author] {
-                post.authorName = cached.display.isEmpty ? nil : cached.display
-                post.authorAvatar = cached.pictureUrl
-            }
-            // Request kind:0 profile metadata (force=1 bypasses EventStore dedup).
-            NMPBridge.shared.claimProfile(pubkey: event.author, consumer: "olas.feed")
-            if posts.isEmpty {
-                posts.insert(post, at: 0)
-            } else {
-                pendingPosts.insert(post, at: 0)
-                pendingNewCount = pendingPosts.count
-            }
-        case 0:
-            guard let profileJSON = NMPBridge.shared.decodeKind0Event(json),
-                  let profileData = profileJSON.data(using: .utf8),
-                  let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) else { return }
-            let name = parsed.displayName ?? parsed.name
-            let avatar = parsed.picture
-            guard name != nil || avatar != nil else { return }
-            func apply(to post: inout PhotoPost) {
-                if let n = name { post.authorName = n }
-                if let a = avatar { post.authorAvatar = a }
-            }
-            for i in posts.indices where posts[i].authorPubkey == event.author { apply(to: &posts[i]) }
-            for i in pendingPosts.indices where pendingPosts[i].authorPubkey == event.author { apply(to: &pendingPosts[i]) }
-        default:
-            break
+    func handlePhotoFeedSnapshot(key: String, posts snapshotPosts: [PhotoPost]) {
+        guard key == currentFeedKey else { return }
+        var nextPosts = snapshotPosts
+        applyProfileCache(NMPBridge.shared.profileCache, to: &nextPosts)
+        for post in nextPosts {
+            NMPBridge.shared.claimProfile(pubkey: post.authorPubkey, consumer: "olas.feed")
         }
+        posts = nextPosts
+        pendingPosts = []
+        pendingNewCount = 0
+        isLoading = false
     }
 
     // Apply profile cache updates to all feed posts (called when snapshot delivers profiles).
     private func applyProfileCache(_ cache: [String: ProfileWire]) {
+        applyProfileCache(cache, to: &posts)
+        applyProfileCache(cache, to: &pendingPosts)
+    }
+
+    private func applyProfileCache(_ cache: [String: ProfileWire], to target: inout [PhotoPost]) {
         func apply(to post: inout PhotoPost, cached: ProfileWire) {
             let name = cached.display
             if !name.isEmpty { post.authorName = name }
             if let a = cached.pictureUrl, !a.isEmpty { post.authorAvatar = a }
         }
-        for i in posts.indices {
-            if let cached = cache[posts[i].authorPubkey] { apply(to: &posts[i], cached: cached) }
-        }
-        for i in pendingPosts.indices {
-            if let cached = cache[pendingPosts[i].authorPubkey] { apply(to: &pendingPosts[i], cached: cached) }
+        for i in target.indices {
+            if let cached = cache[target[i].authorPubkey] { apply(to: &target[i], cached: cached) }
         }
     }
 
@@ -116,7 +81,6 @@ final class FeedViewModel {
 
     func refresh() {
         posts = []
-        seenIds = []
         pendingNewCount = 0
         pendingPosts = []
         isLoading = true
@@ -126,8 +90,17 @@ final class FeedViewModel {
     }
 
     func loadMore() {
-        let feedKey = mode == .following ? "olas.following_feed" : "olas.network_feed"
-        NMPBridge.shared.loadOlderFeed(key: feedKey)
+        NMPBridge.shared.loadOlderFeed(key: currentFeedKey)
+    }
+
+    private var currentFeedKey: String {
+        mode == .following ? "olas.following_feed" : "olas.network_feed"
+    }
+
+    private func applyCurrentProjectionIfLoaded() {
+        guard let snapshot = NMPBridge.shared.currentPhotoFeed(key: currentFeedKey),
+              !snapshot.isEmpty else { return }
+        handlePhotoFeedSnapshot(key: currentFeedKey, posts: snapshot)
     }
 
     // NMP-GAP(#24): Reaction state will be updated by the Rust photo-feed projection.

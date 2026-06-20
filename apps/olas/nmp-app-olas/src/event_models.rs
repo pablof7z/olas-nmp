@@ -41,6 +41,10 @@ const DEFAULT_RELAYS: &[DefaultRelay] = &[
     },
 ];
 
+pub(crate) fn default_relay_rows() -> impl Iterator<Item = (&'static str, &'static str)> {
+    DEFAULT_RELAYS.iter().map(|relay| (relay.url, relay.role))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DefaultRelay {
@@ -58,11 +62,11 @@ pub extern "C" fn olas_add_default_relays(app: *mut NmpApp) {
         if app.is_null() {
             return;
         }
-        for relay in DEFAULT_RELAYS {
-            let Ok(url) = CString::new(relay.url) else {
+        for (relay_url, relay_role) in default_relay_rows() {
+            let Ok(url) = CString::new(relay_url) else {
                 continue;
             };
-            let Ok(role) = CString::new(relay.role) else {
+            let Ok(role) = CString::new(relay_role) else {
                 continue;
             };
             nmp_ffi::nmp_app_add_relay(app, url.as_ptr(), role.as_ptr());

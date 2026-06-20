@@ -42,6 +42,7 @@ data class PhotoPost(
     @SerialName("content") val content: String,
     val hashtags: List<String> = emptyList(),
     @SerialName("created_at") val createdAt: Long,
+    val repostedBy: PhotoRepostAttribution? = null,
     // Client-only counters — not in Rust JSON output.
     val reactionCount: Int = 0,
     val commentCount: Int = 0,
@@ -49,6 +50,13 @@ data class PhotoPost(
 ) {
     val caption: String get() = content
 }
+
+@Serializable
+data class PhotoRepostAttribution(
+    val authorPubkey: String,
+    val repostEventId: String,
+    val repostCreatedAt: Long,
+)
 
 /** A Nostr profile (kind-0). */
 @Serializable

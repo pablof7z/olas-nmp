@@ -28,6 +28,7 @@ struct PhotoPost: Identifiable, Codable {
     let content: String      // JSON: "content" (caption text)
     let hashtags: [String]
     let createdAt: Int64     // JSON: "created_at"
+    let repostedBy: PhotoRepostAttribution?
     // Client-only state — not in Rust JSON output, excluded from CodingKeys.
     var reactionCount: Int = 0
     var commentCount: Int = 0
@@ -42,6 +43,7 @@ struct PhotoPost: Identifiable, Codable {
         case authorPubkey = "author"
         case authorName, authorAvatar, images, content, hashtags
         case createdAt = "created_at"
+        case repostedBy
     }
 
     // Rust skips empty arrays (skip_serializing_if = "Vec::is_empty"), so
@@ -56,7 +58,14 @@ struct PhotoPost: Identifiable, Codable {
         content = try c.decode(String.self, forKey: .content)
         hashtags = try c.decodeIfPresent([String].self, forKey: .hashtags) ?? []
         createdAt = try c.decode(Int64.self, forKey: .createdAt)
+        repostedBy = try c.decodeIfPresent(PhotoRepostAttribution.self, forKey: .repostedBy)
     }
+}
+
+struct PhotoRepostAttribution: Codable, Equatable {
+    let authorPubkey: String
+    let repostEventId: String
+    let repostCreatedAt: Int64
 }
 
 // Mirrors nmp_nip92_types::MediaDimensions JSON.

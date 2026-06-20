@@ -36,12 +36,14 @@ import Combine
 
     func openSearchFeed(query: String, consumer: String) {
         guard let app = appPtr else { return }
+        registerPhotoFeedKey(consumer)
         query.withCString { q in consumer.withCString { c in olas_open_search_feed(app, q, c) } }
     }
 
     func closeSearchFeed(query: String, consumer: String) {
         guard let app = appPtr else { return }
         query.withCString { q in consumer.withCString { c in olas_close_search_feed(app, q, c) } }
+        unregisterPhotoFeedKey(consumer)
     }
 
     private init() {}
@@ -63,9 +65,6 @@ import Combine
 
         registerCallbacks(app: app)
         nmp_app_start(app, 0, 100, 4)
-
-        // Default relay set lives in Rust — no URLs hardcoded in Swift (D3).
-        olas_seed_default_relays(app)
 
         setupCombinePipelines()
         isRunning = true
@@ -120,9 +119,28 @@ import Combine
     // Fast-path dedup for snapshot ticks (~100ms cadence): skip the MainActor hop
     // when the JSON payload hasn't changed since the last tick.
     // nonisolated(unsafe): read/written from background Rust callbacks under tickLock.
-    nonisolated(unsafe) var lastProfilesJSON = ""
-    nonisolated(unsafe) var lastActiveAccountJSON = ""
-    nonisolated(unsafe) let tickLock = NSLock()
+    @ObservationIgnored nonisolated(unsafe) var lastProfilesJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastActiveAccountJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastPhotoFeedJSON: [String: String] = [:]
+    @ObservationIgnored nonisolated(unsafe) var photoFeedKeys: Set<String> = ["olas.following_feed", "olas.network_feed"]
+    @ObservationIgnored let tickLock = NSLock()
+
+    static func authorPhotoFeedKey(pubkey: String) -> String { "olas.author.\(pubkey)" }
+
+    nonisolated func snapshotPhotoFeedKeys() -> [String] {
+        tickLock.withLock { Array(photoFeedKeys) }
+    }
+
+    private func registerPhotoFeedKey(_ key: String) {
+        tickLock.withLock { _ = photoFeedKeys.insert(key) }
+    }
+
+    private func unregisterPhotoFeedKey(_ key: String) {
+        tickLock.withLock {
+            photoFeedKeys.remove(key)
+            lastPhotoFeedJSON.removeValue(forKey: key)
+        }
+    }
 
     func scheduleProfileFlush(_ json: String) {
         profilePipe.send(json)
@@ -155,9 +173,14 @@ import Combine
     // MARK: - Profile cache (from claimed_profiles snapshot projection)
 
     private var profileUpdateHandlers: [([String: ProfileWire]) -> Void] = []
+    private var photoFeedUpdateHandlers: [(String, [PhotoPost]) -> Void] = []
 
     func addProfileUpdateHandler(_ handler: @escaping ([String: ProfileWire]) -> Void) {
         profileUpdateHandlers.append(handler)
+    }
+
+    func addPhotoFeedUpdateHandler(_ handler: @escaping (String, [PhotoPost]) -> Void) {
+        photoFeedUpdateHandlers.append(handler)
     }
 
     func handleActiveAccountJSON(_ json: String) {
@@ -165,6 +188,12 @@ import Combine
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let pubkey = obj["pubkey"], !pubkey.isEmpty else { return }
         if activeAccountPubkey != pubkey { activeAccountPubkey = pubkey }
+    }
+
+    func handlePhotoFeedJSON(key: String, json: String) {
+        guard let data = json.data(using: .utf8),
+              let posts = try? JSONDecoder().decode([PhotoPost].self, from: data) else { return }
+        photoFeedUpdateHandlers.forEach { $0(key, posts) }
     }
 
     private func handleClaimedProfilesJSON(_ json: String) {
@@ -224,10 +253,9 @@ import Combine
         }
     }
 
-    // NMP-GAP(#18): dispatchAndAwaitResult suspends on an action terminal, making native
-    // Swift the owner of the upload/publish lifecycle state machine. Once NMP ships a
-    // stream-based action-result projection, this bridging shim must be removed.
-    func dispatchAndAwaitResult(namespace: String, json: String, timeoutSeconds: Double = 30) async -> ActionTerminal? {
+    // Suspends until Rust reports the action terminal through the action_results
+    // snapshot projection. No native timeout or optimistic terminal is synthesized.
+    func dispatchAndAwaitResult(namespace: String, json: String) async -> ActionTerminal? {
         guard let returnJSON = dispatchAction(namespace: namespace, json: json),
               let data = returnJSON.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -235,13 +263,6 @@ import Combine
         return await withCheckedContinuation { [weak self] continuation in
             guard let self else { continuation.resume(returning: nil); return }
             self.actionResultWaiters[cid] = continuation
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                // Already on @MainActor (Task inherits actor from creation context).
-                if let waiter = self?.actionResultWaiters.removeValue(forKey: cid) {
-                    waiter.resume(returning: ActionTerminal(status: "published", resultJSON: "null"))
-                }
-            }
         }
     }
 
@@ -266,7 +287,8 @@ import Combine
 
     func openAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
-        let consumer = "olas.author.\(pubkey)"
+        let consumer = Self.authorPhotoFeedKey(pubkey: pubkey)
+        registerPhotoFeedKey(consumer)
         pubkey.withCString { pk in consumer.withCString { cid in
             olas_open_author_photo_feed(app, pk, cid)
         }}
@@ -274,10 +296,21 @@ import Combine
 
     func closeAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
-        let consumer = "olas.author.\(pubkey)"
+        let consumer = Self.authorPhotoFeedKey(pubkey: pubkey)
         pubkey.withCString { pk in consumer.withCString { cid in
             olas_close_author_photo_feed(app, pk, cid)
         }}
+        unregisterPhotoFeedKey(consumer)
+    }
+
+    func currentPhotoFeed(key: String) -> [PhotoPost]? {
+        guard let app = appPtr else { return nil }
+        return key.withCString { keyPtr in
+            guard let ptr = olas_current_photo_feed_json(app, keyPtr) else { return nil }
+            defer { nmp_free_string(ptr) }
+            guard let data = String(cString: ptr).data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode([PhotoPost].self, from: data)
+        }
     }
 
     // MARK: - Profile
@@ -384,6 +417,17 @@ import Combine
         guard let app = appPtr else { return }
         mode.withCString { olas_feed_mode_set(app, $0) }
         feedMode = mode
+    }
+
+    var wotPreset: String {
+        guard let res = olas_wot_preset_get(appPtr) else { return "balanced" }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
+    func setWotPreset(_ preset: String) {
+        guard let app = appPtr else { return }
+        preset.withCString { olas_wot_preset_set(app, $0) }
     }
 
 }

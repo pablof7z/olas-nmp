@@ -40,7 +40,7 @@ enum WoTPreset: String, CaseIterable, Identifiable {
 }
 
 struct WoTSettingsView: View {
-    @AppStorage("wotPreset") private var selectedPreset = WoTPreset.balanced.storageValue
+    @State private var selectedPreset = WoTPreset.balanced.storageValue
 
     var body: some View {
         ScrollView {
@@ -87,12 +87,16 @@ struct WoTSettingsView: View {
         .background(Color.olasBackground)
         .navigationTitle("Content & Filtering")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            selectedPreset = NMPBridge.shared.wotPreset
+        }
     }
 
     private func presetCard(_ option: WoTPreset) -> some View {
         let isSelected = option.storageValue == selectedPreset.lowercased()
         return Button {
             selectedPreset = option.storageValue
+            NMPBridge.shared.setWotPreset(option.storageValue)
         } label: {
             HStack(spacing: OlasSpacing.md) {
                 Image(systemName: option.icon)

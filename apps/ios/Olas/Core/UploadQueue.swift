@@ -90,7 +90,6 @@ final class UploadQueue {
         }
 
         setStep(.done)
-        Task { try? await Task.sleep(for: .seconds(3)); clearTerminal() }
     }
 
     func clearTerminal() {

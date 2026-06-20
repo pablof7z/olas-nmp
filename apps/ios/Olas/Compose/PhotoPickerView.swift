@@ -38,10 +38,8 @@ struct PhotoSelectionScreen: View {
                 if FileManager.default.fileExists(atPath: debugPhoto.path),
                    let img = UIImage(contentsOfFile: debugPhoto.path) {
                     isLoading = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        isLoading = false
-                        onDone([img])
-                    }
+                    isLoading = false
+                    onDone([img])
                     return
                 }
             }

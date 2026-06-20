@@ -52,9 +52,8 @@ pub extern "C" fn olas_decode_snapshot_action_results_json(
                 if let Some(result_str) = row.result {
                     // result is already a serialised JSON string — parse it into
                     // a Value so it embeds cleanly (not double-encoded).
-                    obj["result"] =
-                        serde_json::from_str::<serde_json::Value>(&result_str)
-                            .unwrap_or(serde_json::Value::Null);
+                    obj["result"] = serde_json::from_str::<serde_json::Value>(&result_str)
+                        .unwrap_or(serde_json::Value::Null);
                 }
                 obj
             })
@@ -123,7 +122,8 @@ pub extern "C" fn olas_decode_snapshot_claimed_profiles_json(
                     obj["nip05"] = serde_json::Value::String(card.nip05.clone());
                 }
                 obj["npub"] = serde_json::Value::String(nmp_core::display::to_npub(pubkey));
-                obj["npub_short"] = serde_json::Value::String(nmp_core::display::short_npub(pubkey));
+                obj["npub_short"] =
+                    serde_json::Value::String(nmp_core::display::short_npub(pubkey));
                 obj
             })
             .collect();
@@ -191,8 +191,8 @@ mod jni_extras;
 // Relay seeding, search feed, and account creation helpers.
 mod extras;
 pub use extras::{
-    olas_close_author_photo_feed, olas_close_search_feed, olas_create_account,
-    olas_open_author_photo_feed, olas_open_search_feed, olas_seed_default_relays,
+    olas_close_search_feed, olas_create_account, olas_declare_initial_relays,
+    olas_open_search_feed, olas_seed_default_relays,
 };
 
 // New event-decoder, BOLT11, geohash and config FFI helpers.
@@ -208,7 +208,7 @@ pub use extras_ffi::{
 mod extras_state;
 pub use extras_state::{
     olas_blossom_server_url_get, olas_blossom_server_url_set, olas_feed_mode_get,
-    olas_feed_mode_set,
+    olas_feed_mode_set, olas_wot_preset_get, olas_wot_preset_set,
 };
 
 // Geohash location utilities — exports olas_location_geohash4 and is_valid_geohash4.
@@ -226,9 +226,11 @@ pub use event_models::{
     olas_profile_json,
 };
 
-// Per-event WoT filter for kind:20 photo posts.
-mod photo_feed;
-pub use photo_feed::olas_filter_photo_post_json;
+mod picture_feed;
+pub use picture_feed::{
+    olas_close_author_photo_feed, olas_current_photo_feed_json,
+    olas_decode_snapshot_photo_feed_json, olas_open_author_photo_feed, olas_open_photo_feed,
+};
 
 // Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.
 mod actions;
@@ -256,59 +258,13 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
         // SAFETY: caller guarantees a valid pointer from nmp_app_new, no other
         // exclusive reference aliases it here (same pattern as nmp-app-chirp).
         let app_ref = unsafe { &mut *app };
-        nmp_defaults::register_defaults(app_ref);
+        let handles = nmp_defaults::register_defaults_with_handles(
+            app_ref,
+            nmp_defaults::NmpDefaults::default(),
+        );
+        picture_feed::install_runtime_handles(app_ref, &handles);
+        let _ = extras::declare_initial_relays(app_ref);
         nmp_blossom::register_actions(app_ref);
-    }));
-}
-
-/// Open a NIP-68 (kind:20) photo feed subscription.
-///
-/// contact_list_only: 1 = Following feed (contact-list scoped), 0 = Network / global.
-/// consumer_id: a unique string tag identifying this subscription (freed by caller).
-///
-/// Internally calls nmp_app_open_interest with the appropriate kind:20 filter.
-/// The NmpApp update callback receives kind:20 events via the standard update frame.
-///
-/// WoT FILTERING NOTE: Per-event WoT score filtering on network feed is gated on
-/// a pending NMP gap (nmp_app_wot_score FFI function does not exist yet).
-/// Until that gap is resolved, network feed is unfiltered at the kernel level.
-/// The UI must note this limitation in the Network tab subtitle.
-#[no_mangle]
-pub extern "C" fn olas_open_photo_feed(
-    app: *mut NmpApp,
-    contact_list_only: u8,
-    consumer_id: *const c_char,
-) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let consumer = if consumer_id.is_null() {
-            "olas.photo_feed".to_string()
-        } else {
-            unsafe { CStr::from_ptr(consumer_id) }
-                .to_str()
-                .unwrap_or("olas.photo_feed")
-                .to_string()
-        };
-
-        // NIP-68 picture posts are kind 20.
-        // scope: 0 = SCOPE_CONTACT_LIST, 1 = SCOPE_GLOBAL
-        let filter_json = if contact_list_only != 0 {
-            r#"{"kinds":[20],"limit":50}"#
-        } else {
-            r#"{"kinds":[20],"limit":100}"#
-        };
-        let scope: u32 = if contact_list_only != 0 { 0 } else { 1 };
-
-        // SAFETY: nmp_app_open_interest is a #[no_mangle] extern "C" symbol
-        // from nmp-ffi; it handles null app gracefully (silent no-op).
-        let filter_cstr = match CString::new(filter_json) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let consumer_cstr = match CString::new(consumer) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        nmp_ffi::nmp_app_open_interest(app, filter_cstr.as_ptr(), consumer_cstr.as_ptr(), scope);
     }));
 }
 
@@ -334,4 +290,3 @@ pub extern "C" fn olas_open_follow_pack(app: *mut NmpApp, pack_addr: *const c_ch
         nmp_ffi::nmp_app_open_uri(app, addr_cstr.as_ptr());
     }));
 }
-

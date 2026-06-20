@@ -20,10 +20,9 @@ enum SearchResultTab: String, CaseIterable {
     private var searchCancellable: AnyCancellable?
     private let consumer = "olas.search"
 
-    // Collected raw events from the search feed, keyed by pubkey (kind:0)
-    // or event id (kind:20).
+    // Collected profile events from the profile search interest, keyed by pubkey.
+    // Picture results are delivered by the Rust-owned typed photo-feed projection.
     private var collectedProfiles: [String: OlasProfile] = [:]
-    private var collectedPosts: [String: PhotoPost] = [:]
     private var lastSearchQuery: String?
 
     func startListening() {
@@ -41,6 +40,10 @@ enum SearchResultTab: String, CaseIterable {
             Task { @MainActor [weak self] in
                 self?.handleSearchEvent(json)
             }
+        }
+        NMPBridge.shared.addPhotoFeedUpdateHandler { [weak self] key, posts in
+            guard let self, key == self.consumer else { return }
+            self.handleSearchPhotoFeed(posts)
         }
     }
     private var isListening = false
@@ -61,7 +64,9 @@ enum SearchResultTab: String, CaseIterable {
 
     private func performSearch(query: String) {
         collectedProfiles = [:]
-        collectedPosts = [:]
+        profileResults = []
+        postResults = []
+        tagResults = []
         if let last = lastSearchQuery {
             NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
         }
@@ -81,29 +86,24 @@ enum SearchResultTab: String, CaseIterable {
               let data = json.data(using: .utf8),
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
 
-        switch event.kind {
-        case 0:
-            if let profileJSON = NMPBridge.shared.decodeKind0Event(json),
-               let profileData = profileJSON.data(using: .utf8),
-               let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
-                collectedProfiles[parsed.pubkey] = parsed
-            }
-        case 20:
-            if let postJSON = NMPBridge.shared.decodeKind20Event(json),
-               let postData = postJSON.data(using: .utf8),
-               let post = try? JSONDecoder().decode(PhotoPost.self, from: postData) {
-                collectedPosts[post.id] = post
-            }
-        default:
-            break
+        guard event.kind == 0 else { return }
+        if let profileJSON = NMPBridge.shared.decodeKind0Event(json),
+           let profileData = profileJSON.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode(OlasProfile.self, from: profileData) {
+            collectedProfiles[parsed.pubkey] = parsed
         }
 
-        // Apply results immediately as events arrive.
         isSearching = false
-        applyFilteredResults(query: query)
+        applyProfileResults(query: query)
     }
 
-    private func applyFilteredResults(query: String) {
+    private func handleSearchPhotoFeed(_ posts: [PhotoPost]) {
+        postResults = posts
+        tagResults = tags(from: posts, matching: query)
+        isSearching = false
+    }
+
+    private func applyProfileResults(query: String) {
         let q = query.lowercased()
         profileResults = collectedProfiles.values.filter { profile in
             let name = (profile.name ?? "").lowercased()
@@ -112,21 +112,17 @@ enum SearchResultTab: String, CaseIterable {
             let nip05 = (profile.nip05 ?? "").lowercased()
             return name.contains(q) || displayName.contains(q) || about.contains(q) || nip05.contains(q)
         }.sorted { ($0.displayNameOrName) < ($1.displayNameOrName) }
+    }
 
-        postResults = collectedPosts.values.filter { post in
-            let caption = post.caption.lowercased()
-            let tags = post.hashtags.map { $0.lowercased() }
-            return caption.contains(q) || tags.contains { $0.contains(q) }
-        }.sorted { $0.createdAt > $1.createdAt }
-
-        // Build tag results from hashtags in collected posts
+    private func tags(from posts: [PhotoPost], matching query: String) -> [String] {
+        let q = query.lowercased()
         var tagSet = Set<String>()
-        for post in collectedPosts.values {
+        for post in posts {
             for tag in post.hashtags where tag.lowercased().contains(q) {
                 tagSet.insert(tag)
             }
         }
-        tagResults = Array(tagSet).sorted()
+        return Array(tagSet).sorted()
     }
 }
 
