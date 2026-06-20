@@ -8,7 +8,7 @@ import Combine
 @Observable @MainActor final class NMPBridge {
     static let shared = NMPBridge()
 
-    private var appPtr: UnsafeMutableRawPointer?
+    var appPtr: UnsafeMutableRawPointer?
     var isRunning = false
     var activeAccountPubkey: String?
 
@@ -122,7 +122,8 @@ import Combine
     // nonisolated(unsafe): read/written from background Rust callbacks under tickLock.
     nonisolated(unsafe) var lastProfilesJSON = ""
     nonisolated(unsafe) var lastActiveAccountJSON = ""
-    nonisolated(unsafe) let tickLock = NSLock()
+    nonisolated(unsafe) var lastPhotoFeedJSON: [String: String] = [:]
+    let tickLock = NSLock()
 
     func scheduleProfileFlush(_ json: String) {
         profilePipe.send(json)
@@ -155,9 +156,14 @@ import Combine
     // MARK: - Profile cache (from claimed_profiles snapshot projection)
 
     private var profileUpdateHandlers: [([String: ProfileWire]) -> Void] = []
+    private var photoFeedUpdateHandlers: [(String, [PhotoPost]) -> Void] = []
 
     func addProfileUpdateHandler(_ handler: @escaping ([String: ProfileWire]) -> Void) {
         profileUpdateHandlers.append(handler)
+    }
+
+    func addPhotoFeedUpdateHandler(_ handler: @escaping (String, [PhotoPost]) -> Void) {
+        photoFeedUpdateHandlers.append(handler)
     }
 
     func handleActiveAccountJSON(_ json: String) {
@@ -165,6 +171,12 @@ import Combine
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let pubkey = obj["pubkey"], !pubkey.isEmpty else { return }
         if activeAccountPubkey != pubkey { activeAccountPubkey = pubkey }
+    }
+
+    func handlePhotoFeedJSON(key: String, json: String) {
+        guard let data = json.data(using: .utf8),
+              let posts = try? JSONDecoder().decode([PhotoPost].self, from: data) else { return }
+        photoFeedUpdateHandlers.forEach { $0(key, posts) }
     }
 
     private func handleClaimedProfilesJSON(_ json: String) {
@@ -224,10 +236,9 @@ import Combine
         }
     }
 
-    // NMP-GAP(#18): dispatchAndAwaitResult suspends on an action terminal, making native
-    // Swift the owner of the upload/publish lifecycle state machine. Once NMP ships a
-    // stream-based action-result projection, this bridging shim must be removed.
-    func dispatchAndAwaitResult(namespace: String, json: String, timeoutSeconds: Double = 30) async -> ActionTerminal? {
+    // Suspends until Rust reports the action terminal through the action_results
+    // snapshot projection. No native timeout or optimistic terminal is synthesized.
+    func dispatchAndAwaitResult(namespace: String, json: String) async -> ActionTerminal? {
         guard let returnJSON = dispatchAction(namespace: namespace, json: json),
               let data = returnJSON.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -235,15 +246,6 @@ import Combine
         return await withCheckedContinuation { [weak self] continuation in
             guard let self else { continuation.resume(returning: nil); return }
             self.actionResultWaiters[cid] = continuation
-            Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                await MainActor.run { [weak self] in
-                    // If still pending (relay never ACKed), resolve optimistically as published.
-                    if let waiter = self?.actionResultWaiters.removeValue(forKey: cid) {
-                        waiter.resume(returning: ActionTerminal(status: "published", resultJSON: "null"))
-                    }
-                }
-            }
         }
     }
 
@@ -266,16 +268,6 @@ import Combine
 
     // MARK: - Feed
 
-    func openFollowingFeed() {
-        guard let app = appPtr else { return }
-        "olas.following_feed".withCString { olas_open_photo_feed(app, 1, $0) }
-    }
-
-    func openNetworkFeed() {
-        guard let app = appPtr else { return }
-        "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
-    }
-
     func openAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
         let consumer = "olas.author.\(pubkey)"
@@ -292,68 +284,12 @@ import Combine
         }}
     }
 
-    func loadOlderFeed(key: String) {
-        guard let app = appPtr else { return }
-        key.withCString { nmp_app_load_older_feed(app, $0) }
-    }
-
     // MARK: - Profile
 
     // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles
     // Rust projection. It is NOT an authoritative store — only Rust's snapshot is truth.
     // A future typed projection will supersede this dictionary entirely.
     private(set) var profileCache: [String: ProfileWire] = [:]
-
-    func claimProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_claim_profile(app, pk, c, 1) } }
-    }
-
-    func releaseProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_release_profile(app, pk, c) } }
-    }
-
-    // MARK: - Actions
-
-    func dispatchAction(namespace: String, json: String) -> String? {
-        guard let app = appPtr else { return nil }
-        return namespace.withCString { ns in
-            json.withCString { j in
-                guard let ptr = nmp_app_dispatch_action(app, ns, j) else { return nil }
-                defer { nmp_free_string(ptr) }
-                return String(cString: ptr)
-            }
-        }
-    }
-
-    func blossomUploadInputJSON(filePath: String, mime: String, serverURL: String) -> String? {
-        filePath.withCString { fp in
-            mime.withCString { m in
-                serverURL.withCString { s in
-                    guard let ptr = olas_blossom_upload_input_json(fp, m, s) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }
-            }
-        }
-    }
-
-    func picturePostPublishJSON(blossomResultJSON: String, caption: String, alt: String?, dim: String?, geohash: String?) -> String? {
-        func withOpt(_ s: String?, _ body: (UnsafePointer<CChar>?) -> String?) -> String? {
-            if let s { return s.withCString { body($0) } }
-            return body(nil)
-        }
-        return blossomResultJSON.withCString { r in
-            caption.withCString { c in
-                withOpt(alt) { a in withOpt(dim) { d in withOpt(geohash) { g in
-                    guard let ptr = olas_picture_post_publish_json(r, c, a, d, g) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }}}
-            }
-        }
-    }
 
     // MARK: - Event decoders
 
@@ -454,38 +390,17 @@ import Combine
         feedMode = mode
     }
 
-    // MARK: - Relay management
+    var wotPreset: String {
+        guard let res = olas_wot_preset_get(appPtr) else { return "balanced" }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
 
-    func addRelay(url: String, role: String) {
+    func setWotPreset(_ preset: String) {
         guard let app = appPtr else { return }
-        url.withCString { u in role.withCString { r in nmp_app_add_relay(app, u, r) } }
+        preset.withCString { olas_wot_preset_set(app, $0) }
     }
 
-    func removeRelay(url: String) {
-        guard let app = appPtr else { return }
-        url.withCString { nmp_app_remove_relay(app, $0) }
-    }
-
-    // MARK: - Wallet
-
-    func connectWallet(uri: String) {
-        // NMP-GAP: nmp_app_wallet_connect was removed from the FFI surface;
-        // dispatch via the action bus until the NMP wallet projection lands.
-        let escaped = uri.replacingOccurrences(of: "\"", with: "\\\"")
-        _ = dispatchAction(namespace: "nmp.wallet_connect", json: "{\"uri\":\"\(escaped)\"}")
-    }
-
-    // MARK: - Lifecycle
-
-    func appDidBecomeActive() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_foreground(app)
-    }
-
-    func appDidEnterBackground() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_background(app)
-    }
 }
 
 // MARK: - NostrProfileHost

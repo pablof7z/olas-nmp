@@ -108,11 +108,15 @@ void olas_create_account(void* app, const char* name, const char* username);
 /// Wires nmp-defaults (follow/unfollow/react/zap/routing) and nmp-blossom upload action.
 void olas_app_register(void* app);
 
-/// Open NIP-68 kind:20 photo feed.
-/// contact_list_only=1 → Following feed (contact-list scoped, scope 0).
-/// contact_list_only=0 → Network feed (global, scope 1).
-/// consumer_id identifies this subscription; close with nmp_app_close_interest.
+/// Open NIP-68 primary kind:20 photo feed.
+/// contact_list_only=1 -> Following feed (reactive active-account follow set).
+/// contact_list_only=0 -> Network feed (global relay pull with Rust WoT filter).
+/// NMP derives kind:16 repost-wrapper acquisition from the primary declaration.
 void olas_open_photo_feed(void* app, uint8_t contact_list_only, const char* consumer_id);
+
+/// Decode the Rust-owned photo-feed projection for the requested feed key.
+/// Returned string is a JSON array of PhotoPost rows; caller frees with nmp_free_string.
+char* olas_decode_snapshot_photo_feed_json(const uint8_t* frame, size_t len, const char* key);
 
 /// Open a kind:20 photo feed filtered to a single author (profile grid).
 /// consumer_id identifies this subscription; close with olas_close_author_photo_feed.
@@ -180,12 +184,23 @@ char* olas_picture_post_publish_json(const char* blossom_result_json, const char
 // Event decoders (caller must free with nmp_free_string)
 char* olas_decode_kind20_event_json(const char* event_json);
 char* olas_decode_kind0_event_json(const char* event_json);
+char* olas_profile_json(const char* event_json);
+char* olas_notification_json(const char* event_json);
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
+char* olas_default_relays_json(void);
+
+// Action builders (caller must free with nmp_free_string)
+char* olas_react_action_json(const char* target_event_id, const char* target_author_pubkey);
+char* olas_zap_action_json(const char* recipient_pubkey, const char* target_event_id, uint64_t amount_msats, const char* comment);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
 
 // Bolt11 parsing (returns msats or -1 on error; no memory to free)
 long long olas_bolt11_amount_msats(const char* bolt11);
+uint64_t olas_bolt11_amount_sats(const char* bolt11);
 
 // Geohash (caller must free with nmp_free_string)
 char* olas_compute_geohash(double lat, double lon, int precision);
+char* olas_location_geohash4(double latitude, double longitude);
 
 // Zap action builder (caller must free with nmp_free_string)
 char* olas_build_zap_action_json(const char* event_id, long long sats);
@@ -208,3 +223,7 @@ void  olas_blossom_server_url_set(void* app, const char* url);
 // Feed mode (caller must free get result with nmp_free_string)
 char* olas_feed_mode_get(void* app);
 void  olas_feed_mode_set(void* app, const char* mode);
+
+// Network-feed WoT preset (caller must free get result with nmp_free_string)
+char* olas_wot_preset_get(void* app);
+void  olas_wot_preset_set(void* app, const char* preset);

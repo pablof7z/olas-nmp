@@ -14,21 +14,6 @@ extension NMPBridge {
         "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
     }
 
-    func photoPost(from eventJSON: String, mode: FeedMode) -> PhotoPost? {
-        let contactListOnly: UInt8 = mode == .following ? 1 : 0
-        let preset = UserDefaults.standard.string(forKey: "wotPreset") ?? "balanced"
-        let ptr = eventJSON.withCString { eventPtr in
-            preset.withCString { presetPtr in
-                olas_filter_photo_post_json(eventPtr, contactListOnly, presetPtr)
-            }
-        }
-        guard let ptr else { return nil }
-        defer { nmp_free_string(ptr) }
-        let json = String(cString: ptr)
-        guard let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(PhotoPost.self, from: data)
-    }
-
     func profile(from eventJSON: String) -> OlasProfile? {
         let ptr = eventJSON.withCString { olas_profile_json($0) }
         guard let ptr else { return nil }

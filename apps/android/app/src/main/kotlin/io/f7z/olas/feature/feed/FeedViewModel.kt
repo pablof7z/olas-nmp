@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +22,10 @@ data class FeedUiState(
 )
 
 class FeedViewModel : ViewModel() {
+    private companion object {
+        const val FOLLOWING_FEED_KEY = "olas.following_feed"
+        const val NETWORK_FEED_KEY = "olas.network_feed"
+    }
 
     private val _uiState = MutableStateFlow(FeedUiState(isLoading = true, feedMode = FeedMode.NETWORK))
     val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
@@ -35,39 +38,24 @@ class FeedViewModel : ViewModel() {
             else -> FeedMode.NETWORK
         }
         _uiState.value = _uiState.value.copy(feedMode = persistedMode)
-        if (persistedMode == FeedMode.FOLLOWING) NMPBridge.openFollowingFeed() else NMPBridge.openNetworkFeed()
-        observeEvents()
-        // On cold restart, relay WebSocket connections establish asynchronously.
-        // Re-open the subscription at increasing intervals until events arrive.
-        viewModelScope.launch {
-            for (delayMs in listOf(6_000L, 18_000L, 45_000L, 90_000L)) {
-                delay(delayMs)
-                if (_uiState.value.isLoading && _uiState.value.posts.isEmpty()) {
-                    NMPBridge.openNetworkFeed()
-                }
-            }
-        }
+        observePhotoFeeds()
+        openFeed(persistedMode)
     }
 
-    private fun observeEvents() {
-        NMPBridge.nostrEvents
-            .onEach { raw ->
-                val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
-                val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
+    private fun observePhotoFeeds() {
+        NMPBridge.photoFeedsJson
+            .onEach { (key, raw) ->
                 val current = _uiState.value
-                if (current.posts.isEmpty()) {
-                    _uiState.value = current.copy(
-                        posts     = (listOf(post) + current.posts).distinctBy { it.id },
-                        isLoading = false,
-                    )
-                } else {
-                    val pending = (listOf(post) + current.pendingPosts).distinctBy { it.id }
-                    _uiState.value = current.copy(
-                        pendingPosts = pending,
-                        hasNewPosts  = true,
-                        isLoading    = false,
-                    )
-                }
+                if (key != feedKey(current.feedMode)) return@onEach
+                val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
+                    .getOrNull()
+                    ?: return@onEach
+                _uiState.value = current.copy(
+                    posts = posts,
+                    pendingPosts = emptyList(),
+                    hasNewPosts = false,
+                    isLoading = false,
+                )
             }
             .launchIn(viewModelScope)
     }
@@ -75,6 +63,10 @@ class FeedViewModel : ViewModel() {
     fun switchMode(mode: FeedMode) {
         if (_uiState.value.feedMode == mode) return
         _uiState.value = FeedUiState(isLoading = true, feedMode = mode)
+        openFeed(mode)
+    }
+
+    private fun openFeed(mode: FeedMode) {
         when (mode) {
             FeedMode.FOLLOWING -> {
                 NMPBridge.setFeedMode("following")
@@ -99,8 +91,11 @@ class FeedViewModel : ViewModel() {
     }
 
     fun loadOlderPosts() {
-        NMPBridge.loadOlderFeed("photo_feed")
+        NMPBridge.loadOlderFeed(feedKey(_uiState.value.feedMode))
     }
+
+    private fun feedKey(mode: FeedMode): String =
+        if (mode == FeedMode.FOLLOWING) FOLLOWING_FEED_KEY else NETWORK_FEED_KEY
 
     fun react(post: io.f7z.olas.core.PhotoPost) {
         viewModelScope.launch { NMPBridge.reactTo(post) }

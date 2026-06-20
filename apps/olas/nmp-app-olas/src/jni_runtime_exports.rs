@@ -8,13 +8,12 @@ use jni::JNIEnv;
 use nmp_ffi::{
     nmp_app_claim_profile, nmp_app_dispatch_action, nmp_app_lifecycle_background,
     nmp_app_lifecycle_foreground, nmp_app_load_older_feed, nmp_app_open_contact_feed,
-    nmp_app_register_event_observer, nmp_app_release_profile, nmp_app_wallet_connect,
-    nmp_free_string,
+    nmp_app_register_event_observer, nmp_app_release_profile, nmp_free_string,
 };
 
 use crate::{
     olas_close_author_photo_feed, olas_close_search_feed, olas_open_author_photo_feed,
-    olas_open_photo_feed, olas_open_search_feed,
+    olas_open_photo_feed, olas_open_search_feed, olas_wot_preset_get, olas_wot_preset_set,
 };
 
 use super::{
@@ -43,17 +42,20 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenContactFeed(
 
 #[no_mangle]
 pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenPhotoFeed(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
     contact_list_only: jboolean,
+    consumer_id: JString,
 ) {
     if handle == 0 {
         return;
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let consumer = CString::new("olas.photo_feed").unwrap();
+        let Some(consumer) = jstring_to_cstring(&mut env, &consumer_id) else {
+            return;
+        };
         olas_open_photo_feed(
             app,
             if contact_list_only != 0 { 1 } else { 0 },
@@ -275,7 +277,17 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWalletConnect(
         let Some(uri) = jstring_to_cstring(&mut env, &uri) else {
             return;
         };
-        nmp_app_wallet_connect(app, uri.as_ptr());
+        let Ok(namespace) = CString::new("nmp.wallet_connect") else {
+            return;
+        };
+        let payload = serde_json::json!({ "uri": uri.to_string_lossy() }).to_string();
+        let Ok(payload) = CString::new(payload) else {
+            return;
+        };
+        let raw = nmp_app_dispatch_action(app, namespace.as_ptr(), payload.as_ptr());
+        if !raw.is_null() {
+            nmp_free_string(raw);
+        }
     }));
 }
 
@@ -292,8 +304,12 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenAuthorPhotoFeed
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else { return };
-        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else {
+            return;
+        };
+        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else {
+            return;
+        };
         olas_open_author_photo_feed(app, pk.as_ptr(), cid.as_ptr());
     }));
 }
@@ -311,8 +327,12 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeCloseAuthorPhotoFee
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else { return };
-        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        let Some(pk) = jstring_to_cstring(&mut env, &pubkey) else {
+            return;
+        };
+        let Some(cid) = jstring_to_cstring(&mut env, &consumer_id) else {
+            return;
+        };
         olas_close_author_photo_feed(app, pk.as_ptr(), cid.as_ptr());
     }));
 }
@@ -330,8 +350,12 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeClaimProfile(
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else { return };
-        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else {
+            return;
+        };
+        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else {
+            return;
+        };
         nmp_app_claim_profile(app, pk_c.as_ptr(), cid_c.as_ptr(), 1, 0);
     }));
 }
@@ -349,8 +373,12 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeReleaseProfile(
     }
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
-        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else { return };
-        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else { return };
+        let Some(pk_c) = jstring_to_cstring(&mut env, &pubkey) else {
+            return;
+        };
+        let Some(cid_c) = jstring_to_cstring(&mut env, &consumer_id) else {
+            return;
+        };
         nmp_app_release_profile(app, pk_c.as_ptr(), cid_c.as_ptr());
     }));
 }
@@ -374,4 +402,66 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodeClaimedProfil
         cstring_into_jstring(&mut env, raw)
     }));
     result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodePhotoFeed(
+    mut env: JNIEnv,
+    _class: JClass,
+    _handle: jlong,
+    frame: JByteArray,
+    key: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let bytes: Vec<u8> = match env.convert_byte_array(&frame) {
+            Ok(b) => b,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        if bytes.is_empty() {
+            return std::ptr::null_mut();
+        }
+        let Some(key) = jstring_to_cstring(&mut env, &key) else {
+            return std::ptr::null_mut();
+        };
+        let raw =
+            crate::olas_decode_snapshot_photo_feed_json(bytes.as_ptr(), bytes.len(), key.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWotPresetGet(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let raw = olas_wot_preset_get(app);
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeWotPresetSet(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    preset: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(preset) = jstring_to_cstring(&mut env, &preset) else {
+            return;
+        };
+        olas_wot_preset_set(app, preset.as_ptr());
+    }));
 }

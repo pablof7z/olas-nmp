@@ -18,8 +18,11 @@ nmp-core.workspace = true
 nmp-defaults.workspace = true
 nmp-ffi.workspace = true
 nmp-blossom.workspace = true
+nmp-feed.workspace = true
+nmp-nip02.workspace = true
 nmp-nip57.workspace = true
 nmp-nip68.workspace = true
+nmp-planner.workspace = true
 nmp-wot.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -22,8 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object NMPBridge {
     private const val SETTINGS_PREFS = "olas_settings"
-    private const val KEY_WOT_PRESET = "wotPreset"
     private const val KEY_STORED_NSEC = "stored_nsec"
+    private const val FOLLOWING_FEED_KEY = "olas.following_feed"
+    private const val NETWORK_FEED_KEY = "olas.network_feed"
+    private val PHOTO_FEED_KEYS = arrayOf(FOLLOWING_FEED_KEY, NETWORK_FEED_KEY)
 
     init {
         System.loadLibrary("nmp_app_olas")
@@ -43,6 +45,10 @@ object NMPBridge {
     // JSON array of claimed profile entries, emitted on each snapshot frame that carries them.
     private val _claimedProfilesJson = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val claimedProfilesJson: SharedFlow<String> = _claimedProfilesJson.asSharedFlow()
+
+    // JSON arrays of Rust-owned photo-feed rows, keyed by feed projection key.
+    private val _photoFeedsJson = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 64)
+    val photoFeedsJson: SharedFlow<Pair<String, String>> = _photoFeedsJson.asSharedFlow()
 
     @Volatile
     var activeAccountPubkey: String? = null
@@ -67,13 +73,7 @@ object NMPBridge {
     private external fun nativeSignInNsec(handle: Long, nsec: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
     private external fun nativeOpenContactFeed(handle: Long, kindsJson: String)
-    private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean)
-    private external fun nativeFilterPhotoPostJson(
-        handle: Long,
-        eventJson: String,
-        contactListOnly: Boolean,
-        wotPreset: String,
-    ): String?
+    private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean, consumerId: String)
     private external fun nativeProfileJson(handle: Long, eventJson: String): String?
     private external fun nativeNotificationJson(handle: Long, eventJson: String): String?
     private external fun nativeContactListPubkeysJson(
@@ -122,6 +122,9 @@ object NMPBridge {
     private external fun nativeClaimProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
+    private external fun nativeDecodePhotoFeed(handle: Long, frame: ByteArray, key: String): String?
+    private external fun nativeWotPresetGet(handle: Long): String?
+    private external fun nativeWotPresetSet(handle: Long, preset: String)
 
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
@@ -205,13 +208,10 @@ object NMPBridge {
     }
 
     /** Following feed — kind 20 scoped to contact list. */
-    fun openFollowingFeed() = nativeOpenPhotoFeed(appHandle, true)
+    fun openFollowingFeed() = nativeOpenPhotoFeed(appHandle, true, FOLLOWING_FEED_KEY)
 
     /** Network feed — kind 20 global; Rust applies the active WoT preset per event. */
-    fun openNetworkFeed() = nativeOpenPhotoFeed(appHandle, false)
-
-    fun photoPostJson(raw: String, mode: FeedMode): String? =
-        nativeFilterPhotoPostJson(appHandle, raw, mode == FeedMode.FOLLOWING, wotPreset())
+    fun openNetworkFeed() = nativeOpenPhotoFeed(appHandle, false, NETWORK_FEED_KEY)
 
     fun profileJson(raw: String): String? = nativeProfileJson(appHandle, raw)
 
@@ -222,18 +222,10 @@ object NMPBridge {
 
     fun defaultRelaysJson(): String = nativeDefaultRelaysJson() ?: "[]"
 
-    fun wotPreset(): String =
-        appContext
-            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-            ?.getString(KEY_WOT_PRESET, "balanced")
-            ?: "balanced"
+    fun wotPreset(): String = nativeWotPresetGet(appHandle) ?: "balanced"
 
     fun setWotPreset(preset: String) {
-        appContext
-            ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-            ?.edit()
-            ?.putString(KEY_WOT_PRESET, preset.lowercase())
-            ?.apply()
+        nativeWotPresetSet(appHandle, preset.lowercase())
     }
 
     fun loadOlderFeed(key: String) = nativeLoadOlderFeed(appHandle, key)
@@ -307,6 +299,12 @@ object NMPBridge {
         runCatching { nativeDecodeClaimedProfiles(appHandle, frame) }
             .getOrNull()
             ?.let { json -> _claimedProfilesJson.tryEmit(json) }
+
+        for (key in PHOTO_FEED_KEYS) {
+            runCatching { nativeDecodePhotoFeed(appHandle, frame, key) }
+                .getOrNull()
+                ?.let { json -> _photoFeedsJson.tryEmit(key to json) }
+        }
 
         if (actionResultWaiters.isEmpty()) return
         val json = runCatching { nativeDecodeActionResults(appHandle, frame) }
