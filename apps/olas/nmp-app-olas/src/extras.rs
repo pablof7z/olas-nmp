@@ -9,6 +9,7 @@ use std::os::raw::c_char;
 use nmp_ffi::{NmpApp, NmpConfigStatus};
 
 use crate::event_models::default_relay_rows;
+use crate::picture_feed::{close_search_picture_feed, open_search_picture_feed};
 
 fn default_relay_config() -> Vec<(String, String)> {
     default_relay_rows()
@@ -62,13 +63,12 @@ pub extern "C" fn olas_seed_default_relays(app: *mut NmpApp) {
     }));
 }
 
-/// Open a mixed NIP-50 search interest (profiles + picture events).
+/// Open Olas search interests.
 ///
-/// This is not the typed picture-feed projection: it is a search query surface
-/// whose results include kind:0 profiles and primary kind:20 picture events.
-/// consumer_id identifies this subscription; close with
-/// olas_close_search_feed using the same query and consumer_id. Scope 1 =
-/// global.
+/// Profile search remains a profile-only kind:0 interest. Picture search is
+/// registered as a typed Rust-owned kind:20 photo feed under the same consumer
+/// key; kind:16 repost wrappers and delete maintenance are derived by the
+/// picture-feed adapter, not declared by the native app.
 #[no_mangle]
 pub extern "C" fn olas_open_search_feed(
     app: *mut NmpApp,
@@ -92,7 +92,7 @@ pub extern "C" fn olas_open_search_feed(
                 .to_string()
         };
         let filter = match serde_json::to_string(&serde_json::json!({
-            "kinds": [0, 20],
+            "kinds": [0],
             "search": q,
             "limit": 50
         })) {
@@ -102,14 +102,15 @@ pub extern "C" fn olas_open_search_feed(
         let Ok(filter_c) = CString::new(filter) else {
             return;
         };
-        let Ok(consumer_c) = CString::new(consumer) else {
+        let Ok(consumer_c) = CString::new(consumer.as_str()) else {
             return;
         };
         nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
+        open_search_picture_feed(app, q, &consumer);
     }));
 }
 
-/// Close a NIP-50 search interest opened with olas_open_search_feed.
+/// Close search interests opened with olas_open_search_feed.
 ///
 /// Must be called with the same query and consumer_id as the matching open call.
 #[no_mangle]
@@ -135,7 +136,7 @@ pub extern "C" fn olas_close_search_feed(
                 .to_string()
         };
         let filter = match serde_json::to_string(&serde_json::json!({
-            "kinds": [0, 20],
+            "kinds": [0],
             "search": q,
             "limit": 50
         })) {
@@ -145,10 +146,11 @@ pub extern "C" fn olas_close_search_feed(
         let Ok(filter_c) = CString::new(filter) else {
             return;
         };
-        let Ok(consumer_c) = CString::new(consumer) else {
+        let Ok(consumer_c) = CString::new(consumer.as_str()) else {
             return;
         };
         nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
+        close_search_picture_feed(app, q, &consumer);
     }));
 }
 

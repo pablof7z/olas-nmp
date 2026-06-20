@@ -39,11 +39,16 @@ use picture_feed_slots::{
     clear_picture_feed_slots, picture_feed_registered, record_picture_feed,
     remove_author_picture_feed, reset_all_picture_feeds, reset_home_picture_feeds,
 };
+#[path = "picture_feed_search.rs"]
+mod picture_feed_search;
+pub(crate) use picture_feed_search::{close_search_picture_feed, open_search_picture_feed};
+use picture_feed_search::{open_search_acquisition, search_shape};
 const PHOTO_FEED_SCHEMA_ID: &str = "olas.picture.feed";
 const PHOTO_FEED_SCHEMA_VERSION: u32 = 1;
 const PHOTO_FEED_FILE_IDENTIFIER: &str = "OLPF";
 pub(crate) const FOLLOWING_FEED_KEY: &str = "olas.following_feed";
 pub(crate) const NETWORK_FEED_KEY: &str = "olas.network_feed";
+pub(crate) const SEARCH_FEED_KEY: &str = "olas.search";
 
 #[derive(Clone)]
 struct FeedRuntime {
@@ -223,8 +228,12 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
 
     let provider = mode.provider(runtime);
     let apply_observer = observer.clone();
+    let apply_feed = feed.clone();
     let apply: FeedApply = Arc::new(move |event: &KernelEvent| {
+        let before_len = apply_feed.len();
+        let before_window = apply_feed.snapshot_current_window();
         KernelEventObserver::on_kernel_event(&*apply_observer, event);
+        apply_feed.len() > before_len || apply_feed.snapshot_current_window() != before_window
     });
     let replace_feed = feed.clone();
     let replace: nmp_feed::FeedReplace = Arc::new(move |source_id| {
@@ -273,6 +282,7 @@ enum FeedMode {
     Following,
     Network,
     Author(String),
+    Search(String),
 }
 
 impl FeedMode {
@@ -289,6 +299,7 @@ impl FeedMode {
             Self::Following => FOLLOWING_FEED_KEY,
             Self::Network => NETWORK_FEED_KEY,
             Self::Author(_) => "olas.author_feed",
+            Self::Search(_) => SEARCH_FEED_KEY,
         }
     }
 
@@ -297,6 +308,7 @@ impl FeedMode {
             Self::Following => 50,
             Self::Network => 100,
             Self::Author(_) => 50,
+            Self::Search(_) => 50,
         }
     }
 
@@ -319,6 +331,7 @@ impl FeedMode {
                 let pubkey = pubkey.clone();
                 picture_feed_predicate(Arc::new(move |author| author == pubkey))
             }
+            Self::Search(_) => picture_feed_predicate(Arc::new(|_| true)),
         }
     }
 
@@ -331,6 +344,10 @@ impl FeedMode {
             Self::Author(pubkey) => {
                 let pubkey = pubkey.clone();
                 Arc::new(ClosureInterestShape::new(move || author_shape(&pubkey)))
+            }
+            Self::Search(query) => {
+                let query = query.clone();
+                Arc::new(ClosureInterestShape::new(move || search_shape(&query)))
             }
         }
     }
@@ -380,6 +397,9 @@ fn open_feed_acquisition(app: *mut NmpApp, consumer: &str, mode: &FeedMode) {
         }
         FeedMode::Author(pubkey) => {
             open_author_acquisition(app, pubkey.as_str(), consumer, mode.limit());
+        }
+        FeedMode::Search(query) => {
+            open_search_acquisition(app, query.as_str(), consumer, mode.limit());
         }
     }
 }

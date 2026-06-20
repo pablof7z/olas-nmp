@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use super::picture_feed_acquisition::search_acquisition_filter_jsons;
 use super::picture_feed_test_support::*;
 use super::*;
 
@@ -44,6 +45,23 @@ fn author_acquisition_filter_derives_kind16_and_keeps_author_perspective() {
 }
 
 #[test]
+fn search_acquisition_filter_derives_kind16_and_keeps_search_perspective() {
+    let filters = search_acquisition_filter_jsons("nostr photos", 50);
+    let values = filters
+        .iter()
+        .map(|filter| serde_json::from_str::<serde_json::Value>(filter).expect("json"))
+        .collect::<Vec<_>>();
+    assert_eq!(values[0]["kinds"], serde_json::json!([20]));
+    assert_eq!(values[1]["kinds"], serde_json::json!([5]));
+    assert_eq!(values[2]["kinds"], serde_json::json!([16]));
+    for value in values {
+        assert_eq!(value["search"], "nostr photos");
+        assert_eq!(value["limit"], 50);
+        assert!(value.get("authors").is_none());
+    }
+}
+
+#[test]
 fn author_shape_uses_picture_acquisition_kinds_for_single_source_author() {
     let shape = author_shape("alice").expect("shape");
     assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
@@ -55,6 +73,15 @@ fn network_shape_has_no_author_filter() {
     let shape = network_shape().expect("shape");
     assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
     assert!(shape.authors.is_empty());
+}
+
+#[test]
+fn search_shape_has_no_author_filter_and_carries_relay_search() {
+    let shape = search_shape("nostr photos").expect("shape");
+    assert_eq!(shape.kinds, [5, 16, 20].into_iter().collect());
+    assert!(shape.authors.is_empty());
+    assert_eq!(shape.search.as_deref(), Some("nostr photos"));
+    assert_eq!(shape.limit, Some(50));
 }
 
 #[test]
@@ -242,6 +269,45 @@ fn network_feed_reopens_from_store_after_perspective_switch() {
     let reopened_posts_json = non_empty_network_posts_json(app)
         .expect("network feed rehydrates from the kernel store on reopen");
     assert_posts_contain(&reopened_posts_json, &event_id);
+
+    unsafe { &*app }.unregister_event_observer(observer_id);
+    nmp_ffi::nmp_app_stop(app);
+    nmp_ffi::nmp_app_free(app);
+}
+
+#[test]
+fn search_feed_open_hydrates_typed_picture_projection() {
+    let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
+    let app = nmp_ffi::nmp_app_new();
+    assert!(!app.is_null());
+    crate::olas_app_register(app);
+    nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+    nmp_ffi::nmp_app_start(app, 0, 100, 4);
+
+    let signal = Arc::new(EventSignal::default());
+    let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
+    let query = CString::new("caption").expect("query");
+    let consumer = CString::new(SEARCH_FEED_KEY).expect("search key");
+
+    crate::olas_open_search_feed(app, query.as_ptr(), consumer.as_ptr());
+    let (event_id, event_json) = signed_picture_event(1_700_000_400);
+    inject_signed_event(app, &event_json);
+    let (_observed, posts_json) =
+        signal.wait_for_non_empty_projection(Duration::from_secs(5), || {
+            current_photo_feed_json_via_ffi(app, SEARCH_FEED_KEY).filter(|json| {
+                serde_json::from_str::<serde_json::Value>(json)
+                    .ok()
+                    .and_then(|value| value.as_array().map(|rows| !rows.is_empty()))
+                    .unwrap_or(false)
+            })
+        });
+    assert_posts_contain(&posts_json, &event_id);
+
+    crate::olas_close_search_feed(app, query.as_ptr(), consumer.as_ptr());
+    assert!(
+        current_photo_feed_json_via_ffi(app, SEARCH_FEED_KEY).is_none(),
+        "closing search must unregister the typed search projection"
+    );
 
     unsafe { &*app }.unregister_event_observer(observer_id);
     nmp_ffi::nmp_app_stop(app);

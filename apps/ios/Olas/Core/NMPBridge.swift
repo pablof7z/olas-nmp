@@ -36,12 +36,14 @@ import Combine
 
     func openSearchFeed(query: String, consumer: String) {
         guard let app = appPtr else { return }
+        registerPhotoFeedKey(consumer)
         query.withCString { q in consumer.withCString { c in olas_open_search_feed(app, q, c) } }
     }
 
     func closeSearchFeed(query: String, consumer: String) {
         guard let app = appPtr else { return }
         query.withCString { q in consumer.withCString { c in olas_close_search_feed(app, q, c) } }
+        unregisterPhotoFeedKey(consumer)
     }
 
     private init() {}

@@ -177,11 +177,15 @@ object NMPBridge {
     fun createAccount(name: String, username: String) =
         nativeCreateAccount(appHandle, name, username)
 
-    fun openSearchFeed(query: String, consumerId: String = "olas.search") =
+    fun openSearchFeed(query: String, consumerId: String = "olas.search") {
+        photoFeedKeys.add(consumerId)
         nativeOpenSearchFeed(appHandle, query, consumerId)
+    }
 
-    fun closeSearchFeed(query: String, consumerId: String = "olas.search") =
+    fun closeSearchFeed(query: String, consumerId: String = "olas.search") {
         nativeCloseSearchFeed(appHandle, query, consumerId)
+        photoFeedKeys.remove(consumerId)
+    }
 
     fun authorPhotoFeedKey(pubkey: String): String = "olas.author.$pubkey"
 

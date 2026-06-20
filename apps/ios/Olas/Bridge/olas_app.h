@@ -95,12 +95,12 @@ uint32_t olas_declare_initial_relays(void* app);
 /// purplepag.es (role "indexer"). Safe to call again after a relay-config reset.
 void olas_seed_default_relays(void* app);
 
-/// Open a NIP-50 search interest (kinds 0 + 20) for the given query string.
-/// Scope is global (1). Close with olas_close_search_feed using the same
-/// query and consumer_id.
+/// Open Olas search interests for the given query string. Profile search keeps
+/// a profile-only kind:0 interest; photo search is a typed kind:20 photo-feed
+/// projection under consumer_id.
 void olas_open_search_feed(void* app, const char* query, const char* consumer_id);
 
-/// Close the NIP-50 search interest opened with olas_open_search_feed.
+/// Close the search interests opened with olas_open_search_feed.
 /// Must be called with the same query and consumer_id as the matching open call.
 void olas_close_search_feed(void* app, const char* query, const char* consumer_id);
 
