@@ -185,7 +185,9 @@ final class LocationOnce: NSObject, CLLocationManagerDelegate {
         let lon = loc.coordinate.longitude
         m.stopUpdatingLocation()  // called on delegate thread
         Task { @MainActor in
-            geohash = NMPBridge.shared.computeGeohash(lat: lat, lon: lon, precision: 6)
+            // Coarse precision 4 (~20km) — canonical across iOS/Android for privacy;
+            // matches Android currentCoarseGeohash4 / Rust location_geohash4.
+            geohash = NMPBridge.shared.computeGeohash(lat: lat, lon: lon, precision: 4)
         }
     }
 
