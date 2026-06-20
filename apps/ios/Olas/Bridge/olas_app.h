@@ -210,6 +210,13 @@ char* olas_decode_follow_pack_event_json(const char* event_json);
 /// Returned string must be freed with nmp_free_string.
 char* olas_apply_follow_pack_pubkeys(void* app, const char* pubkeys_json, const char* active_pubkey);
 
+/// Live "Following" count for the active account — the number of distinct `p`
+/// tags in its current kind:3, read synchronously from the local event store
+/// (read-your-writes; reflects a just-applied follow pack with no relay
+/// round-trip). Returns -1 when unavailable (no active account / not started);
+/// the host renders -1 as 0.
+int64_t nmp_app_active_following_count(void* app);
+
 // ── New Olas FFI helpers ──────────────────────────────────────────────────────
 
 // Event decoders (caller must free with nmp_free_string)
