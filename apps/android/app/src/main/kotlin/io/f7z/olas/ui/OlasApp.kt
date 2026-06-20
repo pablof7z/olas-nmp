@@ -140,7 +140,9 @@ fun OlasApp() {
                     // Onboarding
                     composable(Routes.ONBOARDING_WELCOME)  { WelcomeScreen(navController) }
                     composable(Routes.ONBOARDING_CREATE)   { CreateAccountScreen(navController) }
-                    composable(Routes.ONBOARDING_FOLLOWS)  { FollowPacksScreen(navController) }
+                    composable(Routes.ONBOARDING_FOLLOWS)  {
+                        FollowPacksScreen(onContinue = { navController.navigate(Routes.ONBOARDING_COMPLETE) })
+                    }
                     composable(Routes.ONBOARDING_COMPLETE) { OnboardingCompleteScreen(navController) }
                     composable(Routes.SIGN_IN)             { SignInScreen(navController) }
 
