@@ -88,7 +88,6 @@ fun EditPhotoScreen(uri: Uri, onNext: (selectedFilter: PhotoFilter, intensity: F
     }
 }
 
-// Expose helpers from FilterCarousel.kt for use here via file-level references
-private fun identityMatrix() = io.f7z.olas.feature.compose.FILTERS.first().matrix
-private fun blendMatrix(base: FloatArray, overlay: FloatArray, t: Float) =
-    FloatArray(20) { i -> base[i] * (1f - t) + overlay[i] * t }
+// identityMatrix() / blendMatrix() are the internal helpers in FilterCarousel.kt
+// (same package). Using them here keeps the preview baseline identical to the
+// upload bake (P0-D2), so what you see equals what gets published.
