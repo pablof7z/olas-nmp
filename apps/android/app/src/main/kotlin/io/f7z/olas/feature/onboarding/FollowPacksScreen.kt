@@ -1,5 +1,8 @@
 package io.f7z.olas.feature.onboarding
 
+// P0-A: hardcoded STARTER_PACKS removed; packs are discovered from real
+// kind:30000 events via the kernel event observer and decoded by Rust.
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -11,41 +14,48 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import io.f7z.olas.core.FollowPack
-import io.f7z.olas.navigation.Routes
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.f7z.olas.core.FollowPackDescriptor
 import io.f7z.olas.ui.theme.OlasColors
 
-private val STARTER_PACKS = listOf(
-    FollowPack("1", "Photography",     "Best photographers from your network", "Photography", "#F59E0B", 32),
-    FollowPack("2", "Travel",          "Wanderers sharing the world",        "Travel",      "#3B82F6", 28),
-    FollowPack("3", "Food & Drink",    "Chefs, foodies, and tastemakers",    "Food",        "#EF4444", 24),
-    FollowPack("4", "Art & Design",    "Illustrators and visual artists",    "Art",         "#8B5CF6", 19),
-    FollowPack("5", "Open Web Builders", "People building independent social apps", "Community", "#10B981", 41),
-)
-
 @Composable
-fun FollowPacksScreen(navController: NavController) {
-    val selected = remember { mutableStateMapOf<String, Boolean>() }
-    val selectedCount = selected.count { it.value }
-    val totalCreators = STARTER_PACKS.filter { selected[it.id] == true }.sumOf { it.count }
+fun FollowPacksScreen(
+    onContinue: () -> Unit,
+    vm: OnboardingViewModel = viewModel(),
+) {
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
+
+    // Start/stop discovery with the screen's lifecycle.
+    LaunchedEffect(Unit) { vm.startPackDiscovery() }
+    DisposableEffect(Unit) { onDispose { vm.stopPackDiscovery() } }
+
+    val selectedCount  = uiState.selectedPackIds.size
+    val totalCreators  = uiState.discoveredPacks
+        .filter { it.id in uiState.selectedPackIds }
+        .sumOf { it.count }
 
     Column(
         modifier = Modifier
@@ -58,25 +68,43 @@ fun FollowPacksScreen(navController: NavController) {
         ) {
             ProgressDots(currentStep = 1, totalSteps = 2)
             Spacer(Modifier.height(24.dp))
-            Text("Follow some people", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = OlasColors.Text1)
+            Text(
+                "Follow some people",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = OlasColors.Text1,
+            )
             Spacer(Modifier.height(8.dp))
-            Text("Pick a few packs to see great photos right away.", fontSize = 15.sp, color = OlasColors.Text2)
+            Text(
+                "Pick a few packs to see great photos right away.",
+                fontSize = 15.sp,
+                color = OlasColors.Text2,
+            )
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(STARTER_PACKS) { pack ->
-                FollowPackCard(
-                    pack     = pack,
-                    enabled  = selected[pack.id] == true,
-                    onToggle = { selected[pack.id] = it },
-                )
+        if (uiState.discoveredPacks.isEmpty()) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = OlasColors.Text1)
             }
-            item { Spacer(Modifier.height(8.dp)) }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(uiState.discoveredPacks, key = { it.id }) { pack ->
+                    FollowPackCard(
+                        pack     = pack,
+                        enabled  = pack.id in uiState.selectedPackIds,
+                        onToggle = { vm.togglePackSelection(pack.id) },
+                    )
+                }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
         }
 
         Column(
@@ -87,14 +115,14 @@ fun FollowPacksScreen(navController: NavController) {
         ) {
             if (selectedCount > 0) {
                 Text(
-                    text     = "$selectedCount packs · $totalCreators creators",
+                    text     = "$selectedCount pack${if (selectedCount == 1) "" else "s"} · $totalCreators creators",
                     color    = OlasColors.Text2,
                     fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(8.dp))
             }
             Button(
-                onClick  = { navController.navigate(Routes.ONBOARDING_COMPLETE) },
+                onClick  = { vm.applySelectedPacks(); onContinue() },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
                 colors   = ButtonDefaults.buttonColors(
@@ -103,9 +131,9 @@ fun FollowPacksScreen(navController: NavController) {
                 ),
             ) {
                 Text(
-                    "Continue",
-                    color = OlasColors.Background,
-                    fontSize = 17.sp,
+                    if (selectedCount > 0) "Continue" else "Skip",
+                    color      = OlasColors.Background,
+                    fontSize   = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -114,7 +142,11 @@ fun FollowPacksScreen(navController: NavController) {
 }
 
 @Composable
-private fun FollowPackCard(pack: FollowPack, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun FollowPackCard(
+    pack: FollowPackDescriptor,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -133,6 +165,20 @@ private fun FollowPackCard(pack: FollowPack, enabled: Boolean, onToggle: (Boolea
             Spacer(Modifier.height(2.dp))
             Text(pack.description, fontSize = 13.sp, color = OlasColors.Text2)
             Spacer(Modifier.height(4.dp))
+            // Preview avatars using real member pubkeys (first 6)
+            Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                pack.pubkeys.take(6).forEach { pubkey ->
+                    // Deterministic color avatar from pubkey prefix
+                    val color = pubkeyToColor(pubkey)
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(color),
+                    )
+                }
+            }
+            Spacer(Modifier.height(2.dp))
             Text("${pack.count} creators", fontSize = 12.sp, color = OlasColors.Text3)
         }
         Switch(
@@ -145,5 +191,18 @@ private fun FollowPackCard(pack: FollowPack, enabled: Boolean, onToggle: (Boolea
                 uncheckedTrackColor     = OlasColors.Surface2,
             ),
         )
+    }
+}
+
+/** Deterministic avatar fill color from the first 3 bytes of the pubkey hex. */
+private fun pubkeyToColor(pubkey: String): Color {
+    if (pubkey.length < 6) return Color(0xFF8B5CF6)
+    return try {
+        val r = pubkey.substring(0, 2).toInt(16)
+        val g = pubkey.substring(2, 4).toInt(16)
+        val b = pubkey.substring(4, 6).toInt(16)
+        Color(r, g, b, 0xFF)
+    } catch (_: Exception) {
+        Color(0xFF8B5CF6)
     }
 }

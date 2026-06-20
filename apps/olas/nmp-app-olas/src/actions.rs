@@ -113,51 +113,100 @@ pub extern "C" fn olas_bookmark_event_action_json(
     result.unwrap_or(std::ptr::null_mut())
 }
 
-/// Build the `nmp.publish` action input for a NIP-68 picture post from a
-/// finished Blossom upload. Uses `nmp_nip68::PicturePostBuilder` to assemble
-/// the canonical NIP-68 tag set. Event signing, timestamp, and routing stay
-/// in the NMP publish action.
+/// Build the `nmp.publish` action input for a NIP-68 picture post from one or
+/// more finished Blossom uploads. Accepts a JSON array of uploaded-image
+/// descriptors; emits a single kind:20 with one NIP-68 `imeta` tag per image.
+///
+/// `uploaded_images_json` — JSON array:
+/// ```json
+/// [
+///   {"descriptor":{...BUD-02...},"alt":"caption text","dim":"2048x1536"},
+///   {"descriptor":{...BUD-02...},"alt":"alt text 2","dim":"1200x1600"}
+/// ]
+/// ```
+/// Each element's `descriptor` must contain at least `url` and `sha256`
+/// (standard BUD-02 fields). `alt` and `dim` are optional per image.
+///
+/// `caption` — kind:20 content string (NULL → empty).
+/// `geohash` — 4-char NIP-52 "g" tag value (NULL → omitted).
+///
+/// Returns JSON suitable for:
+///   `nmp_app_dispatch_action(app, "nmp.publish", <returned_json>)`
+/// Returned pointer must be freed with `nmp_free_string`.
 #[no_mangle]
 pub extern "C" fn olas_picture_post_publish_json(
-    blossom_result_json: *const c_char,
+    uploaded_images_json: *const c_char,
     caption: *const c_char,
-    alt: *const c_char,
-    dim: *const c_char,
     geohash: *const c_char,
 ) -> *mut c_char {
     let result = std::panic::catch_unwind(|| -> *mut c_char {
-        let Some(descriptor_str) = opt_cstr_owned(blossom_result_json) else {
+        let Some(images_str) = opt_cstr_owned(uploaded_images_json) else {
             return std::ptr::null_mut();
         };
-        let descriptor: serde_json::Value = match serde_json::from_str(&descriptor_str) {
-            Ok(v) => v,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        let url = match descriptor.get("url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-            Some(u) => u.to_string(),
-            None => return std::ptr::null_mut(),
-        };
-        let sha256 = match descriptor.get("sha256").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-            Some(h) => h.to_string(),
-            None => return std::ptr::null_mut(),
+        let entries: Vec<serde_json::Value> = match serde_json::from_str(&images_str) {
+            Ok(serde_json::Value::Array(arr)) if !arr.is_empty() => arr,
+            _ => return std::ptr::null_mut(),
         };
 
-        let mut image = ImageMeta::new(url).sha256(sha256);
-        if let Some(mime) = descriptor.get("type").and_then(|v| v.as_str()) {
-            image = image.mime(mime);
-        }
-        if let Some(dim_str) = opt_cstr_owned(dim) {
-            if let Some((w, h)) = dim_str.split_once('x') {
-                if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
-                    image = image.dimensions(w, h);
+        let mut images: Vec<ImageMeta> = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            // Each entry may be:
+            //   (a) {"descriptor":{...},"alt":"...","dim":"WxH"}  — new array form
+            //   (b) a flat BUD-02 descriptor directly (single-image legacy)
+            let (descriptor, alt_str, dim_str) = if let Some(desc) = entry.get("descriptor") {
+                (
+                    desc,
+                    entry.get("alt").and_then(|v| v.as_str()).map(str::to_string),
+                    entry.get("dim").and_then(|v| v.as_str()).map(str::to_string),
+                )
+            } else {
+                (entry, None, None)
+            };
+
+            let url = match descriptor
+                .get("url")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                Some(u) => u.to_string(),
+                None => continue, // skip malformed entries
+            };
+            let sha256 = match descriptor
+                .get("sha256")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                Some(h) => h.to_string(),
+                None => continue,
+            };
+
+            let mut image = ImageMeta::new(url).sha256(sha256);
+            // MIME type from descriptor (BUD-02 uses "type" key)
+            if let Some(mime) = descriptor
+                .get("type")
+                .or_else(|| descriptor.get("mime"))
+                .and_then(|v| v.as_str())
+            {
+                image = image.mime(mime);
+            }
+            if let Some(dim) = dim_str {
+                if let Some((w, h)) = dim.split_once('x') {
+                    if let (Ok(w), Ok(h)) = (w.parse::<u32>(), h.parse::<u32>()) {
+                        image = image.dimensions(w, h);
+                    }
                 }
             }
-        }
-        if let Some(alt_str) = opt_cstr_owned(alt) {
-            image = image.alt(alt_str);
+            if let Some(alt) = alt_str.filter(|s| !s.is_empty()) {
+                image = image.alt(alt);
+            }
+            images.push(image);
         }
 
-        let mut builder = PicturePost::new(image)
+        if images.is_empty() {
+            return std::ptr::null_mut();
+        }
+
+        let mut builder = PicturePost::with_images(images)
             .content(opt_cstr_owned(caption).unwrap_or_default());
         if let Some(gh) = opt_cstr_owned(geohash).filter(|gh| is_valid_geohash4(gh)) {
             builder = builder.geohash(gh);

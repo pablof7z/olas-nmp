@@ -92,64 +92,33 @@ struct OlasProfile: Codable {
     }
 }
 
-// MARK: - Follow Pack
+// MARK: - Follow Pack (Rust-decoded from kind:30000 events)
 
-struct FollowPack: Identifiable {
-    let id: String
+/// Decoded from `olas_decode_follow_pack_event_json` — the Rust FFI source of truth.
+/// The old hardcoded `FollowPack.defaults` static has been removed (P0-A fix).
+struct FollowPackDescriptor: Identifiable, Codable {
+    let id: String           // JSON: "id"  (kind:30000 `d` tag)
     let name: String
     let description: String
-    let category: String
-    let accentColor: String
+    let accentColor: String  // JSON: "accent_color"
+    let pubkeys: [String]    // resolved member pubkeys from `p` tags
     let count: Int
-    let previewPubkeys: [String]
 
-    static let defaults: [FollowPack] = [
-        FollowPack(
-            id: "visual-storytellers",
-            name: "Visual Storytellers",
-            description: "Photographers pushing the boundaries of everyday imagery",
-            category: "Photography",
-            accentColor: "#0A84FF",
-            count: 847,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "world-travelers",
-            name: "World Travelers",
-            description: "Explore the globe through stunning travel photography",
-            category: "Travel",
-            accentColor: "#34C759",
-            count: 1203,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "digital-artists",
-            name: "Digital Artists",
-            description: "Cutting-edge digital art and creative visual design",
-            category: "Art",
-            accentColor: "#FF375F",
-            count: 629,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "food-culture",
-            name: "Food & Culture",
-            description: "Culinary photography celebrating food around the world",
-            category: "Food",
-            accentColor: "#FBB131",
-            count: 412,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "nostr-builders",
-            name: "Nostr Builders",
-            description: "Developers and creators building the open social web",
-            category: "Tech",
-            accentColor: "#BF5AF2",
-            count: 2891,
-            previewPubkeys: []
-        )
-    ]
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, count, pubkeys
+        case accentColor = "accent_color"
+    }
+}
+
+/// Returned by `olas_apply_follow_pack_pubkeys` after dispatching all follows.
+struct FollowPackApplyResult: Codable {
+    let followCount: Int    // JSON: "follow_count"
+    let feedDefault: String // JSON: "feed_default" — "following" | "network"
+
+    enum CodingKeys: String, CodingKey {
+        case followCount = "follow_count"
+        case feedDefault = "feed_default"
+    }
 }
 
 // MARK: - Feed Mode

@@ -63,15 +63,26 @@ data class OlasProfile(
     val lud16: String? = null,
 )
 
-/** A curated starter follow pack (NIP-51 kind:30000). */
+/**
+ * P0-A: Rust-decoded kind:30000 follow-pack descriptor.
+ * Decoded from `olas_decode_follow_pack_event_json`.
+ * Replaces the hardcoded STARTER_PACKS list in FollowPacksScreen.
+ */
 @Serializable
-data class FollowPack(
+data class FollowPackDescriptor(
     val id: String,
     val name: String,
     val description: String,
-    val category: String,
-    val accentColor: String,
+    @SerialName("accent_color") val accentColor: String,
+    val pubkeys: List<String>,
     val count: Int,
+)
+
+/** Result of olas_apply_follow_pack_pubkeys. */
+@Serializable
+data class FollowPackApplyResult(
+    @SerialName("follow_count") val followCount: Int,
+    @SerialName("feed_default") val feedDefault: String, // "following" | "network"
 )
 
 /** Which feed source the user is currently viewing. */

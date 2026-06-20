@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -37,35 +38,76 @@ class UploadViewModel : ViewModel() {
     val state: StateFlow<UploadState> = _state.asStateFlow()
 
     /**
-     * Drive a NIP-68 picture post through the two canonical Rust actions, in
-     * lock-step with iOS. Native does only render + capability:
+     * P0-B: Drive a NIP-68 picture post through the two canonical Rust actions.
+     * Supports multi-image: each image is encoded + uploaded independently, then
+     * the full array of descriptors is passed to Rust's
+     * `olas_picture_post_publish_json` which emits ONE kind:20 with multiple
+     * NIP-68 `imeta` tags.
+     *
+     * Native does only render + capability:
      *   1. Downsample + JPEG-encode each image (render).
      *   2. Write the bytes to a temp file (capability — OS file I/O).
      *   3. Measure pixel dimensions for the imeta `dim` (a render fact).
      * Rust owns the rest: `nmp.blossom.upload` hashes + uploads; `nmp.publish`
-     * (PublishRaw) constructs, signs, and routes the kind:20. No SHA-256, no
-     * event JSON, no signing, no imeta assembly happen here. D8: no polling —
-     * each Rust action terminal resolves a suspended awaiter.
+     * constructs, signs, and routes the kind:20. D8: no polling.
      */
-    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>, geohash: String? = null) {
+    fun upload(
+        context: Context,
+        uris: List<Uri>,
+        caption: String,
+        altTexts: Map<Uri, String> = emptyMap(),
+        geohash: String? = null,
+    ) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
             try {
                 _state.value = UploadState(UploadStep.ENCODING, 0f)
 
-                // Single-image parity with iOS: encode + upload the first image,
-                // await its BUD-02 descriptor, then publish one kind:20 carrying
-                // the caption + imeta. Rust signs + routes.
-                val uri = uris.first()
-                _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
-                val publishInput = withContext(Dispatchers.IO) {
-                    uploadOne(appContext, uri, caption, altTexts[uri], geohash)
+                // Load media config from Rust once for all images.
+                val configJson = NMPBridge.mediaUploadConfigJson()
+                    ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
+                val config = runCatching { JSONObject(configJson) }.getOrNull()
+                val maxDimension = config?.optInt("max_dimension", 2048) ?: 2048
+                val jpegQuality = ((config?.optDouble("jpeg_quality", 0.92) ?: 0.92) * 100)
+                    .toInt().coerceIn(1, 100)
+
+                // Determine Blossom server list.
+                val servers = buildList {
+                    val configured = NMPBridge.blossomServerUrl().takeIf { it.isNotBlank() }
+                    if (configured != null) add(configured)
+                    add("https://blossom.band")
+                    add("https://blossom.primal.net")
+                }.distinct()
+
+                // Upload each image; collect descriptor + per-image metadata.
+                val uploadedImages = JSONArray()
+                uris.forEachIndexed { index, uri ->
+                    val progress = index.toFloat() / uris.size
+                    _state.value = _state.value.copy(
+                        step     = UploadStep.UPLOADING,
+                        progress = progress,
+                    )
+                    val entry = withContext(Dispatchers.IO) {
+                        uploadOne(appContext, uri, maxDimension, jpegQuality, servers)
+                    }
+                    val obj = JSONObject().apply {
+                        put("descriptor", JSONObject(entry.descriptorJson))
+                        altTexts[uri]?.takeIf { it.isNotBlank() }?.let { put("alt", it) }
+                        put("dim", entry.dim)
+                    }
+                    uploadedImages.put(obj)
                 }
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
-                // Dispatch publish; allow 30 s for relay confirmation before treating
-                // as optimistic success (event was signed+routed even if no OK arrived).
+
+                // Build the publish input in Rust (one kind:20 for all images).
+                val publishInput = NMPBridge.picturePostPublishJson(
+                    uploadedImagesJson = uploadedImages.toString(),
+                    caption            = caption,
+                    geohash            = geohash,
+                ) ?: throw IllegalStateException("Failed to build publish input")
+
                 val published = withTimeoutOrNull(30_000L) {
                     NMPBridge.dispatchAndAwaitResult("nmp.publish", publishInput)
                 }
@@ -79,42 +121,37 @@ class UploadViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Encode one image to a temp JPEG, upload via `nmp.blossom.upload`, await the
-     * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
-     * JSON (built in Rust). Returns null on any failure.
-     */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?, geohash: String?): String {
-        // 1. Load upload config from Rust (max_dimension, jpeg_quality).
-        val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
-        val config = runCatching { JSONObject(configJson) }.getOrNull()
-        val maxDimension = config?.optInt("max_dimension", 2048) ?: 2048
-        val jpegQuality = ((config?.optDouble("jpeg_quality", 0.92) ?: 0.92) * 100).toInt().coerceIn(1, 100)
+    private data class UploadedEntry(val descriptorJson: String, val dim: String)
 
-        // 2. Decode + downsample (render).
+    /**
+     * Encode one image to a temp JPEG, upload via `nmp.blossom.upload`, and
+     * await the BUD-02 descriptor. Returns the descriptor JSON + dimensions.
+     */
+    private suspend fun uploadOne(
+        context: Context,
+        uri: Uri,
+        maxDimension: Int,
+        jpegQuality: Int,
+        servers: List<String>,
+    ): UploadedEntry {
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
         } ?: throw IllegalStateException("Failed to decode image")
         val resized = downsample(bitmap, maxDimension)
         val dim = "${resized.width}x${resized.height}"
 
-        // 3. Write JPEG to a temp file (capability).
         val tmp = File.createTempFile("olas_upload_", ".jpg", context.cacheDir)
         try {
-            tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out) }
+            tmp.outputStream().use { out ->
+                resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
+            }
 
-            // 4. Dispatch the Blossom upload action and await the descriptor.
-            // Try multiple servers in order; first success wins.
-            val servers = listOf(
-                NMPBridge.blossomServerUrl().takeIf { it.isNotBlank() } ?: "https://blossom.band",
-                "https://blossom.primal.net",
-            ).distinct()
             var terminal: NMPBridge.ActionTerminal? = null
             var lastError = "No servers tried"
             for (server in servers) {
                 val uploadInput = NMPBridge.blossomUploadInputJson(
-                    filePath = tmp.absolutePath,
-                    mime = "image/jpeg",
+                    filePath  = tmp.absolutePath,
+                    mime      = "image/jpeg",
                     serverUrl = server,
                 ) ?: continue
                 val result = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
@@ -122,21 +159,16 @@ class UploadViewModel : ViewModel() {
                     terminal = result
                     break
                 }
-                val reason = result?.reason?.takeIf { it.isNotEmpty() } ?: result?.resultJson?.take(150) ?: "dispatch rejected"
+                val reason = result?.reason?.takeIf { it.isNotEmpty() }
+                    ?: result?.resultJson?.take(150)
+                    ?: "dispatch rejected"
                 lastError = "[$server] $reason"
             }
             terminal ?: throw IllegalStateException("All servers failed. Last: $lastError")
-            if (terminal.resultJson == "null")
+            if (terminal.resultJson == "null") {
                 throw IllegalStateException("Upload returned empty result")
-
-            // 5. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
-            return NMPBridge.picturePostPublishJson(
-                blossomResultJson = terminal.resultJson,
-                caption = caption,
-                alt = alt,
-                dim = dim,
-                geohash = geohash,
-            ) ?: throw IllegalStateException("Failed to build publish input from upload result")
+            }
+            return UploadedEntry(descriptorJson = terminal.resultJson, dim = dim)
         } finally {
             tmp.delete()
         }

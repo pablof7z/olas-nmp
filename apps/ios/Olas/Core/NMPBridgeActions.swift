@@ -172,24 +172,92 @@ extension NMPBridge {
         }
     }
 
-    func picturePostPublishJSON(blossomResultJSON: String, caption: String, alt: String?, dim: String?, geohash: String?) -> String? {
+    // MARK: - P0-B: multi-image publish
+
+    /// Build the nmp.publish (PublishRaw) kind:20 input JSON from an array of
+    /// finished Blossom upload results. Each element carries the BUD-02
+    /// descriptor plus per-image alt text and pixel dimensions.
+    ///
+    /// uploadedImages: array of (descriptor JSON string, alt, dim "WxH") tuples.
+    /// caption: kind:20 content string.
+    /// geohash: optional 4-char precision geohash for the "g" tag.
+    func picturePostPublishJSON(
+        uploadedImages: [(descriptorJSON: String, alt: String?, dim: String?)],
+        caption: String,
+        geohash: String?
+    ) -> String? {
+        // Build the JSON array that Rust expects.
+        var entries: [[String: Any]] = []
+        for item in uploadedImages {
+            guard let descriptorData = item.descriptorJSON.data(using: .utf8),
+                  let descriptorObj = try? JSONSerialization.jsonObject(with: descriptorData)
+            else { continue }
+            var entry: [String: Any] = ["descriptor": descriptorObj]
+            if let alt = item.alt, !alt.isEmpty { entry["alt"] = alt }
+            if let dim = item.dim, !dim.isEmpty { entry["dim"] = dim }
+            entries.append(entry)
+        }
+        guard !entries.isEmpty,
+              let entriesData = try? JSONSerialization.data(withJSONObject: entries),
+              let entriesJSON = String(data: entriesData, encoding: .utf8)
+        else { return nil }
+
         func withOpt(_ s: String?, _ body: (UnsafePointer<CChar>?) -> String?) -> String? {
             if let s { return s.withCString { body($0) } }
             return body(nil)
         }
-        return blossomResultJSON.withCString { r in
-            caption.withCString { c in
-                withOpt(alt) { a in
-                    withOpt(dim) { d in
-                        withOpt(geohash) { g in
-                            guard let ptr = olas_picture_post_publish_json(r, c, a, d, g) else { return nil }
-                            defer { nmp_free_string(ptr) }
-                            return String(cString: ptr)
-                        }
-                    }
+        return entriesJSON.withCString { imagesPtr in
+            caption.withCString { captionPtr in
+                withOpt(geohash) { geoPtr in
+                    guard let ptr = olas_picture_post_publish_json(imagesPtr, captionPtr, geoPtr) else { return nil }
+                    defer { nmp_free_string(ptr) }
+                    return String(cString: ptr)
                 }
             }
         }
+    }
+
+    // MARK: - P0-A: follow-pack discovery and apply
+
+    /// Open the kind:30000 follow-pack discovery interest.
+    func openFollowPackDiscovery(consumer: String = "olas.follow_packs") {
+        guard let app = appPtr else { return }
+        consumer.withCString { olas_open_follow_pack_discovery(app, $0) }
+    }
+
+    /// Close the follow-pack discovery interest.
+    func closeFollowPackDiscovery(consumer: String = "olas.follow_packs") {
+        guard let app = appPtr else { return }
+        consumer.withCString { olas_close_follow_pack_discovery(app, $0) }
+    }
+
+    /// Decode a raw kind:30000 event JSON into a FollowPackDescriptor.
+    func decodeFollowPackEvent(_ eventJSON: String) -> FollowPackDescriptor? {
+        let ptr = eventJSON.withCString { olas_decode_follow_pack_event_json($0) }
+        guard let ptr else { return nil }
+        defer { nmp_free_string(ptr) }
+        let json = String(cString: ptr)
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(FollowPackDescriptor.self, from: data)
+    }
+
+    /// Apply selected follow packs: dispatch nmp.follow for each pubkey in
+    /// the deduplicated union. Returns the result descriptor or nil on failure.
+    func applyFollowPackPubkeys(_ pubkeys: [String]) -> FollowPackApplyResult? {
+        guard let app = appPtr, !pubkeys.isEmpty else { return nil }
+        guard let data = try? JSONSerialization.data(withJSONObject: pubkeys),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        let activePk = activeAccountPubkey ?? ""
+        let ptr = json.withCString { pubkeysPtr in
+            activePk.withCString { activePtr in
+                olas_apply_follow_pack_pubkeys(app, pubkeysPtr, activePtr)
+            }
+        }
+        guard let ptr else { return nil }
+        defer { nmp_free_string(ptr) }
+        let resultJSON = String(cString: ptr)
+        guard let resultData = resultJSON.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(FollowPackApplyResult.self, from: resultData)
     }
 
     func locationGeohash4(latitude: Double, longitude: Double) -> String? {

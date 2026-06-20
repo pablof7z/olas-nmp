@@ -93,13 +93,18 @@ object NMPBridge {
     private external fun nativeBolt11AmountSats(bolt11: String): Long
     private external fun nativeBookmarkEventActionJson(accountPubkey: String, eventId: String): String?
     private external fun nativeLocationGeohash4(latitude: Double, longitude: Double): String?
+    /** P0-B: multi-image publish — accepts JSON array of uploaded-image descriptors. */
     private external fun nativePicturePostPublishJson(
-        blossomResultJson: String,
+        uploadedImagesJson: String,
         caption: String?,
-        alt: String?,
-        dim: String?,
         geohash: String?,
     ): String?
+
+    // P0-A: follow-pack discovery
+    private external fun nativeOpenFollowPackDiscovery(handle: Long, consumerId: String)
+    private external fun nativeCloseFollowPackDiscovery(handle: Long, consumerId: String)
+    private external fun nativeDecodeFollowPackEventJson(eventJson: String): String?
+    private external fun nativeApplyFollowPackPubkeys(handle: Long, pubkeysJson: String, activePubkey: String): String?
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
     private external fun nativeLifecycleBackground(handle: Long)
@@ -353,14 +358,44 @@ object NMPBridge {
     fun blossomUploadInputJson(filePath: String, mime: String?, serverUrl: String?): String? =
         nativeBlossomUploadInputJson(filePath, mime, serverUrl)
 
-    /** Build the nmp.publish (PublishRaw) kind:20 input JSON in Rust from a Blossom result. */
+    /**
+     * P0-B: Build the nmp.publish (PublishRaw) kind:20 input JSON in Rust from
+     * an array of finished Blossom upload descriptors. Emits one kind:20 with
+     * multiple NIP-68 `imeta` tags — one per image.
+     *
+     * uploadedImagesJson: JSON array of
+     *   `[{"descriptor":{...BUD-02...},"alt":"...","dim":"WxH"}, ...]`
+     */
     fun picturePostPublishJson(
-        blossomResultJson: String,
+        uploadedImagesJson: String,
         caption: String?,
-        alt: String?,
-        dim: String?,
         geohash: String?,
-    ): String? = nativePicturePostPublishJson(blossomResultJson, caption, alt, dim, geohash)
+    ): String? = nativePicturePostPublishJson(uploadedImagesJson, caption, geohash)
+
+    // --- P0-A: Follow-pack discovery and bulk-apply --------------------------
+
+    /** Open kind:30000 follow-pack discovery interest (canonical Olas curators). */
+    fun openFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
+        nativeOpenFollowPackDiscovery(appHandle, consumerId)
+
+    /** Close follow-pack discovery interest. */
+    fun closeFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
+        nativeCloseFollowPackDiscovery(appHandle, consumerId)
+
+    /**
+     * Decode a raw kind:30000 event JSON from the event observer into a
+     * FollowPackDescriptor JSON string (or null if not a valid pack event).
+     */
+    fun decodeFollowPackEventJson(eventJson: String): String? =
+        nativeDecodeFollowPackEventJson(eventJson)
+
+    /**
+     * Apply selected follow packs: dispatch nmp.follow for each pubkey.
+     * pubkeysJson: JSON array of hex pubkey strings (deduped, self-excluded by Rust).
+     * Returns: `{"follow_count":N,"feed_default":"following|network"}` or null.
+     */
+    fun applyFollowPackPubkeys(pubkeysJson: String, activePubkey: String = ""): String? =
+        nativeApplyFollowPackPubkeys(appHandle, pubkeysJson, activePubkey)
 
     /** Native supplies the raw OS location fix; Rust owns geohash precision/encoding. */
     fun locationGeohash4(latitude: Double, longitude: Double): String? =
