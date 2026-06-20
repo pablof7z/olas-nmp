@@ -47,7 +47,7 @@ void nmp_app_open_uri(void* app, const char* uri);
 // force=1: re-fetch from relay even if kind:0 is already in the EventStore.
 // Profile data is delivered via the update callback `claimed_profiles` projection,
 // NOT via the event observer (observer only fires for events NEW to the EventStore).
-void nmp_app_claim_profile(void* app, const char* pubkey, const char* consumer_id, int32_t force);
+void nmp_app_claim_profile(void* app, const char* pubkey, const char* consumer_id, int32_t force, int32_t liveness);
 void nmp_app_release_profile(void* app, const char* pubkey, const char* consumer_id);
 void nmp_app_claim_event(void* app, const char* event_id, const char* consumer_id);
 void nmp_app_release_event(void* app, const char* event_id, const char* consumer_id);
@@ -81,16 +81,12 @@ char* nmp_app_encode_profile(void* app, const char* pubkey_hex);
 void nmp_app_lifecycle_foreground(void* app);
 void nmp_app_lifecycle_background(void* app);
 
-// Wallet (NWC — Nostr Wallet Connect)
-void nmp_app_wallet_connect(void* app, const char* nwc_uri);
-char* nmp_app_wallet_pay_invoice(void* app, const char* bolt11);
-
 // Free — every char* returned by any nmp_app_* or olas_* function must be freed here
 void nmp_free_string(char* s);
 
 // ── Olas-specific additions ───────────────────────────────────────────────────
 
-/// Seed the four canonical Olas relays (call once after nmp_app_start).
+/// Seed the four canonical Olas relays (call once before nmp_app_start).
 /// Adds relay.damus.io, nos.lol, relay.primal.net (role "both") and
 /// purplepag.es (role "indexer"). Safe to call again after a relay-config reset.
 void olas_seed_default_relays(void* app);
@@ -133,6 +129,24 @@ void olas_open_follow_pack(void* app, const char* pack_addr);
 /// Returned pointer must be freed with nmp_free_string.
 char* olas_blossom_upload_input_json(const char* file_path, const char* mime_type, const char* server_url);
 
+/// Decode a raw kind:20 KernelEvent JSON into the Olas PhotoPost payload.
+char* olas_filter_photo_post_json(const char* event_json, uint8_t contact_list_only, const char* wot_preset);
+
+/// Decode common event models from raw KernelEvent JSON.
+char* olas_profile_json(const char* event_json);
+char* olas_notification_json(const char* event_json);
+char* olas_contact_list_pubkeys_json(const char* event_json, const char* active_pubkey);
+char* olas_default_relays_json(void);
+
+/// Build app action payloads in Rust; Swift only dispatches them.
+char* olas_react_action_json(const char* target_event_id, const char* target_author_pubkey);
+char* olas_zap_action_json(const char* recipient_pubkey, const char* target_event_id, uint64_t amount_msats, const char* comment);
+char* olas_bookmark_event_action_json(const char* account_pubkey, const char* event_id);
+
+/// Convenience helpers used by native capability flows.
+uint64_t olas_bolt11_amount_sats(const char* bolt11);
+char* olas_location_geohash4(double latitude, double longitude);
+
 /// Decode `claimed_profiles` from a FlatBuffer snapshot frame (update callback).
 /// Returns JSON array "[{"pubkey","display_name?","picture_url?","nip05?"}]" or NULL.
 /// Profiles come via the update callback — NOT via the event observer.
@@ -151,6 +165,12 @@ char* olas_decode_snapshot_active_account_json(const uint8_t* frame, size_t len)
 /// nmp_free_string. Call from the nmp_app_set_update_callback handler to resolve
 /// nmp.blossom.upload and nmp.publish async terminals by correlation_id.
 char* olas_decode_snapshot_action_results_json(const uint8_t* frame, size_t len);
+
+/// Decode an Olas photo-feed typed projection from a FlatBuffer snapshot frame.
+/// key is "olas.following_feed" or "olas.network_feed". Returns a JSON array
+/// of PhotoPost objects, or NULL if the projection is absent in this frame.
+/// Returned string must be freed with nmp_free_string.
+char* olas_decode_snapshot_photo_feed_json(const uint8_t* frame, size_t len, const char* key);
 
 /// Build the nmp.publish action input JSON for a NIP-68 (kind:20) picture post
 /// from a finished Blossom upload. This is the single canonical picture-post
@@ -205,3 +225,7 @@ void  olas_blossom_server_url_set(void* app, const char* url);
 // Feed mode (caller must free get result with nmp_free_string)
 char* olas_feed_mode_get(void* app);
 void  olas_feed_mode_set(void* app, const char* mode);
+
+// WoT preset for the Rust-owned network feed predicate.
+char* olas_wot_preset_get(void* app);
+void  olas_wot_preset_set(void* app, const char* preset);

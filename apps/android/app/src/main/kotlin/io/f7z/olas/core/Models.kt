@@ -42,6 +42,8 @@ data class PhotoPost(
     val commentCount: Int,
     val zapTotal: Long,
     val createdAt: Long,
+    val isLiked: Boolean = false,
+    val isBookmarked: Boolean = false,
 )
 
 /** A Nostr profile (kind-0). */
@@ -66,6 +68,16 @@ data class FollowPack(
     val category: String,
     val accentColor: String,
     val count: Int,
+)
+
+@Serializable
+data class DefaultRelay(
+    val id: String,
+    val name: String,
+    val iconHost: String,
+    val url: String,
+    val role: String,
+    val connected: Boolean,
 )
 
 /** Which feed source the user is currently viewing. */

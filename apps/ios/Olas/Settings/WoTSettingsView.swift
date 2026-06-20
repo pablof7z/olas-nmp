@@ -93,6 +93,7 @@ struct WoTSettingsView: View {
         let isSelected = option.storageValue == selectedPreset.lowercased()
         return Button {
             selectedPreset = option.storageValue
+            NMPBridge.shared.setWotPreset(option.storageValue)
         } label: {
             HStack(spacing: OlasSpacing.md) {
                 Image(systemName: option.icon)

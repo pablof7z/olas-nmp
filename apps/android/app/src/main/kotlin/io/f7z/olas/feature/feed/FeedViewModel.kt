@@ -5,13 +5,11 @@ import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FeedMode
 import io.f7z.olas.core.NMPBridge
 import io.f7z.olas.core.PhotoPost
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 data class FeedUiState(
@@ -37,40 +35,23 @@ class FeedViewModel : ViewModel() {
         }
         _uiState.value = _uiState.value.copy(feedMode = persistedMode)
         if (persistedMode == FeedMode.FOLLOWING) NMPBridge.openFollowingFeed() else NMPBridge.openNetworkFeed()
-        observeEvents()
-        // On cold restart, relay WebSocket connections establish asynchronously.
-        // Re-open the subscription after 6s and 18s if no events have arrived yet.
-        viewModelScope.launch {
-            for (delayMs in listOf(6_000L, 18_000L)) {
-                delay(delayMs)
-                if (_uiState.value.isLoading && _uiState.value.posts.isEmpty()) {
-                    NMPBridge.openNetworkFeed()
-                }
-            }
-        }
+        observeFeedSnapshots()
     }
 
-    private fun observeEvents() {
-        NMPBridge.nostrEvents
-            .onEach { raw ->
-                val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
-                val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
+    private fun observeFeedSnapshots() {
+        NMPBridge.photoFeedSnapshots
+            .onEach { snapshot ->
+                if (snapshot.key != feedKey(_uiState.value.feedMode)) return@onEach
+                val posts = runCatching {
+                    json.decodeFromString<List<PhotoPost>>(snapshot.postsJson)
+                }.getOrDefault(emptyList())
                 val current = _uiState.value
-                if (current.posts.isEmpty()) {
-                    // First batch — show immediately
-                    _uiState.value = current.copy(
-                        posts     = (listOf(post) + current.posts).distinctBy { it.id },
-                        isLoading = false,
-                    )
-                } else {
-                    // Subsequent posts — queue behind "new posts" pill
-                    val pending = (listOf(post) + current.pendingPosts).distinctBy { it.id }
-                    _uiState.value = current.copy(
-                        pendingPosts = pending,
-                        hasNewPosts  = true,
-                        isLoading    = false,
-                    )
-                }
+                _uiState.value = current.copy(
+                    posts = posts.distinctBy { it.id },
+                    pendingPosts = emptyList(),
+                    hasNewPosts = false,
+                    isLoading = false,
+                )
             }
             .launchIn(viewModelScope)
     }
@@ -102,6 +83,21 @@ class FeedViewModel : ViewModel() {
     }
 
     fun loadOlderPosts() {
-        NMPBridge.loadOlderFeed("photo_feed")
+        NMPBridge.loadOlderFeed(feedKey(_uiState.value.feedMode))
     }
+
+    fun react(post: PhotoPost) {
+        NMPBridge.reactTo(post)
+    }
+
+    fun bookmark(post: PhotoPost) {
+        NMPBridge.bookmarkEvent(post, add = !post.isBookmarked)
+    }
+
+    fun zap(post: PhotoPost) {
+        NMPBridge.zapPost(post, amountSats = 21L)
+    }
+
+    private fun feedKey(mode: FeedMode): String =
+        if (mode == FeedMode.FOLLOWING) NMPBridge.FOLLOWING_FEED_KEY else NMPBridge.NETWORK_FEED_KEY
 }

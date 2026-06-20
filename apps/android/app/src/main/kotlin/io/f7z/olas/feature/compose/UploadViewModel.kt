@@ -113,6 +113,7 @@ class UploadViewModel : ViewModel() {
                 caption = caption,
                 alt = alt,
                 dim = dim,
+                geohash = null,
             )
         } finally {
             tmp.delete()

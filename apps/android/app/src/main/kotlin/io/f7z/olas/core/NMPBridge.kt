@@ -20,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
 object NMPBridge {
     private const val SETTINGS_PREFS = "olas_settings"
     private const val KEY_WOT_PRESET = "wotPreset"
+    const val FOLLOWING_FEED_KEY = "olas.following_feed"
+    const val NETWORK_FEED_KEY = "olas.network_feed"
 
     init {
         System.loadLibrary("nmp_app_olas")
@@ -36,6 +38,13 @@ object NMPBridge {
     private val _nostrEvents = MutableSharedFlow<String>(extraBufferCapacity = 512)
     val nostrEvents: SharedFlow<String> = _nostrEvents.asSharedFlow()
 
+    data class PhotoFeedSnapshot(val key: String, val postsJson: String)
+    private val _photoFeedSnapshots = MutableSharedFlow<PhotoFeedSnapshot>(extraBufferCapacity = 64)
+    val photoFeedSnapshots: SharedFlow<PhotoFeedSnapshot> = _photoFeedSnapshots.asSharedFlow()
+
+    private val _claimedProfilesJson = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val claimedProfilesJson: SharedFlow<String> = _claimedProfilesJson.asSharedFlow()
+
     @Volatile
     var activeAccountPubkey: String? = null
         private set
@@ -45,6 +54,7 @@ object NMPBridge {
     private external fun nativeFree(handle: Long)
     private external fun nativeRegister(handle: Long)
     private external fun nativeConsumeAllBuiltinProjections(handle: Long)
+    private external fun nativeSeedDefaultRelays(handle: Long)
     private external fun nativeStart(handle: Long, storagePath: String)
     private external fun nativeStop(handle: Long)
     private external fun nativeSetUpdateListener(handle: Long, listener: UpdateListener?)
@@ -73,6 +83,10 @@ object NMPBridge {
     private external fun nativeRegisterEventObserver(handle: Long, listener: EventObserverListener)
     private external fun nativeDecodeActionResults(handle: Long, frame: ByteArray): String?
     private external fun nativeDecodeActiveAccount(handle: Long, frame: ByteArray): String?
+    private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
+    private external fun nativeDecodePhotoFeed(handle: Long, frame: ByteArray, key: String): String?
+    private external fun nativeClaimProfile(handle: Long, pubkey: String, consumerId: String)
+    private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeBlossomUploadInputJson(filePath: String, contentType: String?, serverUrl: String?): String?
     private external fun nativeReactActionJson(targetEventId: String, targetAuthorPubkey: String?): String?
     private external fun nativeZapActionJson(recipientPubkey: String, targetEventId: String?, amountMsats: Long, comment: String?): String?
@@ -89,7 +103,6 @@ object NMPBridge {
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
     private external fun nativeLifecycleBackground(handle: Long)
-    private external fun nativeWalletConnect(handle: Long, uri: String)
     private external fun nativeSetStoragePath(handle: Long, path: String): Int
     private external fun nativeDecodeKind20EventJson(handle: Long, eventJson: String): String?
     private external fun nativeDecodeKind0EventJson(handle: Long, eventJson: String): String?
@@ -106,6 +119,7 @@ object NMPBridge {
     private external fun nativeBlossomServerUrlSet(handle: Long, url: String)
     private external fun nativeFeedModeGet(handle: Long): String?
     private external fun nativeFeedModeSet(handle: Long, mode: String)
+    private external fun nativeWotPresetSet(handle: Long, preset: String)
 
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
@@ -128,6 +142,8 @@ object NMPBridge {
         nativeConsumeAllBuiltinProjections(appHandle)
         val storageDir = File(context.filesDir, "nmp").also { it.mkdirs() }
         nativeSetStoragePath(appHandle, storageDir.absolutePath)
+        nativeWotPresetSet(appHandle, wotPreset())
+        nativeSeedDefaultRelays(appHandle)
         // Wire the update callback: emit raw FlatBuffer frames to _events and
         // parse action_results in each frame.
         nativeSetUpdateListener(appHandle, object : UpdateListener {
@@ -181,11 +197,13 @@ object NMPBridge {
             ?: "balanced"
 
     fun setWotPreset(preset: String) {
+        val normalized = preset.lowercase()
         appContext
             ?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             ?.edit()
-            ?.putString(KEY_WOT_PRESET, preset.lowercase())
+            ?.putString(KEY_WOT_PRESET, normalized)
             ?.apply()
+        nativeWotPresetSet(appHandle, normalized)
     }
 
     fun loadOlderFeed(key: String) = nativeLoadOlderFeed(appHandle, key)
@@ -256,6 +274,10 @@ object NMPBridge {
                     ?.let { activeAccountPubkey = it }
             }
 
+        decodePhotoFeed(frame, FOLLOWING_FEED_KEY)
+        decodePhotoFeed(frame, NETWORK_FEED_KEY)
+        decodeClaimedProfiles(frame)
+
         if (actionResultWaiters.isEmpty()) return
         val json = runCatching { nativeDecodeActionResults(appHandle, frame) }
             .getOrNull() ?: return
@@ -269,6 +291,22 @@ object NMPBridge {
             waiter.complete(ActionTerminal(status, resultJson))
         }
     }
+
+    private fun decodePhotoFeed(frame: ByteArray, key: String) {
+        val json = runCatching { nativeDecodePhotoFeed(appHandle, frame, key) }.getOrNull() ?: return
+        _photoFeedSnapshots.tryEmit(PhotoFeedSnapshot(key, json))
+    }
+
+    private fun decodeClaimedProfiles(frame: ByteArray) {
+        val json = runCatching { nativeDecodeClaimedProfiles(appHandle, frame) }.getOrNull() ?: return
+        _claimedProfilesJson.tryEmit(json)
+    }
+
+    fun claimProfile(pubkey: String, consumerId: String) =
+        nativeClaimProfile(appHandle, pubkey, consumerId)
+
+    fun releaseProfile(pubkey: String, consumerId: String) =
+        nativeReleaseProfile(appHandle, pubkey, consumerId)
 
     /**
      * Dispatch an async-completing action and suspend until its terminal row
@@ -301,8 +339,6 @@ object NMPBridge {
     /** Native supplies the raw OS location fix; Rust owns geohash precision/encoding. */
     fun locationGeohash4(latitude: Double, longitude: Double): String? =
         nativeLocationGeohash4(latitude, longitude)
-
-    fun walletConnect(uri: String) = nativeWalletConnect(appHandle, uri)
 
     fun lifecycleForeground() = nativeLifecycleForeground(appHandle)
     fun lifecycleBackground() = nativeLifecycleBackground(appHandle)

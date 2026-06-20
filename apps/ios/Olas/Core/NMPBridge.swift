@@ -7,6 +7,8 @@ import Combine
 
 @Observable @MainActor final class NMPBridge {
     static let shared = NMPBridge()
+    static let followingFeedKey = "olas.following_feed"
+    static let networkFeedKey = "olas.network_feed"
 
     private var appPtr: UnsafeMutableRawPointer?
     var isRunning = false
@@ -46,6 +48,8 @@ import Combine
 
     private init() {}
 
+    func appForFFI() -> UnsafeMutableRawPointer? { appPtr }
+
     func initialize() async {
         guard appPtr == nil else { return }
         appPtr = nmp_app_new()
@@ -61,11 +65,13 @@ import Combine
         // ADR-0053: must declare projection-consumption intent before start.
         nmp_app_consume_all_builtin_projections(app)
 
+        // Default relay set lives in Rust — no URLs hardcoded in Swift (D3).
+        // Seed before start so the actor's initial subscription compile has relays.
+        olas_seed_default_relays(app)
+
+        setWotPreset(UserDefaults.standard.string(forKey: "wotPreset") ?? "balanced")
         registerCallbacks(app: app)
         nmp_app_start(app, 0, 100, 4)
-
-        // Default relay set lives in Rust — no URLs hardcoded in Swift (D3).
-        olas_seed_default_relays(app)
 
         setupCombinePipelines()
         isRunning = true
@@ -156,6 +162,18 @@ import Combine
 
     func addEventHandler(_ handler: @escaping (String) -> Void) {
         eventHandlers.append(handler)
+    }
+
+    // MARK: - Photo feed snapshots
+
+    private var photoFeedHandlers: [(String, String) -> Void] = []
+
+    func addPhotoFeedHandler(_ handler: @escaping (String, String) -> Void) {
+        photoFeedHandlers.append(handler)
+    }
+
+    func handlePhotoFeedJSON(key: String, json: String) {
+        photoFeedHandlers.forEach { $0(key, json) }
     }
 
     // MARK: - Profile cache (from claimed_profiles snapshot projection)
@@ -260,80 +278,12 @@ import Combine
         uri.withCString { nmp_app_signin_bunker(app, $0, 1) }
     }
 
-    // MARK: - Feed
-
-    func openFollowingFeed() {
-        guard let app = appPtr else { return }
-        "olas.following_feed".withCString { olas_open_photo_feed(app, 1, $0) }
-    }
-
-    func openNetworkFeed() {
-        guard let app = appPtr else { return }
-        "olas.network_feed".withCString { olas_open_photo_feed(app, 0, $0) }
-    }
-
-    func loadOlderFeed(key: String) {
-        guard let app = appPtr else { return }
-        key.withCString { nmp_app_load_older_feed(app, $0) }
-    }
-
     // MARK: - Profile
 
     // NMP-GAP(#5): profileCache is a read-only view populated from the claimed_profiles
     // Rust projection. It is NOT an authoritative store — only Rust's snapshot is truth.
     // A future typed projection will supersede this dictionary entirely.
     private(set) var profileCache: [String: ProfileWire] = [:]
-
-    func claimProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_claim_profile(app, pk, c, 1) } }
-    }
-
-    func releaseProfile(pubkey: String, consumer: String = "olas.profile") {
-        guard let app = appPtr else { return }
-        pubkey.withCString { pk in consumer.withCString { c in nmp_app_release_profile(app, pk, c) } }
-    }
-
-    // MARK: - Actions
-
-    func dispatchAction(namespace: String, json: String) -> String? {
-        guard let app = appPtr else { return nil }
-        return namespace.withCString { ns in
-            json.withCString { j in
-                guard let ptr = nmp_app_dispatch_action(app, ns, j) else { return nil }
-                defer { nmp_free_string(ptr) }
-                return String(cString: ptr)
-            }
-        }
-    }
-
-    func blossomUploadInputJSON(filePath: String, mime: String, serverURL: String) -> String? {
-        filePath.withCString { fp in
-            mime.withCString { m in
-                serverURL.withCString { s in
-                    guard let ptr = olas_blossom_upload_input_json(fp, m, s) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }
-            }
-        }
-    }
-
-    func picturePostPublishJSON(blossomResultJSON: String, caption: String, alt: String?, dim: String?, geohash: String?) -> String? {
-        func withOpt(_ s: String?, _ body: (UnsafePointer<CChar>?) -> String?) -> String? {
-            if let s { return s.withCString { body($0) } }
-            return body(nil)
-        }
-        return blossomResultJSON.withCString { r in
-            caption.withCString { c in
-                withOpt(alt) { a in withOpt(dim) { d in withOpt(geohash) { g in
-                    guard let ptr = olas_picture_post_publish_json(r, c, a, d, g) else { return nil }
-                    defer { nmp_free_string(ptr) }
-                    return String(cString: ptr)
-                }}}
-            }
-        }
-    }
 
     // MARK: - Event decoders
 
@@ -434,35 +384,9 @@ import Combine
         feedMode = mode
     }
 
-    // MARK: - Relay management
-
-    func addRelay(url: String, role: String) {
+    func setWotPreset(_ preset: String) {
         guard let app = appPtr else { return }
-        url.withCString { u in role.withCString { r in nmp_app_add_relay(app, u, r) } }
-    }
-
-    func removeRelay(url: String) {
-        guard let app = appPtr else { return }
-        url.withCString { nmp_app_remove_relay(app, $0) }
-    }
-
-    // MARK: - Wallet
-
-    func connectWallet(uri: String) {
-        guard let app = appPtr else { return }
-        uri.withCString { nmp_app_wallet_connect(app, $0) }
-    }
-
-    // MARK: - Lifecycle
-
-    func appDidBecomeActive() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_foreground(app)
-    }
-
-    func appDidEnterBackground() {
-        guard let app = appPtr else { return }
-        nmp_app_lifecycle_background(app)
+        preset.lowercased().withCString { olas_wot_preset_set(app, $0) }
     }
 }
 

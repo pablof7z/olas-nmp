@@ -58,6 +58,18 @@ pub extern "C" fn olas_add_default_relays(app: *mut NmpApp) {
         if app.is_null() {
             return;
         }
+        let relays = DEFAULT_RELAYS
+            .iter()
+            .map(|relay| (relay.url.to_string(), relay.role.to_string()))
+            .collect::<Vec<_>>();
+
+        // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
+        let app_ref = unsafe { &*app };
+        if app_ref.set_initial_relays_for_start(relays) == nmp_ffi::NmpConfigStatus::Ok {
+            return;
+        }
+
+        // Late calls after start/reset still update the actor-owned relay list.
         for relay in DEFAULT_RELAYS {
             let Ok(url) = CString::new(relay.url) else {
                 continue;
@@ -246,6 +258,19 @@ fn to_cstring(value: String) -> *mut c_char {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::c_void;
+    use std::sync::mpsc::Sender;
+    use std::time::Duration;
+
+    extern "C" fn signal_update(context: *mut c_void, bytes: *const u8, len: usize) {
+        if context.is_null() || bytes.is_null() || len == 0 {
+            return;
+        }
+        // SAFETY: the test installs a `Sender<()>` pointer that lives until the
+        // callback is cleared before app teardown.
+        let tx = unsafe { &*(context as *const Sender<()>) };
+        let _ = tx.send(());
+    }
 
     fn event(kind: u64, content: serde_json::Value, tags: serde_json::Value) -> String {
         serde_json::json!({
@@ -289,5 +314,44 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["kind"], "reaction");
         assert_eq!(value["postId"], "post1");
+    }
+
+    #[test]
+    fn default_relays_seed_initial_relay_slot_before_start() {
+        let app = nmp_ffi::nmp_app_new();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let context = &tx as *const Sender<()> as *mut c_void;
+
+        nmp_ffi::nmp_app_set_update_callback(app, context, Some(signal_update));
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("pre-start snapshot callback");
+
+        nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+        olas_add_default_relays(app);
+        nmp_ffi::nmp_app_start(app, 0, 32, 4);
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("started snapshot callback");
+
+        // SAFETY: `app` is live until `nmp_app_free` below.
+        let app_ref = unsafe { &*app };
+        let relay_slot = app_ref.configured_relays_handle();
+        let guard = relay_slot.lock().expect("configured relays lock");
+        let rows = guard
+            .as_slice()
+            .iter()
+            .map(|row| (row.url().to_string(), row.role().to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            vec![
+                ("wss://relay.damus.io".to_string(), "both".to_string()),
+                ("wss://nos.lol".to_string(), "both".to_string()),
+                ("wss://relay.primal.net".to_string(), "both".to_string()),
+                ("wss://purplepag.es".to_string(), "indexer".to_string()),
+            ]
+        );
+
+        nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), None);
+        nmp_ffi::nmp_app_free(app);
     }
 }

@@ -12,7 +12,7 @@ use nmp_ffi::{
     NmpApp,
 };
 
-use crate::{olas_app_register, olas_create_account};
+use crate::{olas_app_register, olas_create_account, olas_seed_default_relays};
 
 #[path = "jni_action_exports.rs"]
 mod action_exports;
@@ -195,6 +195,21 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeConsumeAllBuiltinPr
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
         let (app, _) = unpack(handle);
         nmp_app_consume_all_builtin_projections(app);
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeSeedDefaultRelays(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        olas_seed_default_relays(app);
     }));
 }
 

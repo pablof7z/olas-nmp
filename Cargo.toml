@@ -15,15 +15,18 @@ version = "0.1.0"
 #   1. Bump all rev entries below to the new rev.
 #   2. Bump the [patch] paths if still using local checkout.
 #
-# Current rev: 4d65f241ebc4a2e320046364e5e3fe4a5443466f (NMP v0.8.0)
+# Current rev: 7ff065d13967d48a32579f54b771d47edbef109b (NMP #1636 feed adapters)
 [workspace.dependencies]
-nmp-core     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-ffi      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-blossom  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-nip57    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-nip02    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
-nmp-wot      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "4d65f241ebc4a2e320046364e5e3fe4a5443466f" }
+nmp-core     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-ffi      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-blossom  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-feed     = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-nip02    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-nip57    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-nip68    = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-planner  = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
+nmp-wot      = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "7ff065d13967d48a32579f54b771d47edbef109b" }
 
 nostr      = "0.44"
 serde      = "1.0"
@@ -37,6 +40,9 @@ jni        = { version = "0.21", features = ["invocation"] }
 #nmp-defaults = { path = "../nostr-multi-platform/crates/nmp-defaults" }
 #nmp-ffi      = { path = "../nostr-multi-platform/crates/nmp-ffi" }
 #nmp-blossom  = { path = "../nostr-multi-platform/crates/nmp-blossom" }
-#nmp-nip57    = { path = "../nostr-multi-platform/crates/nmp-nip57" }
+#nmp-feed     = { path = "../nostr-multi-platform/crates/nmp-feed" }
 #nmp-nip02    = { path = "../nostr-multi-platform/crates/nmp-nip02" }
+#nmp-nip57    = { path = "../nostr-multi-platform/crates/nmp-nip57" }
+#nmp-nip68    = { path = "../nostr-multi-platform/crates/nmp-nip68" }
+#nmp-planner  = { path = "../nostr-multi-platform/crates/nmp-planner" }
 #nmp-wot      = { path = "../nostr-multi-platform/crates/nmp-wot" }

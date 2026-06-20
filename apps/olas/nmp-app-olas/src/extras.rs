@@ -10,25 +10,13 @@ use nmp_ffi::NmpApp;
 /// Seed the four canonical Olas relays on a freshly started NmpApp.
 ///
 /// Call once after nmp_app_start (or on a relay-config reset).
-/// Adds: relay.damus.io, nos.lol, relay.primal.net (role "both") and
-/// purplepag.es (role "indexer" — purpose-built kind:0 profile index).
 #[no_mangle]
 pub extern "C" fn olas_seed_default_relays(app: *mut NmpApp) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if app.is_null() {
             return;
         }
-        const RELAYS: &[(&str, &str)] = &[
-            ("wss://relay.damus.io", "both"),
-            ("wss://nos.lol", "both"),
-            ("wss://relay.primal.net", "both"),
-            ("wss://purplepag.es", "indexer"),
-        ];
-        for (url, role) in RELAYS {
-            let Ok(url_c) = CString::new(*url) else { continue };
-            let Ok(role_c) = CString::new(*role) else { continue };
-            nmp_ffi::nmp_app_add_relay(app, url_c.as_ptr(), role_c.as_ptr());
-        }
+        crate::event_models::olas_add_default_relays(app);
     }));
 }
 
@@ -66,8 +54,12 @@ pub extern "C" fn olas_open_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
+        let Ok(filter_c) = CString::new(filter) else {
+            return;
+        };
+        let Ok(consumer_c) = CString::new(consumer) else {
+            return;
+        };
         nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -105,8 +97,12 @@ pub extern "C" fn olas_close_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
+        let Ok(filter_c) = CString::new(filter) else {
+            return;
+        };
+        let Ok(consumer_c) = CString::new(consumer) else {
+            return;
+        };
         nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -149,14 +145,12 @@ pub extern "C" fn olas_create_account(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(profile_c) = CString::new(profile) else { return };
-        let Ok(relays_c) = CString::new("[]") else { return };
-        nmp_ffi::nmp_app_create_new_account(
-            app,
-            profile_c.as_ptr(),
-            relays_c.as_ptr(),
-            false,
-            1,
-        );
+        let Ok(profile_c) = CString::new(profile) else {
+            return;
+        };
+        let Ok(relays_c) = CString::new("[]") else {
+            return;
+        };
+        nmp_ffi::nmp_app_create_new_account(app, profile_c.as_ptr(), relays_c.as_ptr(), false, 1);
     }));
 }
