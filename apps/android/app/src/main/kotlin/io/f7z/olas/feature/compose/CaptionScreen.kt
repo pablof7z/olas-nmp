@@ -49,6 +49,8 @@ import io.f7z.olas.ui.theme.OlasColors
 @Composable
 fun CaptionScreen(
     uris: List<Uri>,
+    filter: PhotoFilter,
+    intensity: Float,
     onShare: () -> Unit,
 ) {
     val vm: UploadViewModel = viewModel()
@@ -180,7 +182,7 @@ fun CaptionScreen(
         Button(
             onClick  = {
                 val geohash = if (locationEnabled) currentCoarseGeohash4(context) else null
-                vm.upload(context, uris, caption, altTexts, geohash)
+                vm.upload(context, uris, caption, altTexts, geohash, filter, intensity)
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape    = RoundedCornerShape(12.dp),
