@@ -191,8 +191,8 @@ mod jni_extras;
 // Relay seeding, search feed, and account creation helpers.
 mod extras;
 pub use extras::{
-    olas_close_author_photo_feed, olas_close_search_feed, olas_create_account,
-    olas_open_author_photo_feed, olas_open_search_feed, olas_seed_default_relays,
+    olas_close_search_feed, olas_create_account, olas_declare_initial_relays,
+    olas_open_search_feed, olas_seed_default_relays,
 };
 
 // New event-decoder, BOLT11, geohash and config FFI helpers.
@@ -227,7 +227,10 @@ pub use event_models::{
 };
 
 mod picture_feed;
-pub use picture_feed::{olas_decode_snapshot_photo_feed_json, olas_open_photo_feed};
+pub use picture_feed::{
+    olas_close_author_photo_feed, olas_decode_snapshot_photo_feed_json,
+    olas_open_author_photo_feed, olas_open_photo_feed,
+};
 
 // Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.
 mod actions;
@@ -260,6 +263,7 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
             nmp_defaults::NmpDefaults::default(),
         );
         picture_feed::install_runtime_handles(app_ref, &handles);
+        let _ = extras::declare_initial_relays(app_ref);
         nmp_blossom::register_actions(app_ref);
     }));
 }

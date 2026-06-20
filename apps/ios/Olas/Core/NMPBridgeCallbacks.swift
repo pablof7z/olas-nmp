@@ -11,22 +11,23 @@ final class NMPCallbackSink {
     let onProfiles: (String) -> Void
     let onActiveAccount: (String) -> Void
     let onPhotoFeed: (String, String) -> Void
+    let photoFeedKeys: () -> [String]
     init(
         onEvent: @escaping (String) -> Void,
         onUpdate: @escaping (String) -> Void,
         onProfiles: @escaping (String) -> Void,
         onActiveAccount: @escaping (String) -> Void,
-        onPhotoFeed: @escaping (String, String) -> Void
+        onPhotoFeed: @escaping (String, String) -> Void,
+        photoFeedKeys: @escaping () -> [String]
     ) {
         self.onEvent = onEvent
         self.onUpdate = onUpdate
         self.onProfiles = onProfiles
         self.onActiveAccount = onActiveAccount
         self.onPhotoFeed = onPhotoFeed
+        self.photoFeedKeys = photoFeedKeys
     }
 }
-
-private let olasPhotoFeedKeys = ["olas.following_feed", "olas.network_feed"]
 
 // File-scope factory so closures do NOT inherit @MainActor from callers.
 // Swift 6 would infer closures inside a @MainActor method as @MainActor-isolated,
@@ -66,7 +67,8 @@ func makeBridgeCallbackSink(bridge: NMPBridge) -> NMPCallbackSink {
             }
             guard changed else { return }
             Task { @MainActor [weak bridge] in bridge?.handlePhotoFeedJSON(key: key, json: json) }
-        }
+        },
+        photoFeedKeys: { [weak bridge] in bridge?.snapshotPhotoFeedKeys() ?? [] }
     )
 }
 
@@ -92,10 +94,12 @@ let olasUpdateCallback: NmpUpdateCallback = { context, data, len in
         if let json = String(validatingCString: ptr) { sink.onActiveAccount(json) }
         nmp_free_string(ptr)
     }
-    for key in olasPhotoFeedKeys {
+    for key in sink.photoFeedKeys() {
         key.withCString { keyPtr in
             if let ptr = olas_decode_snapshot_photo_feed_json(data, len, keyPtr) {
-                if let json = String(validatingCString: ptr) { sink.onPhotoFeed(key, json) }
+                if let json = String(validatingCString: ptr) {
+                    sink.onPhotoFeed(key, json)
+                }
                 nmp_free_string(ptr)
             }
         }

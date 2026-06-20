@@ -86,7 +86,11 @@ void nmp_free_string(char* s);
 
 // ── Olas-specific additions ───────────────────────────────────────────────────
 
-/// Seed the four canonical Olas relays (call once after nmp_app_start).
+/// Declare the four canonical Olas relays before nmp_app_start.
+/// Normal startup gets this through olas_app_register.
+uint32_t olas_declare_initial_relays(void* app);
+
+/// Seed the four canonical Olas relays on a running app after an explicit reset.
 /// Adds relay.damus.io, nos.lol, relay.primal.net (role "both") and
 /// purplepag.es (role "indexer"). Safe to call again after a relay-config reset.
 void olas_seed_default_relays(void* app);

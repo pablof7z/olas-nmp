@@ -25,7 +25,10 @@ object NMPBridge {
     private const val KEY_STORED_NSEC = "stored_nsec"
     private const val FOLLOWING_FEED_KEY = "olas.following_feed"
     private const val NETWORK_FEED_KEY = "olas.network_feed"
-    private val PHOTO_FEED_KEYS = arrayOf(FOLLOWING_FEED_KEY, NETWORK_FEED_KEY)
+    private val photoFeedKeys = ConcurrentHashMap.newKeySet<String>().apply {
+        add(FOLLOWING_FEED_KEY)
+        add(NETWORK_FEED_KEY)
+    }
 
     init {
         System.loadLibrary("nmp_app_olas")
@@ -166,17 +169,6 @@ object NMPBridge {
         if (!storedNsec.isNullOrBlank()) {
             nativeSignInNsec(appHandle, storedNsec)
         }
-        // Re-add default relays AFTER start so the actor processes AddRelay commands
-        // while running=true (restore_active_session inside Start can overwrite relay list).
-        val defaultRelays = listOf(
-            "wss://relay.damus.io" to "both",
-            "wss://nos.lol" to "both",
-            "wss://relay.primal.net" to "both",
-            "wss://purplepag.es" to "indexer",
-        )
-        for ((url, role) in defaultRelays) {
-            nativeAddRelay(appHandle, url, role)
-        }
         // blossom.band (nostr.build CDN) stores files for any NIP-98-authenticated key.
         nativeBlossomServerUrlSet(appHandle, "https://blossom.band")
     }
@@ -190,11 +182,17 @@ object NMPBridge {
     fun closeSearchFeed(query: String, consumerId: String = "olas.search") =
         nativeCloseSearchFeed(appHandle, query, consumerId)
 
-    fun openAuthorPhotoFeed(pubkey: String, consumerId: String = "olas.author.$pubkey") =
-        nativeOpenAuthorPhotoFeed(appHandle, pubkey, consumerId)
+    fun authorPhotoFeedKey(pubkey: String): String = "olas.author.$pubkey"
 
-    fun closeAuthorPhotoFeed(pubkey: String, consumerId: String = "olas.author.$pubkey") =
+    fun openAuthorPhotoFeed(pubkey: String, consumerId: String = authorPhotoFeedKey(pubkey)) {
+        photoFeedKeys.add(consumerId)
+        nativeOpenAuthorPhotoFeed(appHandle, pubkey, consumerId)
+    }
+
+    fun closeAuthorPhotoFeed(pubkey: String, consumerId: String = authorPhotoFeedKey(pubkey)) {
         nativeCloseAuthorPhotoFeed(appHandle, pubkey, consumerId)
+        photoFeedKeys.remove(consumerId)
+    }
 
     fun signInNsec(nsec: String) {
         appContext?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -300,7 +298,7 @@ object NMPBridge {
             .getOrNull()
             ?.let { json -> _claimedProfilesJson.tryEmit(json) }
 
-        for (key in PHOTO_FEED_KEYS) {
+        for (key in photoFeedKeys) {
             runCatching { nativeDecodePhotoFeed(appHandle, frame, key) }
                 .getOrNull()
                 ?.let { json -> _photoFeedsJson.tryEmit(key to json) }

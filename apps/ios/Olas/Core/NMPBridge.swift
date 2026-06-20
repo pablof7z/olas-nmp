@@ -64,9 +64,6 @@ import Combine
         registerCallbacks(app: app)
         nmp_app_start(app, 0, 100, 4)
 
-        // Default relay set lives in Rust — no URLs hardcoded in Swift (D3).
-        olas_seed_default_relays(app)
-
         setupCombinePipelines()
         isRunning = true
     }
@@ -120,10 +117,28 @@ import Combine
     // Fast-path dedup for snapshot ticks (~100ms cadence): skip the MainActor hop
     // when the JSON payload hasn't changed since the last tick.
     // nonisolated(unsafe): read/written from background Rust callbacks under tickLock.
-    nonisolated(unsafe) var lastProfilesJSON = ""
-    nonisolated(unsafe) var lastActiveAccountJSON = ""
-    nonisolated(unsafe) var lastPhotoFeedJSON: [String: String] = [:]
-    let tickLock = NSLock()
+    @ObservationIgnored nonisolated(unsafe) var lastProfilesJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastActiveAccountJSON = ""
+    @ObservationIgnored nonisolated(unsafe) var lastPhotoFeedJSON: [String: String] = [:]
+    @ObservationIgnored nonisolated(unsafe) var photoFeedKeys: Set<String> = ["olas.following_feed", "olas.network_feed"]
+    @ObservationIgnored let tickLock = NSLock()
+
+    static func authorPhotoFeedKey(pubkey: String) -> String { "olas.author.\(pubkey)" }
+
+    nonisolated func snapshotPhotoFeedKeys() -> [String] {
+        tickLock.withLock { Array(photoFeedKeys) }
+    }
+
+    private func registerPhotoFeedKey(_ key: String) {
+        tickLock.withLock { _ = photoFeedKeys.insert(key) }
+    }
+
+    private func unregisterPhotoFeedKey(_ key: String) {
+        tickLock.withLock {
+            photoFeedKeys.remove(key)
+            lastPhotoFeedJSON.removeValue(forKey: key)
+        }
+    }
 
     func scheduleProfileFlush(_ json: String) {
         profilePipe.send(json)
@@ -270,7 +285,8 @@ import Combine
 
     func openAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
-        let consumer = "olas.author.\(pubkey)"
+        let consumer = Self.authorPhotoFeedKey(pubkey: pubkey)
+        registerPhotoFeedKey(consumer)
         pubkey.withCString { pk in consumer.withCString { cid in
             olas_open_author_photo_feed(app, pk, cid)
         }}
@@ -278,10 +294,11 @@ import Combine
 
     func closeAuthorPhotoFeed(pubkey: String) {
         guard let app = appPtr else { return }
-        let consumer = "olas.author.\(pubkey)"
+        let consumer = Self.authorPhotoFeedKey(pubkey: pubkey)
         pubkey.withCString { pk in consumer.withCString { cid in
             olas_close_author_photo_feed(app, pk, cid)
         }}
+        unregisterPhotoFeedKey(consumer)
     }
 
     // MARK: - Profile

@@ -84,32 +84,32 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             .onEach { raw -> parseClaimedProfiles(raw) }
             .launchIn(viewModelScope)
 
-        // Supplement: raw kind:0 and kind:20 events
+        NMPBridge.photoFeedsJson
+            .onEach { (key, raw) ->
+                val pk = targetPubkey ?: return@onEach
+                if (key != NMPBridge.authorPhotoFeedKey(pk)) return@onEach
+                val posts = runCatching { json.decodeFromString<List<PhotoPost>>(raw) }
+                    .getOrNull()
+                    ?: return@onEach
+                _uiState.value = _uiState.value.copy(
+                    posts = posts,
+                    isLoading = false,
+                )
+            }
+            .launchIn(viewModelScope)
+
+        // Supplement: raw kind:0 events until the profile projection covers this screen.
         NMPBridge.nostrEvents
             .onEach { raw ->
                 val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
                     ?: return@onEach
-                when (event.kind) {
-                    0 -> {
-                        if (targetPubkey != null && event.author != targetPubkey) return@onEach
-                        val profileJson = NMPBridge.decodeKind0EventJson(raw) ?: return@onEach
-                        val profile = runCatching { json.decodeFromString<OlasProfile>(profileJson) }.getOrNull() ?: return@onEach
-                        _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
-                    }
-                    20 -> {
-                        // Skip posts from unknown author — avoids polluting the grid with
-                        // replayed network-feed events before the own pubkey is resolved.
-                        if (event.author != targetPubkey) return@onEach
-                        val postJson = NMPBridge.decodeKind20EventJson(raw) ?: return@onEach
-                        val post = runCatching { json.decodeFromString<PhotoPost>(postJson) }.getOrNull() ?: return@onEach
-                        val current = _uiState.value
-                        _uiState.value = current.copy(
-                            posts = (current.posts + post).distinctBy { it.id }
-                                .sortedByDescending { it.createdAt },
-                            isLoading = false,
-                        )
-                    }
-                }
+                if (event.kind != 0) return@onEach
+                if (targetPubkey != null && event.author != targetPubkey) return@onEach
+                val profileJson = NMPBridge.decodeKind0EventJson(raw) ?: return@onEach
+                val profile = runCatching { json.decodeFromString<OlasProfile>(profileJson) }
+                    .getOrNull()
+                    ?: return@onEach
+                _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
             }
             .launchIn(viewModelScope)
     }

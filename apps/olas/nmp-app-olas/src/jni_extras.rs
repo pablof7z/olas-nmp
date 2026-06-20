@@ -221,7 +221,9 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeBlossomServerUrlSet
     url: JString,
 ) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let Some(url_c) = jstring_to_cstring(&mut env, &url) else { return };
+        let Some(url_c) = jstring_to_cstring(&mut env, &url) else {
+            return;
+        };
         crate::olas_blossom_server_url_set(std::ptr::null_mut(), url_c.as_ptr());
     }));
 }
@@ -247,7 +249,9 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeFeedModeSet(
     mode: JString,
 ) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let Some(mode_c) = jstring_to_cstring(&mut env, &mode) else { return };
+        let Some(mode_c) = jstring_to_cstring(&mut env, &mode) else {
+            return;
+        };
         crate::olas_feed_mode_set(std::ptr::null_mut(), mode_c.as_ptr());
     }));
 }

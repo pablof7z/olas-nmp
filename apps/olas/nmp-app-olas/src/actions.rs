@@ -133,11 +133,19 @@ pub extern "C" fn olas_picture_post_publish_json(
             Ok(v) => v,
             Err(_) => return std::ptr::null_mut(),
         };
-        let url = match descriptor.get("url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        let url = match descriptor
+            .get("url")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
             Some(u) => u.to_string(),
             None => return std::ptr::null_mut(),
         };
-        let sha256 = match descriptor.get("sha256").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        let sha256 = match descriptor
+            .get("sha256")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
             Some(h) => h.to_string(),
             None => return std::ptr::null_mut(),
         };
@@ -157,8 +165,8 @@ pub extern "C" fn olas_picture_post_publish_json(
             image = image.alt(alt_str);
         }
 
-        let mut builder = PicturePost::new(image)
-            .content(opt_cstr_owned(caption).unwrap_or_default());
+        let mut builder =
+            PicturePost::new(image).content(opt_cstr_owned(caption).unwrap_or_default());
         if let Some(gh) = opt_cstr_owned(geohash).filter(|gh| is_valid_geohash4(gh)) {
             builder = builder.geohash(gh);
         }

@@ -1,15 +1,47 @@
 // extras.rs — Olas-specific helper FFI functions.
-// Relay seeding, search feed management, and account creation in Rust (no Swift/Kotlin policy).
+// Relay seeding, NIP-50 search interest management, and account creation in
+// Rust (no Swift/Kotlin policy).
 // New event-decoding and config helpers live in extras_ffi.rs (kept within 500-line ceiling).
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use nmp_ffi::NmpApp;
+use nmp_ffi::{NmpApp, NmpConfigStatus};
 
-/// Seed the four canonical Olas relays on a freshly started NmpApp.
+use crate::event_models::default_relay_rows;
+
+fn default_relay_config() -> Vec<(String, String)> {
+    default_relay_rows()
+        .map(|(url, role)| (url.to_string(), role.to_string()))
+        .collect()
+}
+
+pub(crate) fn declare_initial_relays(app: &NmpApp) -> NmpConfigStatus {
+    app.set_initial_relays_for_start(default_relay_config())
+}
+
+/// Declare Olas' canonical initial relay set before nmp_app_start.
 ///
-/// Call once after nmp_app_start (or on a relay-config reset).
+/// Normal app startup should call olas_app_register, which invokes this helper.
+/// The exported symbol exists for native shells that need to make the lifecycle
+/// edge explicit.
+#[no_mangle]
+pub extern "C" fn olas_declare_initial_relays(app: *mut NmpApp) -> u32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if app.is_null() {
+            return NmpConfigStatus::NullApp;
+        }
+        // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
+        let app_ref = unsafe { &*app };
+        declare_initial_relays(app_ref)
+    }));
+    result.unwrap_or(NmpConfigStatus::Unavailable).code()
+}
+
+/// Seed the four canonical Olas relays on a running NmpApp.
+///
+/// Normal startup declares these relays before nmp_app_start through
+/// olas_app_register. Call this only for an explicit relay-config reset.
 /// Adds: relay.damus.io, nos.lol, relay.primal.net (role "both") and
 /// purplepag.es (role "indexer" — purpose-built kind:0 profile index).
 #[no_mangle]
@@ -18,24 +50,25 @@ pub extern "C" fn olas_seed_default_relays(app: *mut NmpApp) {
         if app.is_null() {
             return;
         }
-        const RELAYS: &[(&str, &str)] = &[
-            ("wss://relay.damus.io", "both"),
-            ("wss://nos.lol", "both"),
-            ("wss://relay.primal.net", "both"),
-            ("wss://purplepag.es", "indexer"),
-        ];
-        for (url, role) in RELAYS {
-            let Ok(url_c) = CString::new(*url) else { continue };
-            let Ok(role_c) = CString::new(*role) else { continue };
+        for (url, role) in default_relay_rows() {
+            let Ok(url_c) = CString::new(url) else {
+                continue;
+            };
+            let Ok(role_c) = CString::new(role) else {
+                continue;
+            };
             nmp_ffi::nmp_app_add_relay(app, url_c.as_ptr(), role_c.as_ptr());
         }
     }));
 }
 
-/// Open a NIP-50 search interest (kinds 0 and 20) for the given query string.
+/// Open a mixed NIP-50 search interest (profiles + picture events).
 ///
-/// consumer_id identifies this subscription; close with olas_close_search_feed
-/// using the same query and consumer_id. Scope 1 = global.
+/// This is not the typed picture-feed projection: it is a search query surface
+/// whose results include kind:0 profiles and primary kind:20 picture events.
+/// consumer_id identifies this subscription; close with
+/// olas_close_search_feed using the same query and consumer_id. Scope 1 =
+/// global.
 #[no_mangle]
 pub extern "C" fn olas_open_search_feed(
     app: *mut NmpApp,
@@ -66,8 +99,12 @@ pub extern "C" fn olas_open_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
+        let Ok(filter_c) = CString::new(filter) else {
+            return;
+        };
+        let Ok(consumer_c) = CString::new(consumer) else {
+            return;
+        };
         nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -105,87 +142,12 @@ pub extern "C" fn olas_close_search_feed(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
-        nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
-    }));
-}
-
-/// Open a kind:20 photo feed scoped to a specific author pubkey.
-///
-/// consumer_id identifies this subscription; close with olas_close_author_photo_feed
-/// using the same pubkey and consumer_id. Scope 1 = global.
-#[no_mangle]
-pub extern "C" fn olas_open_author_photo_feed(
-    app: *mut NmpApp,
-    pubkey: *const c_char,
-    consumer_id: *const c_char,
-) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if app.is_null() || pubkey.is_null() {
+        let Ok(filter_c) = CString::new(filter) else {
             return;
-        }
-        let pk = match unsafe { CStr::from_ptr(pubkey) }.to_str() {
-            Ok(s) if !s.is_empty() => s,
-            _ => return,
         };
-        let consumer = if consumer_id.is_null() {
-            "olas.author_feed".to_string()
-        } else {
-            unsafe { CStr::from_ptr(consumer_id) }
-                .to_str()
-                .unwrap_or("olas.author_feed")
-                .to_string()
-        };
-        let filter = match serde_json::to_string(&serde_json::json!({
-            "kinds": [20],
-            "authors": [pk],
-            "limit": 50
-        })) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
-        nmp_ffi::nmp_app_open_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
-    }));
-}
-
-/// Close an author photo feed opened with olas_open_author_photo_feed.
-///
-/// Must be called with the same pubkey and consumer_id as the matching open call.
-#[no_mangle]
-pub extern "C" fn olas_close_author_photo_feed(
-    app: *mut NmpApp,
-    pubkey: *const c_char,
-    consumer_id: *const c_char,
-) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        if app.is_null() || pubkey.is_null() {
+        let Ok(consumer_c) = CString::new(consumer) else {
             return;
-        }
-        let pk = match unsafe { CStr::from_ptr(pubkey) }.to_str() {
-            Ok(s) if !s.is_empty() => s,
-            _ => return,
         };
-        let consumer = if consumer_id.is_null() {
-            "olas.author_feed".to_string()
-        } else {
-            unsafe { CStr::from_ptr(consumer_id) }
-                .to_str()
-                .unwrap_or("olas.author_feed")
-                .to_string()
-        };
-        let filter = match serde_json::to_string(&serde_json::json!({
-            "kinds": [20],
-            "authors": [pk],
-            "limit": 50
-        })) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let Ok(filter_c) = CString::new(filter) else { return };
-        let Ok(consumer_c) = CString::new(consumer) else { return };
         nmp_ffi::nmp_app_close_interest(app, filter_c.as_ptr(), consumer_c.as_ptr(), 1);
     }));
 }
@@ -228,14 +190,12 @@ pub extern "C" fn olas_create_account(
             Ok(s) => s,
             Err(_) => return,
         };
-        let Ok(profile_c) = CString::new(profile) else { return };
-        let Ok(relays_c) = CString::new("[]") else { return };
-        nmp_ffi::nmp_app_create_new_account(
-            app,
-            profile_c.as_ptr(),
-            relays_c.as_ptr(),
-            false,
-            1,
-        );
+        let Ok(profile_c) = CString::new(profile) else {
+            return;
+        };
+        let Ok(relays_c) = CString::new("[]") else {
+            return;
+        };
+        nmp_ffi::nmp_app_create_new_account(app, profile_c.as_ptr(), relays_c.as_ptr(), false, 1);
     }));
 }

@@ -62,8 +62,15 @@ pub extern "C" fn olas_decode_kind0_event_json(event_json: *const c_char) -> *mu
             return std::ptr::null_mut();
         }
 
-        let pubkey = event.get("author").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let content_str = event.get("content").and_then(|v| v.as_str()).unwrap_or("{}");
+        let pubkey = event
+            .get("author")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let content_str = event
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("{}");
         let content: serde_json::Value =
             serde_json::from_str(content_str).unwrap_or(serde_json::json!({}));
 
@@ -85,7 +92,9 @@ pub extern "C" fn olas_decode_kind0_event_json(event_json: *const c_char) -> *mu
         });
 
         match serde_json::to_string(&profile) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     }));
@@ -119,8 +128,9 @@ pub extern "C" fn olas_bolt11_amount_msats(bolt11: *const c_char) -> i64 {
         // hrp = "ln" + currency + amount_with_optional_unit
         let after_ln = &hrp[2..];
         // Currency is lowercase alpha chars at the start (e.g. "bc", "tb")
-        let currency_end =
-            after_ln.find(|c: char| c.is_ascii_digit()).unwrap_or(after_ln.len());
+        let currency_end = after_ln
+            .find(|c: char| c.is_ascii_digit())
+            .unwrap_or(after_ln.len());
         let amount_part = &after_ln[currency_end..];
         if amount_part.is_empty() {
             // No amount encoded — return -1
@@ -131,7 +141,10 @@ pub extern "C" fn olas_bolt11_amount_msats(bolt11: *const c_char) -> i64 {
         let (digits, unit) = if last.is_ascii_digit() {
             (amount_part, None)
         } else {
-            (&amount_part[..amount_part.len() - last.len_utf8()], Some(last))
+            (
+                &amount_part[..amount_part.len() - last.len_utf8()],
+                Some(last),
+            )
         };
         let amount: i64 = match digits.parse() {
             Ok(n) => n,
@@ -211,7 +224,9 @@ pub extern "C" fn olas_compute_geohash(lat: f64, lon: f64, precision: i32) -> *m
             }
         }
 
-        CString::new(hash).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut())
+        CString::new(hash)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(std::ptr::null_mut())
     }));
     result.unwrap_or(std::ptr::null_mut())
 }
@@ -238,7 +253,9 @@ pub extern "C" fn olas_build_zap_action_json(event_id: *const c_char, sats: i64)
             "comment": "",
         });
         match serde_json::to_string(&json) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     }));
@@ -261,7 +278,9 @@ pub extern "C" fn olas_filter_catalog_json() -> *mut c_char {
             {"id": "fade",      "name": "Fade"},
         ]);
         match serde_json::to_string(&catalog) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -279,7 +298,9 @@ pub extern "C" fn olas_media_upload_config_json() -> *mut c_char {
             "strip_exif": true,
         });
         match serde_json::to_string(&config) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -296,7 +317,9 @@ pub extern "C" fn olas_picker_config_json() -> *mut c_char {
             "allowed_types": ["image"],
         });
         match serde_json::to_string(&config) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -320,7 +343,9 @@ pub extern "C" fn olas_settings_catalog_json() -> *mut c_char {
             {"id": "account_security", "label": "Account Security"},
         ]);
         match serde_json::to_string(&catalog) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -341,7 +366,9 @@ pub extern "C" fn olas_onboarding_steps_json() -> *mut c_char {
             "complete",
         ]);
         match serde_json::to_string(&steps) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -355,7 +382,9 @@ pub extern "C" fn olas_compose_steps_json() -> *mut c_char {
     let result = std::panic::catch_unwind(|| -> *mut c_char {
         let steps = serde_json::json!(["photo_picker", "edit_photo", "caption"]);
         match serde_json::to_string(&steps) {
-            Ok(s) => CString::new(s).map(|cs| cs.into_raw()).unwrap_or(std::ptr::null_mut()),
+            Ok(s) => CString::new(s)
+                .map(|cs| cs.into_raw())
+                .unwrap_or(std::ptr::null_mut()),
             Err(_) => std::ptr::null_mut(),
         }
     });
@@ -372,52 +401,87 @@ pub extern "C" fn olas_compose_steps_json() -> *mut c_char {
 #[no_mangle]
 pub extern "C" fn olas_decode_zap_notification_json(event_json: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> *mut c_char {
-        if event_json.is_null() { return std::ptr::null_mut(); }
+        if event_json.is_null() {
+            return std::ptr::null_mut();
+        }
         let input = match unsafe { CStr::from_ptr(event_json) }.to_str() {
-            Ok(s) => s, Err(_) => return std::ptr::null_mut(),
+            Ok(s) => s,
+            Err(_) => return std::ptr::null_mut(),
         };
         let event: serde_json::Value = match serde_json::from_str(input) {
-            Ok(v) => v, Err(_) => return std::ptr::null_mut(),
+            Ok(v) => v,
+            Err(_) => return std::ptr::null_mut(),
         };
         // Only handle kind:9735 zap receipts
-        if event["kind"].as_i64() != Some(9735) { return std::ptr::null_mut(); }
+        if event["kind"].as_i64() != Some(9735) {
+            return std::ptr::null_mut();
+        }
         let tags = match event["tags"].as_array() {
-            Some(t) => t, None => return std::ptr::null_mut(),
+            Some(t) => t,
+            None => return std::ptr::null_mut(),
         };
         // Extract bolt11 tag → msats → sats
-        let bolt11 = tags.iter()
-            .find(|t| t.as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) == Some("bolt11"))
+        let bolt11 = tags
+            .iter()
+            .find(|t| {
+                t.as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|v| v.as_str())
+                    == Some("bolt11")
+            })
             .and_then(|t| t.as_array()?.get(1)?.as_str())
             .unwrap_or("");
         // Parse bolt11 for msats using the logic from olas_bolt11_amount_msats
-        let amount_msats = if bolt11.is_empty() { 0i64 } else {
+        let amount_msats = if bolt11.is_empty() {
+            0i64
+        } else {
             let b = bolt11.to_lowercase();
             // Find the separator '1' after the HRP
             let sep = b.find('1').unwrap_or(0);
             let hrp = &b[..sep];
             // Strip "ln" + currency (bc, bcrt, tb, sb)
-            let amount_part = hrp.strip_prefix("ln")
-                .and_then(|s| ["bcrt","bc","tb","sb"].iter().filter_map(|c| s.strip_prefix(c)).next())
+            let amount_part = hrp
+                .strip_prefix("ln")
+                .and_then(|s| {
+                    ["bcrt", "bc", "tb", "sb"]
+                        .iter()
+                        .filter_map(|c| s.strip_prefix(c))
+                        .next()
+                })
                 .unwrap_or("");
-            if amount_part.is_empty() { 0 } else {
+            if amount_part.is_empty() {
+                0
+            } else {
                 let last = amount_part.chars().last().unwrap_or('0');
                 let digits: &str = if last.is_ascii_alphabetic() {
                     &amount_part[..amount_part.len() - last.len_utf8()]
-                } else { amount_part };
+                } else {
+                    amount_part
+                };
                 let n: i64 = digits.parse().unwrap_or(0);
                 match last {
                     'm' => n * 100_000_000i64,
                     'u' => n * 100_000i64,
                     'n' => n * 100i64,
                     'p' => n / 10i64,
-                    _   => n * 100_000_000_000i64, // whole BTC
+                    _ => n * 100_000_000_000i64, // whole BTC
                 }
             }
         };
-        let amount_sats = if amount_msats > 0 { amount_msats / 1000 } else { 0 };
+        let amount_sats = if amount_msats > 0 {
+            amount_msats / 1000
+        } else {
+            0
+        };
         // Extract referenced event id (first "e" tag)
-        let referenced_event_id = tags.iter()
-            .find(|t| t.as_array().and_then(|a| a.first()).and_then(|v| v.as_str()) == Some("e"))
+        let referenced_event_id = tags
+            .iter()
+            .find(|t| {
+                t.as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|v| v.as_str())
+                    == Some("e")
+            })
             .and_then(|t| t.as_array()?.get(1)?.as_str())
             .unwrap_or("");
         let output = serde_json::json!({

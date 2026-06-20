@@ -198,10 +198,10 @@ extension NMPBridge {
     // MARK: - Wallet
 
     func connectWallet(uri: String) {
-        // NMP-GAP: nmp_app_wallet_connect was removed from the FFI surface;
-        // dispatch via the action bus until the NMP wallet projection lands.
-        let escaped = uri.replacingOccurrences(of: "\"", with: "\\\"")
-        _ = dispatchAction(namespace: "nmp.wallet_connect", json: "{\"uri\":\"\(escaped)\"}")
+        let payload = ["uri": uri]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        _ = dispatchAction(namespace: "nmp.wallet.connect", json: json)
     }
 
     // MARK: - Lifecycle

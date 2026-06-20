@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -7,9 +7,13 @@ use nmp_core::slots::{event_by_id_from_store, ActiveAccountSlot};
 use nmp_core::substrate::{empty_suppression_lookup, KernelEvent, SuppressionLookup};
 use nmp_core::{KernelEventObserver, TypedProjectionData};
 use nmp_feed::{
-    ClosureInterestShape, FeedAdvance, FeedApply, PullFeedController, RootFeedSnapshot,
+    ClosureInterestShape, FeedAdvance, FeedApply, FeedController, PullFeedController,
+    RootFeedSnapshot,
 };
-use nmp_ffi::{nmp_app_open_interest, NmpApp};
+use nmp_ffi::{
+    nmp_app_close_contact_feed, nmp_app_close_interest, nmp_app_open_contact_feed,
+    nmp_app_open_interest, NmpApp,
+};
 use nmp_nip02::ActiveFollowSet;
 use nmp_nip68::{
     picture_acquisition_kinds, picture_feed_observer, picture_feed_predicate, PictureFeed,
@@ -18,6 +22,17 @@ use nmp_nip68::{
 use nmp_planner::InterestShape;
 use nmp_wot::WotBootstrapRuntime;
 
+#[path = "picture_feed_admission.rs"]
+mod picture_feed_admission;
+use picture_feed_admission::network_allows;
+#[cfg(test)]
+use picture_feed_admission::network_allows_for_preset;
+#[path = "picture_feed_acquisition.rs"]
+mod picture_feed_acquisition;
+use picture_feed_acquisition::{
+    acquisition_filter_jsons, author_acquisition_filter_jsons, author_feed_key,
+    PICTURE_PRIMARY_KINDS_JSON,
+};
 const PHOTO_FEED_SCHEMA_ID: &str = "olas.picture.feed";
 const PHOTO_FEED_SCHEMA_VERSION: u32 = 1;
 const PHOTO_FEED_FILE_IDENTIFIER: &str = "OLPF";
@@ -36,6 +51,7 @@ struct FeedRuntime {
 struct FeedSlots {
     following: Option<Arc<PictureFeed>>,
     network: Option<Arc<PictureFeed>>,
+    authors: BTreeMap<String, Arc<PictureFeed>>,
 }
 
 static FEED_RUNTIME: OnceLock<Mutex<Option<FeedRuntime>>> = OnceLock::new();
@@ -55,7 +71,7 @@ pub(crate) fn install_runtime_handles(
         follow_for_identity.notify_account_changed();
         reset_all_picture_feeds();
     });
-    follow_set.on_change(Box::new(reset_all_picture_feeds));
+    follow_set.on_change(Box::new(reset_home_picture_feeds));
 
     let suppression: Arc<dyn SuppressionLookup> = handles
         .mute
@@ -88,15 +104,60 @@ pub extern "C" fn olas_open_photo_feed(
 
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
-        register_picture_feed(app_ref, consumer.clone(), mode);
+        register_picture_feed(app_ref, consumer.clone(), mode.clone());
+        open_feed_acquisition(app, &consumer, &mode);
+    }));
+}
 
-        let Ok(filter) = CString::new(acquisition_filter_json(mode.limit())) else {
+#[no_mangle]
+pub extern "C" fn olas_open_author_photo_feed(
+    app: *mut NmpApp,
+    pubkey: *const c_char,
+    consumer_id: *const c_char,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if app.is_null() {
+            return;
+        }
+        let Some(pubkey) = c_string_opt(pubkey) else {
             return;
         };
-        let Ok(consumer_cstr) = CString::new(consumer) else {
+        let consumer =
+            c_string_opt(consumer_id).unwrap_or_else(|| author_feed_key(pubkey.as_str()));
+        let mode = FeedMode::Author(pubkey);
+
+        // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
+        let app_ref = unsafe { &*app };
+        register_picture_feed(app_ref, consumer.clone(), mode.clone());
+        open_feed_acquisition(app, &consumer, &mode);
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn olas_close_author_photo_feed(
+    app: *mut NmpApp,
+    pubkey: *const c_char,
+    consumer_id: *const c_char,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if app.is_null() {
+            return;
+        }
+        let Some(pubkey) = c_string_opt(pubkey) else {
             return;
         };
-        nmp_app_open_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), mode.scope());
+        let consumer =
+            c_string_opt(consumer_id).unwrap_or_else(|| author_feed_key(pubkey.as_str()));
+        close_author_acquisition(app, pubkey.as_str(), consumer.as_str());
+
+        // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
+        let app_ref = unsafe { &*app };
+        let _ = app_ref.unregister_feed(consumer.as_str());
+        if let Some(slots) = FEED_SLOTS.get() {
+            if let Ok(mut guard) = slots.lock() {
+                guard.authors.remove(consumer.as_str());
+            }
+        }
     }));
 }
 
@@ -119,7 +180,11 @@ pub extern "C" fn olas_decode_snapshot_photo_feed_json(
     result
         .ok()
         .flatten()
-        .map(to_cstring)
+        .map(|value| {
+            CString::new(value)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut())
+        })
         .unwrap_or(std::ptr::null_mut())
 }
 
@@ -148,19 +213,31 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
     let apply: FeedApply = Arc::new(move |event: &KernelEvent| {
         KernelEventObserver::on_kernel_event(&*apply_observer, event);
     });
+    let replace_feed = feed.clone();
+    let replace: nmp_feed::FeedReplace = Arc::new(move |source_id| {
+        replace_feed.remove_source_id(source_id);
+    });
     let advance_feed = feed.clone();
     let advance: FeedAdvance = Arc::new(move || {
         advance_feed.grow_visible_window();
     });
-    let controller = PullFeedController::new(provider, app.feed_pull_fn(), apply, advance);
+    let controller = PullFeedController::new_with_replacement(
+        provider,
+        app.feed_pull_fn(),
+        apply,
+        replace,
+        advance,
+    );
+    let _ = controller.load_older();
     app.register_feed_with_observer(key.clone(), controller, observer);
 
     let projection_feed = feed.clone();
+    let projection_key = key.clone();
     app.register_typed_snapshot_projection(key.clone(), move || {
         let snapshot = projection_feed.snapshot_current_window();
         let payload = serde_json::to_vec(&snapshot).ok()?;
         Some(TypedProjectionData {
-            key: key.clone(),
+            key: projection_key.clone(),
             schema_id: PHOTO_FEED_SCHEMA_ID.to_string(),
             schema_version: PHOTO_FEED_SCHEMA_VERSION,
             file_identifier: PHOTO_FEED_FILE_IDENTIFIER.to_string(),
@@ -176,6 +253,9 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
         match mode {
             FeedMode::Following => slots.following = Some(feed),
             FeedMode::Network => slots.network = Some(feed),
+            FeedMode::Author(_) => {
+                slots.authors.insert(key, feed);
+            }
         }
     }
 }
@@ -195,14 +275,31 @@ fn reset_all_picture_feeds() {
             if let Some(feed) = &guard.network {
                 let _ = feed.reset_for_perspective_change();
             }
+            for feed in guard.authors.values() {
+                let _ = feed.reset_for_perspective_change();
+            }
         }
     }
 }
 
-#[derive(Clone, Copy)]
+fn reset_home_picture_feeds() {
+    if let Some(slots) = FEED_SLOTS.get() {
+        if let Ok(guard) = slots.lock() {
+            if let Some(feed) = &guard.following {
+                let _ = feed.reset_for_perspective_change();
+            }
+            if let Some(feed) = &guard.network {
+                let _ = feed.reset_for_perspective_change();
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 enum FeedMode {
     Following,
     Network,
+    Author(String),
 }
 
 impl FeedMode {
@@ -214,43 +311,54 @@ impl FeedMode {
         }
     }
 
-    fn default_key(self) -> &'static str {
+    fn default_key(&self) -> &'static str {
         match self {
             Self::Following => FOLLOWING_FEED_KEY,
             Self::Network => NETWORK_FEED_KEY,
+            Self::Author(_) => "olas.author_feed",
         }
     }
 
-    fn limit(self) -> u64 {
+    fn limit(&self) -> u64 {
         match self {
             Self::Following => 50,
             Self::Network => 100,
+            Self::Author(_) => 50,
         }
     }
 
-    fn scope(self) -> u32 {
-        match self {
-            Self::Following => 0,
-            Self::Network => 1,
-        }
-    }
-
-    fn predicate(self, runtime: &FeedRuntime) -> nmp_nip68::PictureFeedPredicate {
+    fn predicate(&self, runtime: &FeedRuntime) -> nmp_nip68::PictureFeedPredicate {
         match self {
             Self::Following => picture_feed_predicate(runtime.follow_set.predicate()),
             Self::Network => {
                 let wot = runtime.wot.clone();
-                picture_feed_predicate(Arc::new(move |author| network_allows(&wot, author)))
+                let active_slot = runtime.active_slot.clone();
+                picture_feed_predicate(Arc::new(move |author| {
+                    let has_active = active_slot
+                        .lock()
+                        .ok()
+                        .and_then(|guard| guard.clone())
+                        .is_some();
+                    network_allows(&wot, has_active, author)
+                }))
+            }
+            Self::Author(pubkey) => {
+                let pubkey = pubkey.clone();
+                picture_feed_predicate(Arc::new(move |author| author == pubkey))
             }
         }
     }
 
-    fn provider(self, runtime: FeedRuntime) -> Arc<dyn nmp_feed::FeedInterestShape + Send + Sync> {
+    fn provider(&self, runtime: FeedRuntime) -> Arc<dyn nmp_feed::FeedInterestShape + Send + Sync> {
         match self {
             Self::Following => Arc::new(ClosureInterestShape::new(move || {
                 following_shape(&runtime.active_slot, &runtime.follow_set)
             })),
             Self::Network => Arc::new(ClosureInterestShape::new(network_shape)),
+            Self::Author(pubkey) => {
+                let pubkey = pubkey.clone();
+                Arc::new(ClosureInterestShape::new(move || author_shape(&pubkey)))
+            }
         }
     }
 }
@@ -268,6 +376,13 @@ fn following_shape(
     ))
 }
 
+fn author_shape(pubkey: &str) -> Option<InterestShape> {
+    Some(InterestShape::timeline_for(
+        BTreeSet::from([pubkey.to_string()]),
+        picture_acquisition_kinds(),
+    ))
+}
+
 fn network_shape() -> Option<InterestShape> {
     let kinds = picture_acquisition_kinds()
         .into_iter()
@@ -277,9 +392,73 @@ fn network_shape() -> Option<InterestShape> {
     InterestShape::from_filter_json(&format!(r#"{{"kinds":[{kinds}]}}"#))
 }
 
-fn acquisition_filter_json(limit: u64) -> String {
-    let kinds = picture_acquisition_kinds().into_iter().collect::<Vec<_>>();
-    serde_json::json!({ "kinds": kinds, "limit": limit }).to_string()
+fn open_feed_acquisition(app: *mut NmpApp, consumer: &str, mode: &FeedMode) {
+    match mode {
+        FeedMode::Following => {
+            close_network_acquisition(app);
+            let Ok(kinds) = CString::new(PICTURE_PRIMARY_KINDS_JSON) else {
+                return;
+            };
+            nmp_app_open_contact_feed(app, kinds.as_ptr());
+        }
+        FeedMode::Network => {
+            nmp_app_close_contact_feed(app);
+            open_global_acquisition(app, consumer, mode.limit());
+        }
+        FeedMode::Author(pubkey) => {
+            open_author_acquisition(app, pubkey.as_str(), consumer, mode.limit());
+        }
+    }
+}
+
+fn open_global_acquisition(app: *mut NmpApp, consumer: &str, limit: u64) {
+    for filter in acquisition_filter_jsons(limit) {
+        let Ok(filter) = CString::new(filter) else {
+            continue;
+        };
+        let Ok(consumer_cstr) = CString::new(consumer) else {
+            return;
+        };
+        nmp_app_open_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
+    }
+}
+
+fn close_network_acquisition(app: *mut NmpApp) {
+    for filter in acquisition_filter_jsons(FeedMode::Network.limit()) {
+        let Ok(filter) = CString::new(filter) else {
+            continue;
+        };
+        let Ok(consumer_cstr) = CString::new(NETWORK_FEED_KEY) else {
+            return;
+        };
+        nmp_app_close_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
+    }
+}
+
+fn open_author_acquisition(app: *mut NmpApp, pubkey: &str, consumer: &str, limit: u64) {
+    for filter in author_acquisition_filter_jsons(pubkey, limit) {
+        let Ok(filter) = CString::new(filter) else {
+            continue;
+        };
+        let Ok(consumer_cstr) = CString::new(consumer) else {
+            return;
+        };
+        nmp_app_open_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
+    }
+}
+
+fn close_author_acquisition(app: *mut NmpApp, pubkey: &str, consumer: &str) {
+    for filter in
+        author_acquisition_filter_jsons(pubkey, FeedMode::Author(pubkey.to_string()).limit())
+    {
+        let Ok(filter) = CString::new(filter) else {
+            continue;
+        };
+        let Ok(consumer_cstr) = CString::new(consumer) else {
+            return;
+        };
+        nmp_app_close_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
+    }
 }
 
 fn photo_feed_posts_json_from_payload(payload: &[u8]) -> Option<String> {
@@ -287,37 +466,16 @@ fn photo_feed_posts_json_from_payload(payload: &[u8]) -> Option<String> {
     let posts = snapshot
         .cards
         .iter()
-        .filter_map(|row| row.card.record.as_ref())
+        .filter_map(|row| {
+            let record = row.card.record.as_ref()?;
+            let mut value = serde_json::to_value(record).ok()?;
+            if let Some(reposted_by) = &row.card.reposted_by {
+                value["repostedBy"] = serde_json::to_value(reposted_by).ok()?;
+            }
+            Some(value)
+        })
         .collect::<Vec<_>>();
     serde_json::to_string(&posts).ok()
-}
-
-fn network_allows(wot: &Option<Arc<WotBootstrapRuntime>>, candidate: &str) -> bool {
-    network_allows_for_preset(wot, candidate, &crate::extras_state::wot_preset())
-}
-
-fn network_allows_for_preset(
-    wot: &Option<Arc<WotBootstrapRuntime>>,
-    candidate: &str,
-    preset: &str,
-) -> bool {
-    if preset == "open" {
-        return true;
-    }
-    let Some(runtime) = wot else {
-        return false;
-    };
-    let Some(viewer) = runtime
-        .current_snapshot()
-        .and_then(|snapshot| snapshot.active_pubkey)
-    else {
-        return false;
-    };
-    let decision = match preset {
-        "close" => runtime.score_with_minimum_score(&viewer, candidate, 20),
-        _ => runtime.score_with_minimum_score(&viewer, candidate, 10),
-    };
-    decision.is_some_and(|decision| !decision.hide)
 }
 
 fn c_string_opt(ptr: *const c_char) -> Option<String> {
@@ -332,74 +490,9 @@ fn c_string_opt(ptr: *const c_char) -> Option<String> {
         .map(str::to_string)
 }
 
-fn to_cstring(value: String) -> *mut c_char {
-    CString::new(value)
-        .map(CString::into_raw)
-        .unwrap_or(std::ptr::null_mut())
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn acquisition_filter_derives_kind16_from_primary_picture_kind() {
-        let value: serde_json::Value =
-            serde_json::from_str(&acquisition_filter_json(50)).expect("json");
-        assert_eq!(value["kinds"], serde_json::json!([16, 20]));
-        assert_eq!(value["limit"], 50);
-    }
-
-    #[test]
-    fn network_shape_has_no_author_filter() {
-        let shape = network_shape().expect("shape");
-        assert_eq!(shape.kinds, [16, 20].into_iter().collect());
-        assert!(shape.authors.is_empty());
-    }
-
-    #[test]
-    fn open_network_preset_allows_without_wot_runtime() {
-        assert!(network_allows_for_preset(&None, "pubkey", "open"));
-    }
-
-    #[test]
-    fn balanced_network_preset_rejects_without_wot_runtime() {
-        assert!(!network_allows_for_preset(&None, "pubkey", "balanced"));
-    }
-
-    #[test]
-    fn snapshot_decoder_returns_canonical_picture_records() {
-        let feed = PictureFeed::new(Arc::new(|_| true));
-        feed.on_kernel_event(&KernelEvent {
-            id: "picture-1".to_string(),
-            author: "author-1".to_string(),
-            kind: nmp_nip68::KIND_PICTURE_EVENT,
-            created_at: 42,
-            tags: vec![vec![
-                "imeta".to_string(),
-                "url https://cdn.example/picture.jpg".to_string(),
-                "m image/jpeg".to_string(),
-                "dim 800x600".to_string(),
-            ]],
-            content: "caption".to_string(),
-            relay_provenance: vec!["wss://relay.example".to_string()],
-        });
-
-        let payload = serde_json::to_vec(&feed.snapshot_current_window()).expect("payload");
-        let posts_json = photo_feed_posts_json_from_payload(&payload).expect("posts");
-        let posts: serde_json::Value = serde_json::from_str(&posts_json).expect("json");
-
-        assert_eq!(posts[0]["event_id"], "picture-1");
-        assert_eq!(posts[0]["author"], "author-1");
-        assert_eq!(posts[0]["created_at"], 42);
-        assert_eq!(posts[0]["content"], "caption");
-        assert_eq!(
-            posts[0]["images"][0]["url"],
-            "https://cdn.example/picture.jpg"
-        );
-        assert_eq!(posts[0]["images"][0]["dimensions"]["width"], 800);
-        assert_eq!(posts[0]["images"][0]["dimensions"]["height"], 600);
-        assert!(posts[0].get("authorPubkey").is_none());
-        assert!(posts[0].get("caption").is_none());
-    }
-}
+#[path = "picture_feed_test_support.rs"]
+mod picture_feed_test_support;
+#[cfg(test)]
+#[path = "picture_feed_tests.rs"]
+mod tests;
