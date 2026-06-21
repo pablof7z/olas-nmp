@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 
 enum ComposeStep {
+    case camera
     case photoPicker
     case editPhoto([UIImage])
     case caption([UIImage], UIImage) // selected images, filtered preview
@@ -9,7 +10,8 @@ enum ComposeStep {
 
 struct ComposeNavigator: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var step: ComposeStep = .photoPicker
+    @State private var step: ComposeStep = .camera
+    @State private var showLibrary = false
 
     init() {
         // Verify compose step order from Rust matches what Swift expects.
@@ -23,16 +25,44 @@ struct ComposeNavigator: View {
     var body: some View {
         NavigationStack {
             switch step {
-            case .photoPicker:
-                PhotoSelectionScreen { images in
-                    guard !images.isEmpty else { dismiss(); return }
-                    step = .editPhoto(images)
-                }
-                .navigationTitle("New Post")
+            case .camera:
+                CameraView(
+                    onCapture: { images in
+                        guard !images.isEmpty else { return }
+                        step = .editPhoto(images)
+                    },
+                    onPickFromLibrary: { showLibrary = true }
+                )
+                .navigationTitle("Camera")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
+                            .foregroundStyle(Color.olasText2)
+                    }
+                }
+                // Library presented as a full-screen cover so its own dismiss()
+                // hides the cover rather than the whole compose sheet.
+                .fullScreenCover(isPresented: $showLibrary) {
+                    PhotoSelectionScreen { images in
+                        showLibrary = false
+                        guard !images.isEmpty else { return }
+                        step = .editPhoto(images)
+                    }
+                }
+
+            case .photoPicker:
+                // Retained for potential deep-link entry; normally reached via
+                // the .fullScreenCover on .camera.
+                PhotoSelectionScreen { images in
+                    guard !images.isEmpty else { step = .camera; return }
+                    step = .editPhoto(images)
+                }
+                .navigationTitle("Library")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Back") { step = .camera }
                             .foregroundStyle(Color.olasText2)
                     }
                 }
@@ -45,7 +75,7 @@ struct ComposeNavigator: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Back") { step = .photoPicker }
+                        Button("Back") { step = .camera }
                             .foregroundStyle(Color.olasText2)
                     }
                 }
