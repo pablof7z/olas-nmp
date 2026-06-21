@@ -87,6 +87,37 @@ fn following_open_declares_active_follows_picture_subscription() {
 }
 
 #[test]
+fn following_feed_observer_hydrates_typed_projection_after_ingest() {
+    let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
+    let frames = install_frame_capture();
+    let app = nmp_ffi::nmp_app_new();
+    assert!(!app.is_null());
+    nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), Some(capture_frame_callback));
+    crate::olas_app_register(app);
+    nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+    nmp_ffi::nmp_app_start(app, 0, 100);
+
+    let _active_pubkey = sign_in_test_account_and_wait(app, &frames, Duration::from_secs(5));
+    let signal = Arc::new(EventSignal::default());
+    let observer_id = unsafe { &*app }.register_event_observer(signal.clone());
+    let following = CString::new(FOLLOWING_FEED_KEY).expect("following key");
+
+    crate::olas_open_photo_feed(app, 1, following.as_ptr());
+    let (event_id, event_json) = signed_test_account_picture_event(1_700_000_500);
+    inject_signed_event(app, &event_json);
+    let (_observed, posts_json) = signal
+        .wait_for_non_empty_projection(Duration::from_secs(5), || {
+            non_empty_current_photo_feed_json(app, FOLLOWING_FEED_KEY)
+        });
+    assert_posts_contain(&posts_json, &event_id);
+
+    unsafe { &*app }.unregister_event_observer(observer_id);
+    nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), None);
+    nmp_ffi::nmp_app_stop(app);
+    nmp_ffi::nmp_app_free(app);
+}
+
+#[test]
 fn author_acquisition_filter_derives_kind16_and_keeps_author_perspective() {
     let filters = author_acquisition_filter_jsons("alice", 50);
     let values = filters

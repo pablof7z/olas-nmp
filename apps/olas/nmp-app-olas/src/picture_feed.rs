@@ -403,7 +403,9 @@ fn open_feed_acquisition(
     match mode {
         FeedMode::Following => {
             close_network_acquisition(app, FeedMode::Network.limit());
-            let _ = app_ref.declare_active_follows_feed(following_primary_kinds());
+            if app_ref.declare_active_follows_feed(following_primary_kinds()) {
+                open_following_observer(app_ref, consumer, observer_id);
+            }
         }
         FeedMode::Network => {
             app_ref.clear_active_follows_feed();
@@ -434,6 +436,35 @@ fn open_feed_acquisition(
 
 fn following_primary_kinds() -> [u32; 1] {
     [KIND_PICTURE_EVENT]
+}
+
+fn open_following_observer(
+    app: &NmpApp,
+    consumer: &str,
+    observer_id: Option<KernelEventObserverId>,
+) {
+    let Some(observer_id) = observer_id else {
+        return;
+    };
+    let Some(runtime) = current_runtime() else {
+        return;
+    };
+    let Some(shape) = following_shape(&runtime.active_slot, &runtime.follow_set) else {
+        return;
+    };
+    let filter_json = serde_json::json!({
+        "authors": shape.authors.iter().collect::<Vec<_>>(),
+        "kinds": shape.kinds.iter().copied().collect::<Vec<_>>(),
+    })
+    .to_string();
+    app.open_observed_interest(
+        &filter_json,
+        consumer,
+        1,
+        observer_id,
+        vec![shape],
+        nmp_feed::DEFAULT_FEED_WINDOW_LIMIT,
+    );
 }
 
 fn c_string_opt(ptr: *const c_char) -> Option<String> {
