@@ -108,8 +108,12 @@ private fun CameraContent(onCapture: (Uri) -> Unit) {
     // Re-bind camera when lensFacing changes.
     DisposableEffect(lensFacing) {
         val future = ProcessCameraProvider.getInstance(context)
+        // Captured on the listener thread once the provider resolves; read in
+        // onDispose to unbind without a blocking future.get() on the main thread.
+        var boundProvider: ProcessCameraProvider? = null
         future.addListener({
             val provider = future.get()
+            boundProvider = provider
             val preview  = Preview.Builder().build().also {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
@@ -118,7 +122,7 @@ private fun CameraContent(onCapture: (Uri) -> Unit) {
             provider.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture)
         }, executor)
         onDispose {
-            runCatching { future.get().unbindAll() }
+            runCatching { boundProvider?.unbindAll() }
         }
     }
 
@@ -148,13 +152,19 @@ private fun CameraContent(onCapture: (Uri) -> Unit) {
                 )
             }
 
-            // Shutter
+            // Shutter (guard against a double-tap firing two captures)
+            var capturing by remember { mutableStateOf(false) }
             Box(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(Color.White)
-                    .clickable { takePhoto(context, imageCapture, executor, onCapture) },
+                    .background(if (capturing) Color.Gray else Color.White)
+                    .clickable(enabled = !capturing) {
+                        capturing = true
+                        takePhoto(context, imageCapture, executor) { uri ->
+                            onCapture(uri)
+                        }
+                    },
             )
 
             // Lens toggle
@@ -212,6 +222,25 @@ private fun CameraPermissionDenied(onCapture: (Uri) -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
+        // Open Settings so a denied user can re-grant camera (parity with iOS).
+        Button(
+            onClick = {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", context.packageName, null),
+                )
+                runCatching { context.startActivity(intent) }
+            },
+            colors   = ButtonDefaults.buttonColors(
+                containerColor = OlasColors.Text1,
+                contentColor   = OlasColors.Background,
+            ),
+            shape    = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) {
+            Text("Open Settings", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        }
+        Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
                 libraryLauncher.launch(
@@ -219,8 +248,8 @@ private fun CameraPermissionDenied(onCapture: (Uri) -> Unit) {
                 )
             },
             colors   = ButtonDefaults.buttonColors(
-                containerColor = OlasColors.Text1,
-                contentColor   = OlasColors.Background,
+                containerColor = OlasColors.Surface2,
+                contentColor   = OlasColors.Text1,
             ),
             shape    = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().height(50.dp),

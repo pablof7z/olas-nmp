@@ -27,6 +27,9 @@ private struct CameraPreviewView: UIViewRepresentable {
 final class CameraModel: NSObject, ObservableObject {
     @Published var isPermissionDenied = false
     @Published var isCapturing = false
+    // True once the session is running with an active video connection. The
+    // shutter is gated on this to avoid an NSException if tapped before config.
+    @Published var isSessionReady = false
 
     // AVCaptureSession is internally thread-safe when driven from sessionQueue.
     // nonisolated(unsafe) shares the reference with the preview layer without
@@ -56,6 +59,7 @@ final class CameraModel: NSObject, ObservableObject {
 
     func stop() {
         let sess = session
+        isSessionReady = false
         sessionQueue.async { if sess.isRunning { sess.stopRunning() } }
     }
 
@@ -65,7 +69,10 @@ final class CameraModel: NSObject, ObservableObject {
     }
 
     func capturePhoto() {
-        guard !isCapturing else { return }
+        // Guard against tapping the shutter before the session has an active
+        // video connection — capturing then raises an NSException.
+        guard isSessionReady, !isCapturing,
+              photoOutput.connection(with: .video)?.isActive == true else { return }
         isCapturing = true
         let settings = AVCapturePhotoSettings()
         photoOutput.capturePhoto(with: settings, delegate: self)
@@ -85,6 +92,8 @@ final class CameraModel: NSObject, ObservableObject {
             if !sess.outputs.contains(out), sess.canAddOutput(out) { sess.addOutput(out) }
             sess.commitConfiguration()
             if !sess.isRunning { sess.startRunning() }
+            let ready = sess.isRunning
+            Task { @MainActor [weak self] in self?.isSessionReady = ready }
         }
     }
 }
@@ -154,7 +163,8 @@ struct CameraView: View {
                         Circle().fill(.white).frame(width: 72, height: 72)
                     }
                 }
-                .disabled(model.isCapturing)
+                .disabled(model.isCapturing || !model.isSessionReady)
+                .opacity(model.isSessionReady ? 1 : 0.4)
                 .frame(maxWidth: .infinity)
 
                 Button { model.toggleLens() } label: {
