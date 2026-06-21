@@ -101,26 +101,80 @@ struct OlasProfile: Codable {
     }
 }
 
-// MARK: - Follow Pack (Rust-decoded from kind:30000 events)
+// MARK: - Follow Packs (Rust onboarding wire — `olas_follow_packs_snapshot_json`)
 
-/// Decoded from `olas_decode_follow_pack_event_json` — the Rust FFI source of truth.
-/// The old hardcoded `FollowPack.defaults` static has been removed (P0-A fix).
-struct FollowPackDescriptor: Identifiable, Codable {
-    let id: String           // JSON: "id"  (kind:30000 `d` tag)
-    let name: String
-    let description: String
-    let accentColor: String  // JSON: "accent_color"
-    let pubkeys: [String]    // resolved member pubkeys from `p` tags
-    let count: Int
+/// Top-level snapshot the native side renders. The whole projection (ranking,
+/// dedup, profile resolution) lives in Rust; native only decodes and draws this.
+struct FollowPacksSnapshot: Codable {
+    let state: String          // "loading" | "ready" | "empty_offline"
+    let packs: [FollowPack]
+    let selectionSummary: FollowPacksSelectionSummary
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, count, pubkeys
-        case accentColor = "accent_color"
+        case state, packs
+        case selectionSummary = "selection_summary"
     }
 }
 
-/// Returned by `olas_apply_follow_pack_pubkeys` after dispatching all follows.
-struct FollowPackApplyResult: Codable {
+/// One renderable pack. `id` is an opaque coordinate forwarded back verbatim to
+/// `olas_apply_selected_follow_packs`; native never parses it.
+struct FollowPack: Codable, Identifiable {
+    let id: String
+    let kindGroup: String      // "media" | "general"
+    let featured: Bool
+    let title: String
+    let coverImageUrl: String?
+    let description: String?
+    let memberCount: Int
+    let previewAvatars: [FollowPackAvatar]
+    let socialProof: FollowPackSocialProof
+    let defaultSelected: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, featured, title, description
+        case kindGroup = "kind_group"
+        case coverImageUrl = "cover_image_url"
+        case memberCount = "member_count"
+        case previewAvatars = "preview_avatars"
+        case socialProof = "social_proof"
+        case defaultSelected = "default_selected"
+    }
+}
+
+struct FollowPackAvatar: Codable {
+    let imageUrl: String?
+    let displayName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case imageUrl = "image_url"
+        case displayName = "display_name"
+    }
+}
+
+struct FollowPackSocialProof: Codable {
+    let names: [String]
+    let extraCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case names
+        case extraCount = "extra_count"
+    }
+}
+
+struct FollowPacksSelectionSummary: Codable {
+    let packCount: Int
+    let peopleCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case packCount = "pack_count"
+        case peopleCount = "people_count"
+    }
+}
+
+/// Returned by `olas_apply_selected_follow_packs` after the kernel dispatches
+/// the single follow_many. `feedDefault` is informational — the kernel already
+/// flips the feed.
+struct ApplyFollowPacksResult: Codable {
     let followCount: Int    // JSON: "follow_count"
     let feedDefault: String // JSON: "feed_default" — "following" | "network"
 

@@ -180,6 +180,23 @@ import os
         profileUpdateHandlers.append(handler)
     }
 
+    // MARK: - Frame-update handlers (event-driven snapshot refresh)
+
+    // Fired once per kernel update frame so views that read a Rust snapshot on
+    // demand (e.g. follow-pack discovery) can re-read it without polling. Keyed
+    // by token so a view can unregister on disappear.
+    private var frameUpdateHandlers: [Int: () -> Void] = [:]
+    private var nextFrameUpdateToken = 0
+
+    func addFrameUpdateHandler(_ handler: @escaping () -> Void) -> Int {
+        let token = nextFrameUpdateToken; nextFrameUpdateToken += 1
+        frameUpdateHandlers[token] = handler
+        return token
+    }
+
+    func removeFrameUpdateHandler(_ token: Int) { frameUpdateHandlers.removeValue(forKey: token) }
+    func notifyFrameUpdate() { frameUpdateHandlers.values.forEach { $0() } }
+
     func addPhotoFeedUpdateHandler(_ handler: @escaping (String, [PhotoPost]) -> Void) {
         photoFeedUpdateHandlers.append(handler)
     }

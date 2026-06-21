@@ -102,11 +102,11 @@ object NMPBridge {
         geohash: String?,
     ): String?
 
-    // P0-A: follow-pack discovery
-    private external fun nativeOpenFollowPackDiscovery(handle: Long, consumerId: String)
-    private external fun nativeCloseFollowPackDiscovery(handle: Long, consumerId: String)
-    private external fun nativeDecodeFollowPackEventJson(eventJson: String): String?
-    private external fun nativeApplyFollowPackPubkeys(handle: Long, pubkeysJson: String, activePubkey: String): String?
+    // Follow-pack discovery (Rust onboarding wire — entire projection lives in Rust)
+    private external fun nativeOpenFollowPackDiscovery(handle: Long)
+    private external fun nativeCloseFollowPackDiscovery(handle: Long)
+    private external fun nativeFollowPacksSnapshotJson(handle: Long): String?
+    private external fun nativeApplySelectedFollowPacks(handle: Long, idsJson: String): String?
     private external fun nativeActiveFollowingCount(handle: Long): Long
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
@@ -408,30 +408,30 @@ object NMPBridge {
         geohash: String?,
     ): String? = nativePicturePostPublishJson(uploadedImagesJson, caption, geohash)
 
-    // --- P0-A: Follow-pack discovery and bulk-apply --------------------------
+    // --- Follow-pack discovery and bulk-apply (Rust onboarding wire) ---------
 
-    /** Open kind:30000 follow-pack discovery interest (canonical Olas curators). */
-    fun openFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
-        nativeOpenFollowPackDiscovery(appHandle, consumerId)
+    /** Open follow-pack discovery interests (featured + network). Idempotent. */
+    fun openFollowPackDiscovery() =
+        nativeOpenFollowPackDiscovery(appHandle)
 
-    /** Close follow-pack discovery interest. */
-    fun closeFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
-        nativeCloseFollowPackDiscovery(appHandle, consumerId)
-
-    /**
-     * Decode a raw kind:30000 event JSON from the event observer into a
-     * FollowPackDescriptor JSON string (or null if not a valid pack event).
-     */
-    fun decodeFollowPackEventJson(eventJson: String): String? =
-        nativeDecodeFollowPackEventJson(eventJson)
+    /** Close follow-pack discovery interests. */
+    fun closeFollowPackDiscovery() =
+        nativeCloseFollowPackDiscovery(appHandle)
 
     /**
-     * Apply selected follow packs: dispatch nmp.follow for each pubkey.
-     * pubkeysJson: JSON array of hex pubkey strings (deduped, self-excluded by Rust).
-     * Returns: `{"follow_count":N,"feed_default":"following|network"}` or null.
+     * Current packs snapshot as the Rust onboarding wire JSON. Kotlin decodes
+     * `FollowPacksSnapshot` from this; re-read on each kernel update frame.
      */
-    fun applyFollowPackPubkeys(pubkeysJson: String, activePubkey: String = ""): String? =
-        nativeApplyFollowPackPubkeys(appHandle, pubkeysJson, activePubkey)
+    fun followPacksSnapshotJson(): String? =
+        nativeFollowPacksSnapshotJson(appHandle)
+
+    /**
+     * Apply the user's pack selection. idsJson: JSON array of opaque snapshot
+     * ids. Rust expands p-tags, unions, dedups, excludes self and dispatches
+     * ONE follow_many. Returns `{"follow_count":N,"feed_default":"..."}` or null.
+     */
+    fun applySelectedFollowPacks(idsJson: String): String? =
+        nativeApplySelectedFollowPacks(appHandle, idsJson)
 
     /**
      * Live "Following" count for the active account — the number of distinct

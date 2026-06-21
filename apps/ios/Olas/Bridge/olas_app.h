@@ -206,39 +206,6 @@ char* olas_decode_snapshot_action_results_json(const uint8_t* frame, size_t len)
 /// Returned pointer must be freed with nmp_free_string.
 char* olas_picture_post_publish_json(const char* uploaded_images_json, const char* caption, const char* geohash);
 
-// ── P0-A: Follow-pack discovery and bulk-apply ────────────────────────────────
-
-/// Open a NIP-51 kind:30000 follow-pack discovery interest for the canonical
-/// Olas curated pack authors. Events arrive via the kernel event observer.
-/// Decode each event with olas_decode_follow_pack_event_json to get pack
-/// metadata + member pubkeys. Close with olas_close_follow_pack_discovery.
-void olas_open_follow_pack_discovery(void* app, const char* consumer_id);
-
-/// Close the follow-pack discovery interest.
-void olas_close_follow_pack_discovery(void* app, const char* consumer_id);
-
-/// Decode a raw kind:30000 Nostr event JSON (from the event observer) into a
-/// FollowPack descriptor JSON for rendering.
-/// Returns: {"id":"<d-tag>","name":"...","description":"...","accent_color":"...",
-///           "pubkeys":["<hex>",...],"count":N}
-/// Returns NULL when the event is not a valid kind:30000 with p tags.
-/// Returned string must be freed with nmp_free_string.
-char* olas_decode_follow_pack_event_json(const char* event_json);
-
-/// Apply the selected follow packs. The native side passes the union of all
-/// `p`-tag pubkeys from the selected packs (deduplicated, self-excluded).
-/// Rust dispatches one `nmp.follow` per pubkey through the action bus.
-///
-/// pubkeys_json    — JSON array of hex pubkey strings. Required.
-/// active_pubkey   — active account hex pubkey for self-exclusion guard
-///                   (may be NULL or empty if unknown).
-///
-/// Returns: {"follow_count":N,"feed_default":"following|network"}
-/// feed_default is "following" when N >= 15, "network" otherwise.
-/// Returns NULL on empty input or decode error.
-/// Returned string must be freed with nmp_free_string.
-char* olas_apply_follow_pack_pubkeys(void* app, const char* pubkeys_json, const char* active_pubkey);
-
 /// Live "Following" count for the active account — the number of distinct `p`
 /// tags in its current kind:3, read synchronously from the local event store
 /// (read-your-writes; reflects a just-applied follow pack with no relay

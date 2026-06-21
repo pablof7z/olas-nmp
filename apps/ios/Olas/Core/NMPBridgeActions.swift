@@ -298,47 +298,42 @@ extension NMPBridge {
         return String(cString: res)
     }
 
-    // MARK: - P0-A: follow-pack discovery and apply
+    // MARK: - Follow-pack discovery and apply (Rust onboarding wire)
 
-    /// Open the kind:30000 follow-pack discovery interest.
-    func openFollowPackDiscovery(consumer: String = "olas.follow_packs") {
+    /// Open follow-pack discovery interests (featured + network). Idempotent.
+    func openFollowPackDiscovery() {
         guard let app = appPtr else { return }
-        consumer.withCString { olas_open_follow_pack_discovery(app, $0) }
+        olas_open_follow_pack_discovery(app)
     }
 
-    /// Close the follow-pack discovery interest.
-    func closeFollowPackDiscovery(consumer: String = "olas.follow_packs") {
+    /// Close the follow-pack discovery interests.
+    func closeFollowPackDiscovery() {
         guard let app = appPtr else { return }
-        consumer.withCString { olas_close_follow_pack_discovery(app, $0) }
+        olas_close_follow_pack_discovery(app)
     }
 
-    /// Decode a raw kind:30000 event JSON into a FollowPackDescriptor.
-    func decodeFollowPackEvent(_ eventJSON: String) -> FollowPackDescriptor? {
-        let ptr = eventJSON.withCString { olas_decode_follow_pack_event_json($0) }
+    /// Current packs snapshot as the Rust onboarding wire JSON. Native decodes
+    /// `FollowPacksSnapshot` from this; the C string is copied then freed.
+    func followPacksSnapshotJSON() -> String? {
+        guard let app = appPtr else { return nil }
+        guard let ptr = olas_follow_packs_snapshot_json(app) else { return nil }
+        defer { nmp_free_string(ptr) }
+        return String(cString: ptr)
+    }
+
+    /// Apply the user's pack selection. `ids` are the opaque snapshot ids; Rust
+    /// expands p-tags, unions, dedups, excludes self and dispatches ONE follow.
+    func applySelectedFollowPacks(ids: [String]) -> (followCount: Int, feedDefault: String)? {
+        guard let app = appPtr,
+              let data = try? JSONSerialization.data(withJSONObject: ids),
+              let idsJSON = String(data: data, encoding: .utf8) else { return nil }
+        let ptr = idsJSON.withCString { olas_apply_selected_follow_packs(app, $0) }
         guard let ptr else { return nil }
         defer { nmp_free_string(ptr) }
-        let json = String(cString: ptr)
-        guard let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(FollowPackDescriptor.self, from: data)
-    }
-
-    /// Apply selected follow packs: dispatch nmp.follow for each pubkey in
-    /// the deduplicated union. Returns the result descriptor or nil on failure.
-    func applyFollowPackPubkeys(_ pubkeys: [String]) -> FollowPackApplyResult? {
-        guard let app = appPtr, !pubkeys.isEmpty else { return nil }
-        guard let data = try? JSONSerialization.data(withJSONObject: pubkeys),
-              let json = String(data: data, encoding: .utf8) else { return nil }
-        let activePk = activeAccountPubkey ?? ""
-        let ptr = json.withCString { pubkeysPtr in
-            activePk.withCString { activePtr in
-                olas_apply_follow_pack_pubkeys(app, pubkeysPtr, activePtr)
-            }
-        }
-        guard let ptr else { return nil }
-        defer { nmp_free_string(ptr) }
-        let resultJSON = String(cString: ptr)
-        guard let resultData = resultJSON.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(FollowPackApplyResult.self, from: resultData)
+        guard let resultData = String(cString: ptr).data(using: .utf8),
+              let result = try? JSONDecoder().decode(ApplyFollowPacksResult.self, from: resultData)
+        else { return nil }
+        return (followCount: result.followCount, feedDefault: result.feedDefault)
     }
 
     /// Live "Following" count for the active account — the number of distinct

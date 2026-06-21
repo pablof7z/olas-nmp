@@ -16,16 +16,17 @@ final class OnboardingViewModel {
     var selectedPackIds: Set<String> = []
     var mediaServerURL: String = "https://blossom.primal.net"
 
-    // P0-A: follow-pack discovery (populated from kind:30000 event observer)
-    var discoveredPacks: [FollowPackDescriptor] = []
+    // Follow-pack discovery: the entire projection lives in Rust. Native re-reads
+    // this snapshot on every kernel update frame (event-driven; no polling).
+    var followPacks: FollowPacksSnapshot? = nil
 
     // Sign-in state
     var signInError: String? = nil
     var isSigningIn: Bool = false
 
     // P2-A: inbound invite — set when the app is launched via an invite link.
-    // Display-only hint shown on WelcomeView; the pubkey is pre-seeded as a
-    // follow during applySelectedPacks (reuses the P0-A olas_apply_follow_pack_pubkeys path).
+    // Display-only hint shown on WelcomeView; the pubkey is followed during
+    // applySelectedPacks via a plain nmp.follow, alongside the pack selection.
     var inviterPubkey: String? = nil
     var inviterDisplayHint: String? = nil
 
@@ -79,53 +80,75 @@ final class OnboardingViewModel {
         advance(to: .complete)
     }
 
-    // MARK: - P0-A: follow-pack discovery
+    // MARK: - Follow-pack discovery (event-driven snapshot refresh)
 
-    private var packEventHandler: ((String) -> Void)?
+    private var didSeedDefaults = false
+    private var frameUpdateToken: Int? = nil
+    private var lastFollowPacksJSON = ""
 
     func startPackDiscovery() {
         NMPBridge.shared.openFollowPackDiscovery()
-        // Register an event handler to decode kind:30000 events as they arrive.
-        let handler: (String) -> Void = { [weak self] json in
-            guard let self else { return }
-            if let descriptor = NMPBridge.shared.decodeFollowPackEvent(json) {
-                // Upsert by id (newer event replaces older for the same d-tag).
-                if let idx = self.discoveredPacks.firstIndex(where: { $0.id == descriptor.id }) {
-                    self.discoveredPacks[idx] = descriptor
-                } else {
-                    self.discoveredPacks.append(descriptor)
-                }
+        reloadFollowPacks()
+        // Re-read the snapshot whenever the kernel pushes an update frame.
+        // Event-driven only — no Timer, no poll loop.
+        if frameUpdateToken == nil {
+            frameUpdateToken = NMPBridge.shared.addFrameUpdateHandler { [weak self] in
+                self?.reloadFollowPacks()
             }
         }
-        packEventHandler = handler
-        NMPBridge.shared.addEventHandler(handler)
     }
 
     func stopPackDiscovery() {
+        if let token = frameUpdateToken {
+            NMPBridge.shared.removeFrameUpdateHandler(token)
+            frameUpdateToken = nil
+        }
         NMPBridge.shared.closeFollowPackDiscovery()
     }
 
-    /// Apply the selected packs: collect all pubkeys from selected descriptors,
-    /// deduplicate in Rust, dispatch nmp.follow for each, then advance.
-    /// P2-A: also pre-seeds the inviter pubkey (if an invite was used) into
-    /// the same follow batch — reuses olas_apply_follow_pack_pubkeys so there
-    /// is exactly one kind:3 write for the entire set (no race with pack pubkeys).
+    private func reloadFollowPacks() {
+        guard let json = NMPBridge.shared.followPacksSnapshotJSON() else { return }
+        guard json != lastFollowPacksJSON else { return }
+        lastFollowPacksJSON = json
+        guard let data = json.data(using: .utf8),
+              let snapshot = try? JSONDecoder().decode(FollowPacksSnapshot.self, from: data)
+        else { return }
+        followPacks = snapshot
+        // Pre-select default packs once, the first time they become available.
+        if !didSeedDefaults, snapshot.state == "ready" {
+            let defaults = snapshot.packs.filter { $0.defaultSelected }.map { $0.id }
+            if !defaults.isEmpty {
+                selectedPackIds.formUnion(defaults)
+                didSeedDefaults = true
+            }
+        }
+    }
+
+    func togglePack(_ id: String) {
+        if selectedPackIds.contains(id) {
+            selectedPackIds.remove(id)
+        } else {
+            selectedPackIds.insert(id)
+        }
+    }
+
+    /// Selection summary computed from the snapshot for footer display.
+    var selectionSummary: (packs: Int, people: Int) {
+        let selected = (followPacks?.packs ?? []).filter { selectedPackIds.contains($0.id) }
+        return (selected.count, selected.reduce(0) { $0 + $1.memberCount })
+    }
+
+    /// Apply the selection: forward the opaque ids to Rust (which expands,
+    /// unions, dedups, excludes self and dispatches one follow_many), then
+    /// advance. The returned feed_default is informational — the kernel already
+    /// flips the feed. P2-A: an inbound invite pubkey is followed separately.
     func applySelectedPacks() {
-        var allPubkeys = discoveredPacks
-            .filter { selectedPackIds.contains($0.id) }
-            .flatMap { $0.pubkeys }
-        // Pre-seed inviter into the follow batch (dedup happens in Rust).
+        let ids = Array(selectedPackIds)
+        if !ids.isEmpty {
+            _ = NMPBridge.shared.applySelectedFollowPacks(ids: ids)
+        }
         if let invPk = inviterPubkey, !invPk.isEmpty {
-            allPubkeys.append(invPk)
-        }
-        guard !allPubkeys.isEmpty else {
-            advance(to: .complete)
-            return
-        }
-        let result = NMPBridge.shared.applyFollowPackPubkeys(allPubkeys)
-        // If Rust says feed_default is "following", flip the feed mode.
-        if result?.feedDefault == "following" {
-            NMPBridge.shared.setFeedMode("following")
+            NMPBridge.shared.follow(pubkey: invPk)
         }
         advance(to: .complete)
     }

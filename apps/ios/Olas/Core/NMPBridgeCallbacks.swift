@@ -11,6 +11,7 @@ final class NMPCallbackSink {
     let onProfiles: (String) -> Void
     let onActiveAccount: (String) -> Void
     let onPhotoFeed: (String, String) -> Void
+    let onFrame: () -> Void
     let photoFeedKeys: () -> [String]
     init(
         onEvent: @escaping (String) -> Void,
@@ -18,6 +19,7 @@ final class NMPCallbackSink {
         onProfiles: @escaping (String) -> Void,
         onActiveAccount: @escaping (String) -> Void,
         onPhotoFeed: @escaping (String, String) -> Void,
+        onFrame: @escaping () -> Void,
         photoFeedKeys: @escaping () -> [String]
     ) {
         self.onEvent = onEvent
@@ -25,6 +27,7 @@ final class NMPCallbackSink {
         self.onProfiles = onProfiles
         self.onActiveAccount = onActiveAccount
         self.onPhotoFeed = onPhotoFeed
+        self.onFrame = onFrame
         self.photoFeedKeys = photoFeedKeys
     }
 }
@@ -68,6 +71,9 @@ func makeBridgeCallbackSink(bridge: NMPBridge) -> NMPCallbackSink {
             guard changed else { return }
             Task { @MainActor [weak bridge] in bridge?.handlePhotoFeedJSON(key: key, json: json) }
         },
+        onFrame: { [weak bridge] in
+            Task { @MainActor [weak bridge] in bridge?.notifyFrameUpdate() }
+        },
         photoFeedKeys: { [weak bridge] in bridge?.snapshotPhotoFeedKeys() ?? [] }
     )
 }
@@ -104,4 +110,6 @@ let olasUpdateCallback: NmpUpdateCallback = { context, data, len in
             }
         }
     }
+    // Notify on-demand snapshot readers (e.g. follow packs) once per frame.
+    sink.onFrame()
 }

@@ -72,23 +72,57 @@ data class OlasProfile(
 )
 
 /**
- * P0-A: Rust-decoded kind:30000 follow-pack descriptor.
- * Decoded from `olas_decode_follow_pack_event_json`.
- * Replaces the hardcoded STARTER_PACKS list in FollowPacksScreen.
+ * Follow-pack onboarding snapshot — the entire projection (ranking, dedup,
+ * profile resolution) lives in Rust. Kotlin only decodes and renders this wire
+ * struct from `olas_follow_packs_snapshot_json`.
  */
 @Serializable
-data class FollowPackDescriptor(
-    val id: String,
-    val name: String,
-    val description: String,
-    @SerialName("accent_color") val accentColor: String,
-    val pubkeys: List<String>,
-    val count: Int,
+data class FollowPacksSnapshot(
+    val state: String = "loading", // "loading" | "ready" | "empty_offline"
+    val packs: List<FollowPack> = emptyList(),
+    @SerialName("selection_summary") val selectionSummary: FollowPacksSelectionSummary =
+        FollowPacksSelectionSummary(),
 )
 
-/** Result of olas_apply_follow_pack_pubkeys. */
+/**
+ * One renderable pack. `id` is an opaque coordinate forwarded back verbatim to
+ * `olas_apply_selected_follow_packs`; native never parses it.
+ */
 @Serializable
-data class FollowPackApplyResult(
+data class FollowPack(
+    val id: String,
+    @SerialName("kind_group") val kindGroup: String = "general", // "media" | "general"
+    val featured: Boolean = false,
+    val title: String = "",
+    @SerialName("cover_image_url") val coverImageUrl: String? = null,
+    val description: String? = null,
+    @SerialName("member_count") val memberCount: Int = 0,
+    @SerialName("preview_avatars") val previewAvatars: List<FollowPackAvatar> = emptyList(),
+    @SerialName("social_proof") val socialProof: FollowPackSocialProof = FollowPackSocialProof(),
+    @SerialName("default_selected") val defaultSelected: Boolean = false,
+)
+
+@Serializable
+data class FollowPackAvatar(
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("display_name") val displayName: String? = null,
+)
+
+@Serializable
+data class FollowPackSocialProof(
+    val names: List<String> = emptyList(),
+    @SerialName("extra_count") val extraCount: Int = 0,
+)
+
+@Serializable
+data class FollowPacksSelectionSummary(
+    @SerialName("pack_count") val packCount: Int = 0,
+    @SerialName("people_count") val peopleCount: Int = 0,
+)
+
+/** Result of olas_apply_selected_follow_packs. */
+@Serializable
+data class ApplyFollowPacksResult(
     @SerialName("follow_count") val followCount: Int,
     @SerialName("feed_default") val feedDefault: String, // "following" | "network"
 )

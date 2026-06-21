@@ -4,8 +4,8 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.f7z.olas.core.FollowPackApplyResult
-import io.f7z.olas.core.FollowPackDescriptor
+import io.f7z.olas.core.ApplyFollowPacksResult
+import io.f7z.olas.core.FollowPacksSnapshot
 import io.f7z.olas.core.InviteStore
 import io.f7z.olas.core.resolveInviteJson
 import io.f7z.olas.core.NMPBridge
@@ -26,8 +26,9 @@ data class OnboardingUiState(
     val error: String? = null,
     val displayName: String = "",
     val username: String = "",
-    // P0-A: packs discovered from kind:30000 events via the event observer
-    val discoveredPacks: List<FollowPackDescriptor> = emptyList(),
+    // Follow packs: the entire projection lives in Rust; native re-reads this
+    // snapshot on every kernel update frame (event-driven; no polling).
+    val followPacks: FollowPacksSnapshot? = null,
     val selectedPackIds: Set<String> = emptySet(),
     // P2-A: inbound invite — populated when launched via an invite link.
     val inviterPubkey: String? = null,
@@ -135,30 +136,44 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    // MARK: - P0-A: follow-pack discovery
+    // MARK: - Follow-pack discovery (event-driven snapshot refresh)
 
-    /** Open kind:30000 interest and collect arriving pack events. */
+    private var didSeedDefaults = false
+    private var lastFollowPacksJson = ""
+
+    /**
+     * Open discovery and re-read the snapshot on every kernel update frame.
+     * Event-driven only — the collector reacts to [NMPBridge.events] push frames;
+     * there is no Timer or poll loop.
+     */
     fun startPackDiscovery() {
         if (packDiscoveryStarted) return
         packDiscoveryStarted = true
         NMPBridge.openFollowPackDiscovery()
+        reloadFollowPacks()
         viewModelScope.launch {
-            NMPBridge.nostrEvents.collect { rawJson ->
-                val descriptorJson = NMPBridge.decodeFollowPackEventJson(rawJson) ?: return@collect
-                runCatching {
-                    json.decodeFromString(FollowPackDescriptor.serializer(), descriptorJson)
-                }.getOrNull()?.let { descriptor ->
-                    val current = _uiState.value.discoveredPacks
-                    val idx = current.indexOfFirst { it.id == descriptor.id }
-                    val updated = if (idx >= 0) {
-                        current.toMutableList().also { it[idx] = descriptor }
-                    } else {
-                        current + descriptor
-                    }
-                    _uiState.value = _uiState.value.copy(discoveredPacks = updated)
-                }
+            NMPBridge.events.collect { reloadFollowPacks() }
+        }
+    }
+
+    private fun reloadFollowPacks() {
+        val raw = NMPBridge.followPacksSnapshotJson() ?: return
+        if (raw == lastFollowPacksJson) return
+        lastFollowPacksJson = raw
+        val snapshot = runCatching {
+            json.decodeFromString(FollowPacksSnapshot.serializer(), raw)
+        }.getOrNull() ?: return
+
+        var selected = _uiState.value.selectedPackIds
+        // Pre-select default packs once, the first time they become available.
+        if (!didSeedDefaults && snapshot.state == "ready") {
+            val defaults = snapshot.packs.filter { it.defaultSelected }.map { it.id }
+            if (defaults.isNotEmpty()) {
+                selected = selected + defaults
+                didSeedDefaults = true
             }
         }
+        _uiState.value = _uiState.value.copy(followPacks = snapshot, selectedPackIds = selected)
     }
 
     /** Close the discovery interest (call from onDisappear / onCleared). */
@@ -167,44 +182,27 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Apply selected packs: collect all pubkeys from selected descriptors plus
-     * the inviter pubkey (P2-A), pass to Rust for dedup + self-exclusion, then
-     * advance. The entire set goes through a single olas_apply_follow_pack_pubkeys
-     * call — one kind:3 event, race-free (same P0-A path).
+     * Apply the selection: forward the opaque ids to Rust (which expands p-tags,
+     * unions, dedups, excludes self and dispatches one follow_many), then advance.
+     * The returned feed_default is informational — the kernel already flips the
+     * feed. P2-A: an inbound invite pubkey is followed separately.
      */
     fun applySelectedPacks() {
         val state = _uiState.value
-        val selectedIds = state.selectedPackIds
+        val ids = state.selectedPackIds.toList()
 
-        // Union of pack pubkeys + inviter pubkey (dedup happens in Rust).
-        val allPubkeys = state.discoveredPacks
-            .filter { it.id in selectedIds }
-            .flatMap { it.pubkeys }
-            .toMutableList()
-            .also { list ->
-                state.inviterPubkey?.takeIf { it.isNotEmpty() }?.let { list.add(it) }
-            }
-
-        if (allPubkeys.isEmpty()) {
-            viewModelScope.launch {
-                markOnboardingComplete()
-                advanceTo(OnboardingStep.COMPLETE)
-            }
-            return
-        }
         viewModelScope.launch {
-            val pubkeysJson = "[${allPubkeys.joinToString(",") { "\"$it\"" }}]"
-            val activePubkey = NMPBridge.activeAccountPubkey ?: ""
-            val resultJson = NMPBridge.applyFollowPackPubkeys(pubkeysJson, activePubkey)
-            if (resultJson != null) {
-                runCatching {
-                    json.decodeFromString(FollowPackApplyResult.serializer(), resultJson)
-                }.getOrNull()?.let { result ->
-                    if (result.feedDefault == "following") {
-                        NMPBridge.setFeedMode("following")
-                    }
+            if (ids.isNotEmpty()) {
+                val idsJson = "[${ids.joinToString(",") { "\"$it\"" }}]"
+                val resultJson = NMPBridge.applySelectedFollowPacks(idsJson)
+                if (resultJson != null) {
+                    runCatching {
+                        json.decodeFromString(ApplyFollowPacksResult.serializer(), resultJson)
+                    }.getOrNull()
                 }
             }
+            // P2-A: follow the inviter (if any) via a plain nmp.follow.
+            state.inviterPubkey?.takeIf { it.isNotEmpty() }?.let { NMPBridge.follow(it) }
             markOnboardingComplete()
             advanceTo(OnboardingStep.COMPLETE)
         }
