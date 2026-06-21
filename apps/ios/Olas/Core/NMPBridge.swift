@@ -322,14 +322,6 @@ import Combine
 
     // MARK: - Event decoders
 
-    func decodeKind20Event(_ json: String) -> String? {
-        json.withCString { ptr in
-            guard let res = olas_decode_kind20_event_json(ptr) else { return nil }
-            defer { nmp_free_string(res) }
-            return String(cString: res)
-        }
-    }
-
     func decodeKind0Event(_ json: String) -> String? {
         json.withCString { ptr in
             guard let res = olas_decode_kind0_event_json(ptr) else { return nil }

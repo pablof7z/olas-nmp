@@ -106,7 +106,7 @@ Per AGENTS.md:
 1. **Validate gap with `codex exec`** — confirm it's a real performance or correctness issue and that the fix generalizes beyond Olas.
 2. If validated: **file a GitHub issue on `pablof7z/nostr-multi-platform`** with label `area:nmp-wot`, include the Olas use-case as motivation.
 3. **Launch a PERT flow on the NMP codebase** to implement and land the fix.
-4. **Bump the NMP pin** in `Cargo.toml` to the new rev.
+4. **Refresh the NMP dependency resolution** so `Cargo.toml` continues tracking NMP `master` and the local build consumes the landed upstream fix.
 5. **Update the Olas app crate** to consume the new API.
 
 Do not implement workarounds in the Olas app crate for gaps that belong in NMP.

@@ -188,7 +188,6 @@ char* olas_picture_post_publish_json(const char* blossom_result_json, const char
 // ── New Olas FFI helpers ──────────────────────────────────────────────────────
 
 // Event decoders (caller must free with nmp_free_string)
-char* olas_decode_kind20_event_json(const char* event_json);
 char* olas_decode_kind0_event_json(const char* event_json);
 char* olas_profile_json(const char* event_json);
 char* olas_notification_json(const char* event_json);

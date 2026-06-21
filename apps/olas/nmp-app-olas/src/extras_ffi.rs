@@ -5,39 +5,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use nmp_core::substrate::KernelEvent;
-
 // ─── Event decoders ──────────────────────────────────────────────────────────
-
-/// Decodes a KernelEvent JSON string for a kind:20 picture event into a
-/// `PictureEventRecord` JSON string (nmp_nip68 canonical shape).
-/// Returns NULL if the event is not a valid NIP-68 kind:20 with at least one imeta image.
-/// Returned string must be freed with nmp_free_string.
-#[no_mangle]
-pub extern "C" fn olas_decode_kind20_event_json(event_json: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> *mut c_char {
-        if event_json.is_null() {
-            return std::ptr::null_mut();
-        }
-        let json_str = match unsafe { CStr::from_ptr(event_json) }.to_str() {
-            Ok(s) => s,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        let event: KernelEvent = match serde_json::from_str(json_str) {
-            Ok(v) => v,
-            Err(_) => return std::ptr::null_mut(),
-        };
-        let record = match nmp_nip68::try_from_kernel_event(&event) {
-            Some(r) => r,
-            None => return std::ptr::null_mut(),
-        };
-        match CString::new(serde_json::to_string(&record).unwrap_or_default()) {
-            Ok(c) => c.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        }
-    }));
-    result.unwrap_or(std::ptr::null_mut())
-}
 
 /// Parses a raw Nostr kind:0 event JSON and returns an OlasProfile JSON string.
 /// Returns NULL if event is not kind:0.
