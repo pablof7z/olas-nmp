@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.FollowPackApplyResult
 import io.f7z.olas.core.FollowPackDescriptor
+import io.f7z.olas.core.InviteStore
 import io.f7z.olas.core.NMPBridge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,9 @@ data class OnboardingUiState(
     // P0-A: packs discovered from kind:30000 events via the event observer
     val discoveredPacks: List<FollowPackDescriptor> = emptyList(),
     val selectedPackIds: Set<String> = emptySet(),
+    // P2-A: inbound invite — populated when launched via an invite link.
+    val inviterPubkey: String? = null,
+    val inviterDisplayHint: String? = null,
 )
 
 class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
@@ -102,6 +106,27 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = _uiState.value.copy(step = step)
     }
 
+    /**
+     * P2-A: consume the pending invite token from InviteStore (written by
+     * MainActivity when the app was opened via an invite link). Called once
+     * from WelcomeScreen.LaunchedEffect. Clears the store so it is not
+     * re-consumed on the next launch.
+     */
+    fun consumePendingInvite() {
+        val token = InviteStore.pendingToken ?: return
+        InviteStore.pendingToken = null
+        val resultJson = NMPBridge.resolveInviteJson(token) ?: return
+        runCatching {
+            val obj = org.json.JSONObject(resultJson)
+            val pk   = obj.optString("inviter_pubkey").takeIf { it.isNotEmpty() } ?: return
+            val hint = obj.optString("display_hint").takeIf { it.isNotEmpty() }
+            _uiState.value = _uiState.value.copy(
+                inviterPubkey       = pk,
+                inviterDisplayHint  = hint,
+            )
+        }
+    }
+
     fun togglePackSelection(packId: String) {
         val current = _uiState.value.selectedPackIds
         _uiState.value = _uiState.value.copy(
@@ -141,19 +166,31 @@ class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Apply selected packs: collect all pubkeys from selected descriptors,
-     * pass to Rust for dedup + self-exclusion + dispatch loop, then advance.
+     * Apply selected packs: collect all pubkeys from selected descriptors plus
+     * the inviter pubkey (P2-A), pass to Rust for dedup + self-exclusion, then
+     * advance. The entire set goes through a single olas_apply_follow_pack_pubkeys
+     * call — one kind:3 event, race-free (same P0-A path).
      */
     fun applySelectedPacks() {
         val state = _uiState.value
         val selectedIds = state.selectedPackIds
-        if (selectedIds.isEmpty()) {
-            advanceTo(OnboardingStep.COMPLETE)
-            return
-        }
+
+        // Union of pack pubkeys + inviter pubkey (dedup happens in Rust).
         val allPubkeys = state.discoveredPacks
             .filter { it.id in selectedIds }
             .flatMap { it.pubkeys }
+            .toMutableList()
+            .also { list ->
+                state.inviterPubkey?.takeIf { it.isNotEmpty() }?.let { list.add(it) }
+            }
+
+        if (allPubkeys.isEmpty()) {
+            viewModelScope.launch {
+                markOnboardingComplete()
+                advanceTo(OnboardingStep.COMPLETE)
+            }
+            return
+        }
         viewModelScope.launch {
             val pubkeysJson = "[${allPubkeys.joinToString(",") { "\"$it\"" }}]"
             val activePubkey = NMPBridge.activeAccountPubkey ?: ""

@@ -23,6 +23,14 @@ struct WelcomeView: View {
 
             // Content
             VStack(spacing: 0) {
+                // P2-A: "Invited you" banner — only shown when launched via an invite link.
+                if vm.inviterPubkey != nil {
+                    InviteBanner(hint: vm.inviterDisplayHint)
+                        .padding(.top, OlasSpacing.xl)
+                        .padding(.horizontal, OlasSpacing.xl)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 Spacer()
 
                 VStack(spacing: OlasSpacing.md) {
@@ -71,7 +79,39 @@ struct WelcomeView: View {
                 .padding(.bottom, OlasSpacing.xl)
             }
         }
+        .onAppear { vm.consumePendingInvite() }
     }
+}
+
+// MARK: - Invite banner
+
+private struct InviteBanner: View {
+    let hint: String?
+
+    var body: some View {
+        HStack(spacing: OlasSpacing.sm) {
+            Image(systemName: "envelope.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.olasBlue)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("A friend invited you")
+                    .font(OlasFont.subheadline())
+                    .foregroundStyle(Color.olasText1)
+                if let hint {
+                    Text(hint)
+                        .font(OlasFont.caption())
+                        .foregroundStyle(Color.olasText3)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+        .padding(OlasSpacing.md)
+        .background(Color.olasSurface2, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.olasBorder, lineWidth: 1))
+    }
+}
 
     private var mosaicBackground: some View {
         GeometryReader { geo in

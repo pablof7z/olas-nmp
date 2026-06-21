@@ -8,8 +8,9 @@ use nmp_ffi::{nmp_app_active_following_count, nmp_app_set_storage_path};
 use crate::{
     olas_apply_follow_pack_pubkeys, olas_blossom_upload_input_json, olas_bolt11_amount_sats,
     olas_bookmark_event_action_json, olas_close_follow_pack_discovery,
-    olas_decode_follow_pack_event_json, olas_location_geohash4, olas_open_follow_pack_discovery,
-    olas_picture_post_publish_json, olas_react_action_json, olas_zap_action_json,
+    olas_decode_follow_pack_event_json, olas_location_geohash4, olas_my_invite_link,
+    olas_open_follow_pack_discovery, olas_picture_post_publish_json, olas_react_action_json,
+    olas_resolve_invite_json, olas_zap_action_json,
 };
 
 use super::{cstring_into_jstring, jstring_to_cstring, unpack};
@@ -277,4 +278,44 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeSetStoragePath(
         nmp_app_set_storage_path(app, path_c.as_ptr()) as i32
     }));
     result.unwrap_or(-1)
+}
+
+// ── P2-A: Invite link resolution ─────────────────────────────────────────────
+
+/// Resolve an invite token (full URL, bare npub, or hex pubkey) to inviter info.
+/// Returns `{"inviter_pubkey":"<hex>","display_hint":"npub1..."}` or null.
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeResolveInviteJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    token: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(token_c) = jstring_to_cstring(&mut env, &token) else {
+            return std::ptr::null_mut();
+        };
+        let raw = olas_resolve_invite_json(token_c.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+// ── P2-C: Invite link minting ─────────────────────────────────────────────────
+
+/// Mint the canonical invite link for the active user from their hex pubkey.
+/// Returns `"https://olas.app/i/<npub>"` or null.
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeMyInviteLink(
+    mut env: JNIEnv,
+    _class: JClass,
+    active_pubkey: JString,
+) -> jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let Some(pk_c) = jstring_to_cstring(&mut env, &active_pubkey) else {
+            return std::ptr::null_mut();
+        };
+        let raw = olas_my_invite_link(pk_c.as_ptr());
+        cstring_into_jstring(&mut env, raw)
+    }));
+    result.unwrap_or(std::ptr::null_mut())
 }

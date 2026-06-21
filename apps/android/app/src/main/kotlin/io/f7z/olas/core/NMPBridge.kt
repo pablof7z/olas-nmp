@@ -136,6 +136,12 @@ object NMPBridge {
     // P0-F: Ranked discover sections
     private external fun nativeDiscoverSectionsJson(handle: Long, activePubkey: String): String?
 
+    // P2-A: Invite link resolution
+    private external fun nativeResolveInviteJson(token: String): String?
+
+    // P2-C: Invite link minting
+    private external fun nativeMyInviteLink(activePubkey: String): String?
+
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
         fun onUpdate(data: ByteArray)
@@ -469,4 +475,26 @@ object NMPBridge {
     fun discoverSectionsJson(activePubkey: String): String? =
         if (activePubkey.isEmpty()) null
         else nativeDiscoverSectionsJson(appHandle, activePubkey)
+
+    // --- P2-A: Invite link resolution -----------------------------------------
+
+    /**
+     * Resolve an invite token → inviter info.
+     * [token] accepts full URLs (https://olas.app/i/<npub>, olas://i/<npub>),
+     * bare npub1... strings, or 64-char hex pubkeys.
+     * Returns: `{"inviter_pubkey":"<hex>","display_hint":"npub1..."}` or null.
+     */
+    fun resolveInviteJson(token: String): String? =
+        if (token.isEmpty()) null else nativeResolveInviteJson(token)
+
+    // --- P2-C: Invite link minting --------------------------------------------
+
+    /**
+     * Mint the canonical invite link for the active user.
+     * Returns `"https://olas.app/i/<npub>"` or null when no account is active.
+     */
+    fun myInviteLink(): String? {
+        val pk = activeAccountPubkey ?: return null
+        return if (pk.isEmpty()) null else nativeMyInviteLink(pk)
+    }
 }

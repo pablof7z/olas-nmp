@@ -277,6 +277,20 @@ uint64_t olas_bolt11_amount_sats(const char* bolt11);
 // Location geohash (4-char precision; caller must free with nmp_free_string)
 char* olas_location_geohash4(double latitude, double longitude);
 
+// ── P2-A/P2-C: Invite links ───────────────────────────────────────────────────
+
+/// Resolve an invite token → inviter info.
+/// `token` accepts https://olas.app/i/<npub>, olas://i/<npub>, bare npub1..., or hex pubkey.
+/// Returns: `{"inviter_pubkey":"<hex>","display_hint":"npub1..."}` or NULL.
+/// Returned string must be freed with nmp_free_string.
+char* olas_resolve_invite_json(const char* token);
+
+/// Mint the canonical invite link for the active user.
+/// `active_pubkey` — 64-char hex pubkey of the signed-in account.
+/// Returns: `"https://olas.app/i/<npub>"` or NULL.
+/// Returned string must be freed with nmp_free_string.
+char* olas_my_invite_link(const char* active_pubkey);
+
 // ── P0-E: Real social proof ───────────────────────────────────────────────────
 
 /// Query the real social proof for target_pubkey from active_pubkey's follow graph.

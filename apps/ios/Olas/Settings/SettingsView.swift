@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @State private var showAdvanced = false
     @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled = false
+    @State private var inviteLink: URL? = nil
 
     private struct SettingItem: Decodable { let id: String; let label: String }
 
@@ -58,6 +59,25 @@ struct SettingsView: View {
                 ForEach(displayTier1, id: \.id) { item in
                     NavigationLink(item.label) { destination(for: item.id) }
                 }
+                // P2-C: Invite friends — generate + share the user's personal link.
+                if let link = inviteLink {
+                    ShareLink(
+                        item: link,
+                        subject: Text("Join me on Olas"),
+                        message: Text("Check out Olas — photos without the algorithm. Use my invite link to join!")
+                    ) {
+                        Label("Invite friends", systemImage: "person.badge.plus")
+                    }
+                } else {
+                    Button {
+                        if let urlStr = NMPBridge.shared.myInviteLink(),
+                           let url = URL(string: urlStr) {
+                            inviteLink = url
+                        }
+                    } label: {
+                        Label("Invite friends", systemImage: "person.badge.plus")
+                    }
+                }
             }
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
@@ -72,6 +92,12 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
+        .task {
+            // Pre-load the invite link so the ShareLink renders immediately on tap.
+            if let urlStr = NMPBridge.shared.myInviteLink(), let url = URL(string: urlStr) {
+                inviteLink = url
+            }
+        }
     }
 
     private var notificationsSettings: some View {
