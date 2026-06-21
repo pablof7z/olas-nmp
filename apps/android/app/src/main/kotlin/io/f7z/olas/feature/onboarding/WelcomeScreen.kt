@@ -71,7 +71,7 @@ fun WelcomeScreen(navController: NavController) {
         ) {
             // P2-A: "A friend invited you" banner shown when launched via an invite link.
             if (state.inviterPubkey != null) {
-                InviteBanner(hint = state.inviterDisplayHint)
+                InviteBanner()
                 Spacer(Modifier.height(24.dp))
             }
             Text(
@@ -116,7 +116,7 @@ fun WelcomeScreen(navController: NavController) {
 
 // P2-A: shown on WelcomeScreen when the app is launched via an invite link.
 @Composable
-private fun InviteBanner(hint: String?) {
+private fun InviteBanner() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -130,22 +130,14 @@ private fun InviteBanner(hint: String?) {
             contentDescription = null,
             tint               = OlasColors.Blue,
         )
-        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(
-                text       = "A friend invited you",
-                fontSize   = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color      = OlasColors.Text1,
-            )
-            if (!hint.isNullOrEmpty()) {
-                Text(
-                    text     = hint,
-                    fontSize = 12.sp,
-                    color    = OlasColors.Text3,
-                    maxLines = 1,
-                )
-            }
-        }
+        // Title only — never render the inviter's npub/pubkey (no-jargon rule).
+        Text(
+            text       = "A friend invited you",
+            fontSize   = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color      = OlasColors.Text1,
+            modifier   = Modifier.weight(1f).padding(start = 10.dp),
+        )
     }
 }
 
