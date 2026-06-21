@@ -77,7 +77,7 @@ struct NotificationItemView: View {
     private var actorLabel: String {
         let cache = NMPBridge.shared.profileCache
         let names = notification.actorPubkeys.prefix(2).map { pubkey in
-            cache[pubkey]?.displayName ?? cache[pubkey]?.name ?? String(pubkey.prefix(8))
+            cache[pubkey]?.displayName ?? String(pubkey.prefix(8))
         }
         let others = notification.count - names.count
         let base = names.joined(separator: ", ")
