@@ -30,7 +30,7 @@ pub(crate) fn open_search_picture_feed(app: *mut NmpApp, query: &str, consumer: 
     // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
     let app_ref = unsafe { &*app };
     register_picture_feed(app_ref, consumer.to_string(), mode.clone());
-    super::open_feed_acquisition(app, consumer, &mode);
+    super::open_feed_acquisition(app, app_ref, consumer, &mode);
 }
 
 pub(crate) fn close_search_picture_feed(app: *mut NmpApp, query: &str, consumer: &str) {

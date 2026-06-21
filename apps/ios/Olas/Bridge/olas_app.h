@@ -41,8 +41,6 @@ void nmp_app_remove_relay(void* app, const char* url);
 // Feed / interests
 void nmp_app_open_interest(void* app, const char* filter_json, const char* consumer_id, uint32_t scope);
 void nmp_app_close_interest(void* app, const char* filter_json, const char* consumer_id, uint32_t scope);
-void nmp_app_open_contact_feed(void* app, const char* kinds_json);
-void nmp_app_close_contact_feed(void* app);
 void nmp_app_open_uri(void* app, const char* uri);
 // force=1: re-fetch from relay even if kind:0 is already in the EventStore.
 // Profile data is delivered via the update callback `claimed_profiles` projection,

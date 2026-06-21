@@ -7,13 +7,11 @@ use nmp_core::slots::{event_by_id_from_store, ActiveAccountSlot};
 use nmp_core::substrate::{empty_suppression_lookup, KernelEvent, SuppressionLookup};
 use nmp_core::{KernelEventObserver, TypedProjectionData};
 use nmp_feed::{ClosureInterestShape, FeedAdvance, FeedApply, FeedController, PullFeedController};
-use nmp_ffi::{
-    nmp_app_close_contact_feed, nmp_app_close_interest, nmp_app_open_contact_feed,
-    nmp_app_open_interest, NmpApp,
-};
+use nmp_ffi::{nmp_app_close_interest, nmp_app_open_interest, NmpApp};
 use nmp_nip02::ActiveFollowSet;
 use nmp_nip68::{
     picture_acquisition_kinds, picture_feed_observer, picture_feed_predicate, PictureFeed,
+    KIND_PICTURE_EVENT,
 };
 use nmp_planner::InterestShape;
 use nmp_wot::WotBootstrapRuntime;
@@ -27,7 +25,6 @@ use picture_feed_admission::network_allows_for_preset;
 mod picture_feed_acquisition;
 use picture_feed_acquisition::{
     acquisition_filter_jsons, author_acquisition_filter_jsons, author_feed_key,
-    PICTURE_PRIMARY_KINDS_JSON,
 };
 #[path = "picture_feed_projection.rs"]
 mod picture_feed_projection;
@@ -109,7 +106,7 @@ pub extern "C" fn olas_open_photo_feed(
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
         register_picture_feed(app_ref, consumer.clone(), mode.clone());
-        open_feed_acquisition(app, &consumer, &mode);
+        open_feed_acquisition(app, app_ref, &consumer, &mode);
     }));
 }
 
@@ -133,7 +130,7 @@ pub extern "C" fn olas_open_author_photo_feed(
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
         register_picture_feed(app_ref, consumer.clone(), mode.clone());
-        open_feed_acquisition(app, &consumer, &mode);
+        open_feed_acquisition(app, app_ref, &consumer, &mode);
     }));
 }
 
@@ -380,17 +377,14 @@ fn network_shape() -> Option<InterestShape> {
     InterestShape::from_filter_json(&format!(r#"{{"kinds":[{kinds}]}}"#))
 }
 
-fn open_feed_acquisition(app: *mut NmpApp, consumer: &str, mode: &FeedMode) {
+fn open_feed_acquisition(app: *mut NmpApp, app_ref: &NmpApp, consumer: &str, mode: &FeedMode) {
     match mode {
         FeedMode::Following => {
             close_network_acquisition(app);
-            let Ok(kinds) = CString::new(PICTURE_PRIMARY_KINDS_JSON) else {
-                return;
-            };
-            nmp_app_open_contact_feed(app, kinds.as_ptr());
+            let _ = app_ref.declare_active_follows_feed(following_primary_kinds());
         }
         FeedMode::Network => {
-            nmp_app_close_contact_feed(app);
+            app_ref.clear_active_follows_feed();
             open_global_acquisition(app, consumer, mode.limit());
         }
         FeedMode::Author(pubkey) => {
@@ -400,6 +394,10 @@ fn open_feed_acquisition(app: *mut NmpApp, consumer: &str, mode: &FeedMode) {
             open_search_acquisition(app, query.as_str(), consumer, mode.limit());
         }
     }
+}
+
+fn following_primary_kinds() -> [u32; 1] {
+    [KIND_PICTURE_EVENT]
 }
 
 fn open_global_acquisition(app: *mut NmpApp, consumer: &str, limit: u64) {

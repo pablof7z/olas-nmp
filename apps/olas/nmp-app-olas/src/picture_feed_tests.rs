@@ -23,8 +23,67 @@ fn acquisition_filter_derives_kind16_from_primary_picture_kind() {
 
 #[test]
 fn following_live_acquisition_declares_primary_picture_kind_only() {
-    let value: serde_json::Value = serde_json::from_str(PICTURE_PRIMARY_KINDS_JSON).expect("json");
-    assert_eq!(value, serde_json::json!([20]));
+    let primary_kinds = following_primary_kinds();
+    assert_eq!(primary_kinds, [nmp_nip68::KIND_PICTURE_EVENT]);
+    assert_eq!(primary_kinds, [20]);
+    assert_ne!(
+        primary_kinds[0], 16,
+        "Olas declares kind:20 as the primary feed kind; NMP derives kind:16 acquisition"
+    );
+    assert!(
+        nmp_nip68::picture_acquisition_kinds().contains(&16),
+        "NIP-68/NIP-18 acquisition still includes kind:16 wrappers for picture reposts"
+    );
+}
+
+#[test]
+fn following_open_declares_active_follows_picture_subscription() {
+    let _guard = APP_FEED_TEST_LOCK.lock().expect("feed test lock");
+    let frames = install_frame_capture();
+    let app = nmp_ffi::nmp_app_new();
+    assert!(!app.is_null());
+    nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), Some(capture_frame_callback));
+    crate::olas_app_register(app);
+    nmp_ffi::nmp_app_consume_all_builtin_projections(app);
+    nmp_ffi::nmp_app_start(app, 0, 100);
+
+    let active_pubkey = sign_in_test_account_and_wait(app, &frames, Duration::from_secs(5));
+    let following = CString::new(FOLLOWING_FEED_KEY).expect("following key");
+    crate::olas_open_photo_feed(app, 1, following.as_ptr());
+
+    let filter = wait_for_active_follows_picture_filter(
+        &frames,
+        active_pubkey.as_str(),
+        Duration::from_secs(5),
+    )
+    .expect("following feed should declare an active-follows kind:20 subscription");
+
+    assert_eq!(filter["authors"], serde_json::json!([active_pubkey]));
+    assert!(filter["kinds"]
+        .as_array()
+        .expect("kinds array")
+        .iter()
+        .any(|kind| kind.as_u64() == Some(20)));
+    assert!(
+        filter["kinds"]
+            .as_array()
+            .expect("kinds array")
+            .iter()
+            .any(|kind| kind.as_u64() == Some(16)),
+        "NMP derives kind:16 acquisition for Olas kind:20 feeds"
+    );
+    assert!(
+        !filter["kinds"]
+            .as_array()
+            .expect("kinds array")
+            .iter()
+            .any(|kind| kind.as_u64() == Some(6)),
+        "kind:6 is only for kind:1 repost acquisition"
+    );
+
+    nmp_ffi::nmp_app_set_update_callback(app, std::ptr::null_mut(), None);
+    nmp_ffi::nmp_app_stop(app);
+    nmp_ffi::nmp_app_free(app);
 }
 
 #[test]
