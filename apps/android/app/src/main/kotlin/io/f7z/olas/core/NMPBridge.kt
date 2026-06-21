@@ -75,7 +75,6 @@ object NMPBridge {
     private external fun nativeCloseAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeSignInNsec(handle: Long, nsec: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
-    private external fun nativeOpenContactFeed(handle: Long, kindsJson: String)
     private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean, consumerId: String)
     private external fun nativeProfileJson(handle: Long, eventJson: String): String?
     private external fun nativeNotificationJson(handle: Long, eventJson: String): String?

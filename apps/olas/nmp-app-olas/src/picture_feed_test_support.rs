@@ -14,6 +14,7 @@ use nmp_wot::WotBootstrapRuntime;
 use super::*;
 
 static FRAME_TX: std::sync::OnceLock<Mutex<Option<Sender<Vec<u8>>>>> = std::sync::OnceLock::new();
+const TEST_NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 
 pub(super) extern "C" fn capture_frame_callback(_ctx: *mut c_void, ptr: *const u8, len: usize) {
     if ptr.is_null() || len == 0 {
@@ -73,6 +74,64 @@ pub(super) fn wait_for_non_empty_network_frame(
     }
 }
 
+pub(super) fn sign_in_test_account_and_wait(
+    app: *mut nmp_ffi::NmpApp,
+    frames: &Receiver<Vec<u8>>,
+    timeout: Duration,
+) -> String {
+    let expected = test_nsec_pubkey();
+    let active_slot = unsafe { &*app }.active_account_handle();
+    let secret = CString::new(TEST_NSEC).expect("test nsec");
+    nmp_ffi::nmp_app_signin_nsec(app, secret.as_ptr(), 1);
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        if active_slot.lock().expect("active account slot").as_deref() == Some(expected.as_str()) {
+            return expected;
+        }
+        let now = Instant::now();
+        assert!(
+            now < deadline,
+            "timed out waiting for test sign-in to activate {expected}"
+        );
+        let _ = frames.recv_timeout(deadline.saturating_duration_since(now));
+    }
+}
+
+pub(super) fn wait_for_active_follows_picture_filter(
+    frames: &Receiver<Vec<u8>>,
+    active_pubkey: &str,
+    timeout: Duration,
+) -> Result<serde_json::Value, String> {
+    let deadline = Instant::now() + timeout;
+    let mut summaries = Vec::new();
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(format!(
+                "timed out waiting for kind:20 active-follows subscription; diagnostics:\n{}",
+                summaries.join("\n---\n")
+            ));
+        }
+        let frame = match frames.recv_timeout(deadline.saturating_duration_since(now)) {
+            Ok(frame) => frame,
+            Err(_) => {
+                return Err(format!(
+                    "timed out waiting for kind:20 active-follows subscription; diagnostics:\n{}",
+                    summaries.join("\n---\n")
+                ));
+            }
+        };
+        summaries.push(frame_summary(&frame));
+        if summaries.len() > 8 {
+            summaries.remove(0);
+        }
+        if let Some(filter) = active_follows_picture_filter_from_frame(&frame, active_pubkey) {
+            return Ok(filter);
+        }
+    }
+}
+
 fn frame_summary(frame: &[u8]) -> String {
     let mut lines = Vec::new();
     match nmp_core::decode_snapshot_envelope(frame) {
@@ -103,6 +162,56 @@ fn frame_summary(frame: &[u8]) -> String {
         Err(error) => lines.push(format!("typed_error={error:?}")),
     }
     lines.join("\n")
+}
+
+fn test_nsec_pubkey() -> String {
+    use nostr::prelude::*;
+
+    let sk = SecretKey::parse(TEST_NSEC).expect("valid test nsec");
+    Keys::new(sk).public_key().to_hex()
+}
+
+fn active_follows_picture_filter_from_frame(
+    frame: &[u8],
+    active_pubkey: &str,
+) -> Option<serde_json::Value> {
+    let entries = nmp_core::decode_snapshot_typed_projections(frame).ok()?;
+    for entry in entries {
+        if entry.key != RELAY_DIAGNOSTICS_SCHEMA_ID {
+            continue;
+        }
+        let diagnostics = decode_relay_diagnostics(&entry.payload).ok()?;
+        for relay in diagnostics.relays {
+            for sub in relay.wire_subs {
+                let filter = serde_json::from_str::<serde_json::Value>(&sub.filter_summary).ok()?;
+                if filter_has_kind(&filter, 20)
+                    && filter_has_kind(&filter, 16)
+                    && filter_has_author(&filter, active_pubkey)
+                {
+                    return Some(filter);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn filter_has_kind(filter: &serde_json::Value, kind: u32) -> bool {
+    filter
+        .get("kinds")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|kinds| {
+            kinds
+                .iter()
+                .any(|value| value.as_u64() == Some(kind as u64))
+        })
+}
+
+fn filter_has_author(filter: &serde_json::Value, author: &str) -> bool {
+    filter
+        .get("authors")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|authors| authors.iter().any(|value| value.as_str() == Some(author)))
 }
 
 fn append_relay_projection_summary(lines: &mut Vec<String>, entry: &nmp_core::TypedProjectionData) {

@@ -7,8 +7,8 @@ use jni::sys::{jboolean, jlong, jstring};
 use jni::JNIEnv;
 use nmp_ffi::{
     nmp_app_claim_profile, nmp_app_dispatch_action, nmp_app_lifecycle_background,
-    nmp_app_lifecycle_foreground, nmp_app_load_older_feed, nmp_app_open_contact_feed,
-    nmp_app_register_event_observer, nmp_app_release_profile, nmp_free_string,
+    nmp_app_lifecycle_foreground, nmp_app_load_older_feed, nmp_app_register_event_observer,
+    nmp_app_release_profile, nmp_free_string,
 };
 
 use crate::{
@@ -21,25 +21,6 @@ use super::{
     cstring_into_jstring, jstring_to_cstring, on_event, unpack, EventObserverCtx,
     KernelEventObserverFn,
 };
-
-#[no_mangle]
-pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenContactFeed(
-    mut env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    kinds_json: JString,
-) {
-    if handle == 0 {
-        return;
-    }
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-        let (app, _) = unpack(handle);
-        let Some(kinds) = jstring_to_cstring(&mut env, &kinds_json) else {
-            return;
-        };
-        nmp_app_open_contact_feed(app, kinds.as_ptr());
-    }));
-}
 
 #[no_mangle]
 pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeOpenPhotoFeed(
