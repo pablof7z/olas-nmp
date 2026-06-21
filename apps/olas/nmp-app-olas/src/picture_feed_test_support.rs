@@ -282,6 +282,29 @@ pub(super) fn signed_picture_event(created_at: u64) -> (String, String) {
     (event.id.to_hex(), event.as_json())
 }
 
+pub(super) fn signed_test_account_picture_event(created_at: u64) -> (String, String) {
+    use nostr::{EventBuilder, JsonUtil, Keys, Kind, SecretKey, Tag, Timestamp};
+
+    let secret = SecretKey::parse(TEST_NSEC).expect("valid test nsec");
+    let keys = Keys::new(secret);
+    let imeta = Tag::parse([
+        "imeta",
+        "url https://cdn.example/following.jpg",
+        "m image/jpeg",
+        "dim 800x600",
+    ])
+    .expect("valid imeta tag");
+    let event = EventBuilder::new(
+        Kind::from_u16(nmp_nip68::KIND_PICTURE_EVENT as u16),
+        "following caption",
+    )
+    .tag(imeta)
+    .custom_created_at(Timestamp::from(created_at))
+    .sign_with_keys(&keys)
+    .expect("signed active-account picture event");
+    (event.id.to_hex(), event.as_json())
+}
+
 pub(super) fn inject_signed_event(app: *mut nmp_ffi::NmpApp, event_json: &str) {
     let event_json = CString::new(event_json).expect("event json");
     assert!(
@@ -411,6 +434,18 @@ pub(super) fn current_photo_feed_json_via_ffi(
         .into_owned();
     nmp_ffi::nmp_free_string(raw);
     Some(value)
+}
+
+pub(super) fn non_empty_current_photo_feed_json(
+    app: *mut nmp_ffi::NmpApp,
+    key: &str,
+) -> Option<String> {
+    let posts_json = current_photo_feed_json_via_ffi(app, key)?;
+    let posts: serde_json::Value = serde_json::from_str(&posts_json).ok()?;
+    posts
+        .as_array()
+        .is_some_and(|rows| !rows.is_empty())
+        .then_some(posts_json)
 }
 
 fn non_empty_network_posts_json_from_frame(frame: &[u8]) -> Option<String> {
