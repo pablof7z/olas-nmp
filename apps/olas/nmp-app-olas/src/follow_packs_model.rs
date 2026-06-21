@@ -10,8 +10,9 @@ use nmp_ffi::NmpApp;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/// pablof7z's pubkey — publishes the Olas curated starter packs.
-/// TODO(curator): confirm final hex; swap to OLAS_CURATOR_PUBKEY when formalized.
+/// pablof7z's pubkey (npub1l2vyh4…, nip05 _@f7z.io) — publishes the Olas curated
+/// starter packs. Confirmed by the owner. Swap to a dedicated OLAS_CURATOR_PUBKEY
+/// if/when a separate curation identity is formalized.
 pub(crate) const FEATURED_CURATOR_PUBKEY: &str =
     "fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52";
 
