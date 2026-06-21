@@ -1,4 +1,5 @@
 use std::ffi::CString;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -34,6 +35,40 @@ fn following_live_acquisition_declares_primary_picture_kind_only() {
         nmp_nip68::picture_acquisition_kinds().contains(&16),
         "NIP-68/NIP-18 acquisition still includes kind:16 wrappers for picture reposts"
     );
+}
+
+#[test]
+fn native_surfaces_do_not_expose_raw_kind20_decoder() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .ancestors()
+        .nth(3)
+        .expect("nmp-app-olas lives under apps/olas");
+    let surfaces = [
+        "apps/olas/nmp-app-olas/src/event_models.rs",
+        "apps/olas/nmp-app-olas/src/extras_ffi.rs",
+        "apps/ios/Olas/Bridge/olas_app.h",
+        "apps/ios/Olas/Core/NMPBridge.swift",
+        "apps/android/app/src/main/kotlin/io/f7z/olas/core/NMPBridge.kt",
+    ];
+    let forbidden = [
+        "olas_decode_kind20_event_json",
+        "decode_kind20",
+        "decodeKind20",
+        "Kind20Event",
+        "kind20Event",
+    ];
+
+    for surface in surfaces {
+        let contents = std::fs::read_to_string(repo_root.join(surface))
+            .unwrap_or_else(|err| panic!("read {surface}: {err}"));
+        for symbol in forbidden {
+            assert!(
+                !contents.contains(symbol),
+                "{surface} must not expose raw kind:20 decoding via {symbol}; native code consumes Rust-owned photo-feed projections"
+            );
+        }
+    }
 }
 
 #[test]
