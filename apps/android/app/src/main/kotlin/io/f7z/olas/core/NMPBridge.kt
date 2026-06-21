@@ -106,7 +106,6 @@ object NMPBridge {
     private external fun nativeLifecycleBackground(handle: Long)
     private external fun nativeWalletConnect(handle: Long, uri: String)
     private external fun nativeSetStoragePath(handle: Long, path: String): Int
-    private external fun nativeDecodeKind20EventJson(handle: Long, eventJson: String): String?
     private external fun nativeDecodeKind0EventJson(handle: Long, eventJson: String): String?
     private external fun nativeBolt11AmountMsats(bolt11: String): Long
     private external fun nativeComputeGeohash(lat: Double, lon: Double, precision: Int): String?
@@ -366,7 +365,6 @@ object NMPBridge {
 
     // --- New FFI helpers ------------------------------------------------------
 
-    fun decodeKind20EventJson(eventJson: String): String? = nativeDecodeKind20EventJson(appHandle, eventJson)
     fun decodeKind0EventJson(eventJson: String): String? = nativeDecodeKind0EventJson(appHandle, eventJson)
     fun bolt11AmountMsats(bolt11: String): Long = nativeBolt11AmountMsats(bolt11)
     fun computeGeohash(lat: Double, lon: Double, precision: Int = 6): String? = nativeComputeGeohash(lat, lon, precision)

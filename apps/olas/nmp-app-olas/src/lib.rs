@@ -199,9 +199,9 @@ pub use extras::{
 mod extras_ffi;
 pub use extras_ffi::{
     olas_bolt11_amount_msats, olas_build_zap_action_json, olas_compose_steps_json,
-    olas_compute_geohash, olas_decode_kind0_event_json, olas_decode_kind20_event_json,
-    olas_filter_catalog_json, olas_media_upload_config_json, olas_onboarding_steps_json,
-    olas_picker_config_json, olas_settings_catalog_json,
+    olas_compute_geohash, olas_decode_kind0_event_json, olas_filter_catalog_json,
+    olas_media_upload_config_json, olas_onboarding_steps_json, olas_picker_config_json,
+    olas_settings_catalog_json,
 };
 
 // Mutable app-state: Blossom server URL and feed mode (OnceLock<Mutex<String>>).

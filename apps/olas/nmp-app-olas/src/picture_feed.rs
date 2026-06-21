@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use nmp_core::slots::{event_by_id_from_store, ActiveAccountSlot};
 use nmp_core::substrate::{empty_suppression_lookup, KernelEvent, SuppressionLookup};
-use nmp_core::{KernelEventObserver, TypedProjectionData};
+use nmp_core::{KernelEventObserver, KernelEventObserverId, TypedProjectionData};
 use nmp_feed::{ClosureInterestShape, FeedAdvance, FeedApply, FeedController, PullFeedController};
-use nmp_ffi::{nmp_app_close_interest, nmp_app_open_interest, NmpApp};
+use nmp_ffi::NmpApp;
 use nmp_nip02::ActiveFollowSet;
 use nmp_nip68::{
     picture_acquisition_kinds, picture_feed_observer, picture_feed_predicate, PictureFeed,
@@ -23,8 +23,11 @@ use picture_feed_admission::network_allows;
 use picture_feed_admission::network_allows_for_preset;
 #[path = "picture_feed_acquisition.rs"]
 mod picture_feed_acquisition;
+#[cfg(test)]
+use picture_feed_acquisition::{acquisition_filter_jsons, author_acquisition_filter_jsons};
 use picture_feed_acquisition::{
-    acquisition_filter_jsons, author_acquisition_filter_jsons, author_feed_key,
+    author_feed_key, close_author_acquisition, close_network_acquisition, open_author_acquisition,
+    open_global_acquisition,
 };
 #[path = "picture_feed_projection.rs"]
 mod picture_feed_projection;
@@ -105,8 +108,8 @@ pub extern "C" fn olas_open_photo_feed(
 
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
-        register_picture_feed(app_ref, consumer.clone(), mode.clone());
-        open_feed_acquisition(app, app_ref, &consumer, &mode);
+        let observer_id = register_picture_feed(app_ref, consumer.clone(), mode.clone());
+        open_feed_acquisition(app, app_ref, &consumer, &mode, observer_id);
     }));
 }
 
@@ -129,8 +132,8 @@ pub extern "C" fn olas_open_author_photo_feed(
 
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
-        register_picture_feed(app_ref, consumer.clone(), mode.clone());
-        open_feed_acquisition(app, app_ref, &consumer, &mode);
+        let observer_id = register_picture_feed(app_ref, consumer.clone(), mode.clone());
+        open_feed_acquisition(app, app_ref, &consumer, &mode, observer_id);
     }));
 }
 
@@ -149,7 +152,12 @@ pub extern "C" fn olas_close_author_photo_feed(
         };
         let consumer =
             c_string_opt(consumer_id).unwrap_or_else(|| author_feed_key(pubkey.as_str()));
-        close_author_acquisition(app, pubkey.as_str(), consumer.as_str());
+        close_author_acquisition(
+            app,
+            pubkey.as_str(),
+            consumer.as_str(),
+            FeedMode::Author(pubkey.clone()).limit(),
+        );
 
         // SAFETY: caller provides a live NmpApp pointer from nmp_app_new.
         let app_ref = unsafe { &*app };
@@ -209,12 +217,16 @@ pub extern "C" fn olas_current_photo_feed_json(
         .unwrap_or(std::ptr::null_mut())
 }
 
-fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
+fn register_picture_feed(
+    app: &NmpApp,
+    key: String,
+    mode: FeedMode,
+) -> Option<KernelEventObserverId> {
     let Some(runtime) = current_runtime() else {
-        return;
+        return None;
     };
     if picture_feed_registered(&key, &mode) {
-        return;
+        return None;
     }
     let event_store = app.event_store_handle();
     let event_lookup: nmp_feed::EventLookup =
@@ -225,8 +237,11 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
 
     let provider = mode.provider(runtime);
     let apply_observer = observer.clone();
+    let apply_feed = feed.clone();
     let apply: FeedApply = Arc::new(move |event: &KernelEvent| {
+        let before = apply_feed.snapshot_current_window();
         KernelEventObserver::on_kernel_event(&*apply_observer, event);
+        apply_feed.snapshot_current_window() != before
     });
     let replace_feed = feed.clone();
     let replace: nmp_feed::FeedReplace = Arc::new(move |source_id| {
@@ -248,7 +263,7 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
     );
     let _ = controller.load_older();
     record_picture_feed(&key, &mode, controller.clone());
-    app.register_feed_with_observer(key.clone(), controller, observer);
+    let observer_id = app.register_feed_with_observer(key.clone(), controller, observer);
 
     let projection_feed = feed.clone();
     let projection_key = key.clone();
@@ -264,6 +279,7 @@ fn register_picture_feed(app: &NmpApp, key: String, mode: FeedMode) {
             ..Default::default()
         })
     });
+    Some(observer_id)
 }
 
 fn current_runtime() -> Option<FeedRuntime> {
@@ -377,77 +393,47 @@ fn network_shape() -> Option<InterestShape> {
     InterestShape::from_filter_json(&format!(r#"{{"kinds":[{kinds}]}}"#))
 }
 
-fn open_feed_acquisition(app: *mut NmpApp, app_ref: &NmpApp, consumer: &str, mode: &FeedMode) {
+fn open_feed_acquisition(
+    app: *mut NmpApp,
+    app_ref: &NmpApp,
+    consumer: &str,
+    mode: &FeedMode,
+    observer_id: Option<KernelEventObserverId>,
+) {
     match mode {
         FeedMode::Following => {
-            close_network_acquisition(app);
+            close_network_acquisition(app, FeedMode::Network.limit());
             let _ = app_ref.declare_active_follows_feed(following_primary_kinds());
         }
         FeedMode::Network => {
             app_ref.clear_active_follows_feed();
-            open_global_acquisition(app, consumer, mode.limit());
+            open_global_acquisition(app, app_ref, consumer, mode.limit(), observer_id);
         }
         FeedMode::Author(pubkey) => {
-            open_author_acquisition(app, pubkey.as_str(), consumer, mode.limit());
+            open_author_acquisition(
+                app,
+                app_ref,
+                pubkey.as_str(),
+                consumer,
+                mode.limit(),
+                observer_id,
+            );
         }
         FeedMode::Search(query) => {
-            open_search_acquisition(app, query.as_str(), consumer, mode.limit());
+            open_search_acquisition(
+                app,
+                app_ref,
+                query.as_str(),
+                consumer,
+                mode.limit(),
+                observer_id,
+            );
         }
     }
 }
 
 fn following_primary_kinds() -> [u32; 1] {
     [KIND_PICTURE_EVENT]
-}
-
-fn open_global_acquisition(app: *mut NmpApp, consumer: &str, limit: u64) {
-    for filter in acquisition_filter_jsons(limit) {
-        let Ok(filter) = CString::new(filter) else {
-            continue;
-        };
-        let Ok(consumer_cstr) = CString::new(consumer) else {
-            return;
-        };
-        nmp_app_open_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
-    }
-}
-
-fn close_network_acquisition(app: *mut NmpApp) {
-    for filter in acquisition_filter_jsons(FeedMode::Network.limit()) {
-        let Ok(filter) = CString::new(filter) else {
-            continue;
-        };
-        let Ok(consumer_cstr) = CString::new(NETWORK_FEED_KEY) else {
-            return;
-        };
-        nmp_app_close_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
-    }
-}
-
-fn open_author_acquisition(app: *mut NmpApp, pubkey: &str, consumer: &str, limit: u64) {
-    for filter in author_acquisition_filter_jsons(pubkey, limit) {
-        let Ok(filter) = CString::new(filter) else {
-            continue;
-        };
-        let Ok(consumer_cstr) = CString::new(consumer) else {
-            return;
-        };
-        nmp_app_open_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
-    }
-}
-
-fn close_author_acquisition(app: *mut NmpApp, pubkey: &str, consumer: &str) {
-    for filter in
-        author_acquisition_filter_jsons(pubkey, FeedMode::Author(pubkey.to_string()).limit())
-    {
-        let Ok(filter) = CString::new(filter) else {
-            continue;
-        };
-        let Ok(consumer_cstr) = CString::new(consumer) else {
-            return;
-        };
-        nmp_app_close_interest(app, filter.as_ptr(), consumer_cstr.as_ptr(), 1);
-    }
 }
 
 fn c_string_opt(ptr: *const c_char) -> Option<String> {

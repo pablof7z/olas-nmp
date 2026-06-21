@@ -48,23 +48,6 @@ fn jstring_to_cstring(env: &mut JNIEnv, s: &JString) -> Option<CString> {
 // ---------------------------------------------------------------------------
 
 #[no_mangle]
-pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodeKind20EventJson(
-    mut env: JNIEnv,
-    _class: JClass,
-    _handle: jlong,
-    event_json: JString,
-) -> jstring {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-        let Some(input_c) = jstring_to_cstring(&mut env, &event_json) else {
-            return std::ptr::null_mut();
-        };
-        let raw = crate::olas_decode_kind20_event_json(input_c.as_ptr());
-        cstring_into_jstring(&mut env, raw)
-    }));
-    result.unwrap_or(std::ptr::null_mut())
-}
-
-#[no_mangle]
 pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeDecodeKind0EventJson(
     mut env: JNIEnv,
     _class: JClass,
