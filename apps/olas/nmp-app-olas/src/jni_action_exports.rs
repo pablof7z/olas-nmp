@@ -3,7 +3,7 @@
 use jni::objects::{JClass, JString};
 use jni::sys::{jdouble, jint, jlong, jstring};
 use jni::JNIEnv;
-use nmp_ffi::nmp_app_set_storage_path;
+use nmp_ffi::{nmp_app_active_following_count, nmp_app_set_storage_path};
 
 use crate::{
     olas_apply_follow_pack_pubkeys, olas_blossom_upload_input_json, olas_bolt11_amount_sats,
@@ -236,6 +236,27 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeApplyFollowPackPubk
         cstring_into_jstring(&mut env, raw)
     }));
     result.unwrap_or(std::ptr::null_mut())
+}
+
+/// P0-A: live "Following" count for the profile header — the number of
+/// distinct `p` tags in the active account's current kind:3 in the local event
+/// store (read-your-writes; reflects a just-applied follow pack with no relay
+/// round-trip). Returns -1 when unavailable (no active account / not started);
+/// the host renders -1 as 0.
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeActiveFollowingCount(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jlong {
+    if handle == 0 {
+        return -1;
+    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        nmp_app_active_following_count(app)
+    }));
+    result.unwrap_or(-1)
 }
 
 #[no_mangle]

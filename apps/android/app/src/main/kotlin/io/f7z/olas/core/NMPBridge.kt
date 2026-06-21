@@ -105,6 +105,7 @@ object NMPBridge {
     private external fun nativeCloseFollowPackDiscovery(handle: Long, consumerId: String)
     private external fun nativeDecodeFollowPackEventJson(eventJson: String): String?
     private external fun nativeApplyFollowPackPubkeys(handle: Long, pubkeysJson: String, activePubkey: String): String?
+    private external fun nativeActiveFollowingCount(handle: Long): Long
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
     private external fun nativeLifecycleBackground(handle: Long)
@@ -402,6 +403,15 @@ object NMPBridge {
      */
     fun applyFollowPackPubkeys(pubkeysJson: String, activePubkey: String = ""): String? =
         nativeApplyFollowPackPubkeys(appHandle, pubkeysJson, activePubkey)
+
+    /**
+     * Live "Following" count for the active account — the number of distinct
+     * `p` tags in its current kind:3 contact list, read synchronously from the
+     * local event store (read-your-writes; reflects a just-applied follow pack
+     * with no relay round-trip). Returns 0 when unavailable / no list yet.
+     */
+    fun activeFollowingCount(): Int =
+        nativeActiveFollowingCount(appHandle).toInt().coerceAtLeast(0)
 
     /** Native supplies the raw OS location fix; Rust owns geohash precision/encoding. */
     fun locationGeohash4(latitude: Double, longitude: Double): String? =

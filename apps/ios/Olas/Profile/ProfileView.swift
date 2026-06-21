@@ -136,6 +136,10 @@ struct ProfileView: View {
         posts = []
         NMPBridge.shared.claimProfile(pubkey: pk)
         NMPBridge.shared.openAuthorPhotoFeed(pubkey: pk)
+        // Live "Following" count from the local kind:3 (own profile only). The
+        // contact list may not be ingested the instant the screen opens (e.g.
+        // right after onboarding applies a follow pack), so poll briefly.
+        if isOwn { refreshFollowingCount() }
         // Apply cached profile immediately if available (from snapshot).
         if let cached = NMPBridge.shared.profileCache[pk] {
             applyProfileWire(cached, pubkey: pk)
@@ -153,9 +157,27 @@ struct ProfileView: View {
         Task { loadPostsFromPublishIntents(pubkey: pk) }
     }
 
+    private func refreshFollowingCount() {
+        // Poll until the kind:3 lands (read-your-writes is immediate after a
+        // local publish, but the contact list may still be syncing on open).
+        Task { @MainActor in
+            for _ in 0..<20 {
+                let count = NMPBridge.shared.activeFollowingCount()
+                if count != followingCount { followingCount = count }
+                if count > 0 { return }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
     private func handleProfileEvent(_ json: String, pubkey: String) {
         guard let data = json.data(using: .utf8),
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
+
+        // Active account's contact list changed — refresh the live count.
+        if isOwn, event.kind == 3, event.author == pubkey {
+            followingCount = NMPBridge.shared.activeFollowingCount()
+        }
 
         if event.kind == 0, event.author == pubkey {
             // Use the Rust decoder for consistent key casing and pubkey injection.

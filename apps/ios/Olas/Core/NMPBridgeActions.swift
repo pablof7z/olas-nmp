@@ -260,6 +260,16 @@ extension NMPBridge {
         return try? JSONDecoder().decode(FollowPackApplyResult.self, from: resultData)
     }
 
+    /// Live "Following" count for the active account — the number of distinct
+    /// `p` tags in its current kind:3, read synchronously from the local event
+    /// store (read-your-writes; reflects a just-applied follow pack with no
+    /// relay round-trip). Returns 0 when unavailable / no list yet.
+    func activeFollowingCount() -> Int {
+        guard let app = appPtr else { return 0 }
+        let n = nmp_app_active_following_count(app)
+        return n < 0 ? 0 : Int(n)
+    }
+
     func locationGeohash4(latitude: Double, longitude: Double) -> String? {
         guard let ptr = olas_location_geohash4(latitude, longitude) else { return nil }
         defer { nmp_free_string(ptr) }

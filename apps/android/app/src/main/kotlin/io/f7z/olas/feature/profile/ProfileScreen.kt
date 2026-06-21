@@ -80,7 +80,7 @@ fun ProfileScreen(
                         isOwnProfile    = isOwnProfile,
                         isFollowing     = state.isFollowing,
                         followerCount   = 0,
-                        followingCount  = 0,
+                        followingCount  = state.followingCount,
                         socialProofJson = state.socialProofJson,
                         onFollow        = { vm.toggleFollow() },
                         onZap           = {},
