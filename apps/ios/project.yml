@@ -44,6 +44,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIApplicationSupportsIndirectInputEvents: true
+        NSCameraUsageDescription: "Olas uses your camera so you can capture and share photos."
         LSApplicationQueriesSchemes:
           - nostrsigner
           - primal

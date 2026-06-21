@@ -53,6 +53,11 @@ dependencies {
     implementation("com.google.flatbuffers:flatbuffers-java:25.2.10")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    // CameraX — camera-first compose step (P3-A)
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
     testImplementation("junit:junit:4.13.2")
 }
