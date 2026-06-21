@@ -49,6 +49,11 @@ struct RecoveryKeyView: View {
             // Fetch once and store — never re-fetch to avoid unnecessary exposure.
             recoveryKey = NMPBridge.shared.activeAccountRecoveryKey()
         }
+        .onDisappear {
+            // Clear the revealed state so the key is masked if the user navigates
+            // back to this screen (e.g. via the navigation stack).
+            revealed = false
+        }
     }
 
     // MARK: - Key display cell
@@ -99,7 +104,12 @@ struct RecoveryKeyView: View {
     @ViewBuilder
     private func copyButton(_ key: String) -> some View {
         Button {
-            UIPasteboard.general.string = key
+            // Use setItems with an expiration date so the key auto-clears from the
+            // pasteboard after 60 seconds — it should not linger in clipboard history.
+            UIPasteboard.general.setItems(
+                [[UIPasteboard.typeAutomatic: key]],
+                options: [.expirationDate: Date().addingTimeInterval(60)]
+            )
             withAnimation { copied = true }
             Task {
                 try? await Task.sleep(for: .seconds(2))
@@ -108,7 +118,7 @@ struct RecoveryKeyView: View {
         } label: {
             HStack {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                Text(copied ? "Copied" : "Copy Recovery Key")
+                Text(copied ? "Copied — clears in 60s" : "Copy Recovery Key")
             }
             .frame(maxWidth: .infinity)
             .foregroundStyle(copied ? Color.olasSuccess : Color.olasBlue)

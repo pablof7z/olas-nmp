@@ -30,6 +30,9 @@ object OlasProfileHost : NostrProfileHost {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val profiles = MutableStateFlow<Map<String, ProfileWire>>(emptyMap())
+
+    /** Read-only snapshot of all cached profiles — mirrors iOS `NMPBridge.shared.profileCache`. */
+    val profilesFlow: kotlinx.coroutines.flow.StateFlow<Map<String, ProfileWire>> get() = profiles
     private val json = Json { ignoreUnknownKeys = true }
 
     init {

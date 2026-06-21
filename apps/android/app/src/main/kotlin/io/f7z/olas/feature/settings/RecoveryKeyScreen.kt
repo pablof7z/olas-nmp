@@ -5,6 +5,12 @@
 
 package io.f7z.olas.feature.settings
 
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,8 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,8 +61,14 @@ fun RecoveryKeyScreen(navController: NavController) {
     val recoveryKey = remember { NMPBridge.activeAccountRecoveryKey() }
     var revealed by remember { mutableStateOf(false) }
     var copied   by remember { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
-    val scope     = rememberCoroutineScope()
+    val context  = LocalContext.current
+    val scope    = rememberCoroutineScope()
+
+    // Clear revealed state when the screen leaves composition so the key is
+    // not exposed if the user navigates back to this screen via back-stack.
+    DisposableEffect(Unit) {
+        onDispose { revealed = false }
+    }
 
     Scaffold(
         containerColor = OlasColors.Background,
@@ -151,7 +163,17 @@ fun RecoveryKeyScreen(navController: NavController) {
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            clipboard.setText(AnnotatedString(recoveryKey))
+                            // Copy to clipboard — mark sensitive so the key is excluded
+                            // from clipboard history and overlay previews (API 33+).
+                            val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                as ClipboardManager
+                            val clip = ClipData.newPlainText("recovery_key", recoveryKey)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                clip.description.extras = PersistableBundle().apply {
+                                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                                }
+                            }
+                            clipMgr.setPrimaryClip(clip)
                             copied = true
                             scope.launch {
                                 delay(2000)
@@ -164,7 +186,7 @@ fun RecoveryKeyScreen(navController: NavController) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = OlasColors.Text1)
                         androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth(0.05f))
                         Text(
-                            if (copied) "Copied!" else "Copy Recovery Key",
+                            if (copied) "Copied — clears in 60s" else "Copy Recovery Key",
                             color = OlasColors.Text1,
                         )
                     }
