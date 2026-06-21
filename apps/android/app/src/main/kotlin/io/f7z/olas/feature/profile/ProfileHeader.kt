@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,6 +72,7 @@ fun ProfileHeader(
     onFollow: () -> Unit,
     onZap: () -> Unit,
     onEdit: () -> Unit,
+    onSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val socialProofLabel = parseSocialProofLabel(socialProofJson)
@@ -146,16 +151,25 @@ fun ProfileHeader(
 
             // Action buttons
             if (isOwnProfile) {
-                OutlinedButton(
-                    onClick  = onEdit,
-                    modifier = Modifier.fillMaxWidth().height(36.dp),
-                    border   = BorderStroke(1.dp, OlasColors.Text3),
-                    colors   = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor   = OlasColors.Text1,
-                    ),
-                ) {
-                    Text("Edit profile", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick  = onEdit,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        border   = BorderStroke(1.dp, OlasColors.Text3),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor   = OlasColors.Text1,
+                        ),
+                    ) {
+                        Text("Edit profile", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(
+                            imageVector        = Icons.Outlined.Settings,
+                            contentDescription = "Settings",
+                            tint               = OlasColors.Text1,
+                        )
+                    }
                 }
             } else {
                 Row {

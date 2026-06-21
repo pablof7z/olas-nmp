@@ -1,5 +1,6 @@
 package io.f7z.olas.feature.profile
 
+import io.f7z.olas.navigation.Routes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -85,6 +86,7 @@ fun ProfileScreen(
                         onFollow        = { vm.toggleFollow() },
                         onZap           = {},
                         onEdit          = { navController.navigate("profile_edit") },
+                        onSettings      = { navController.navigate(Routes.SETTINGS) },
                     )
                 }
                 items(state.posts, key = { it.id }) { post ->
