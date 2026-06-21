@@ -18,6 +18,8 @@ use crate::{olas_app_register, olas_create_account};
 mod action_exports;
 #[path = "jni_event_models.rs"]
 mod event_model_exports;
+#[path = "jni_follow_packs.rs"]
+mod follow_pack_exports;
 #[path = "jni_runtime_exports.rs"]
 mod runtime_exports;
 

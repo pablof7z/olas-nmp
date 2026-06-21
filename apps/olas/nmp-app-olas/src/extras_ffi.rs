@@ -330,6 +330,7 @@ pub extern "C" fn olas_onboarding_steps_json() -> *mut c_char {
             "create_account",
             "sign_in",
             "follow_packs",
+            "media_server",
             "complete",
         ]);
         match serde_json::to_string(&steps) {

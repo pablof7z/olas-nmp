@@ -132,8 +132,27 @@ void olas_open_author_photo_feed(void* app, const char* pubkey, const char* cons
 void olas_close_author_photo_feed(void* app, const char* pubkey, const char* consumer_id);
 
 /// Open a NIP-51 kind:30000 follow pack by NIP-19 address (naddr1... or bare coord).
-/// Used during onboarding to hydrate follow pack contents.
+/// Used for deep-linking into a single pack from outside onboarding.
 void olas_open_follow_pack(void* app, const char* pack_addr);
+
+/// Open follow-pack discovery interests (kinds 39089/39092): featured (curated)
+/// and network (public). Idempotent; call on entering the follow-packs step.
+void olas_open_follow_pack_discovery(void* app);
+
+/// Close the discovery interests. Call on leaving the follow-packs step.
+void olas_close_follow_pack_discovery(void* app);
+
+/// Current decoded, ranked, de-duplicated packs as the onboarding wire JSON
+/// (design §4.2). state: "loading" | "ready" | "empty_offline".
+/// Returned string must be freed with nmp_free_string.
+char* olas_follow_packs_snapshot_json(void* app);
+
+/// Apply the user's pack selection: expand 39089/39092 p-tags, union pubkeys,
+/// remove duplicates and the active account's own pubkey, dispatch ONE
+/// nmp.follow_many. ids_json = JSON array of opaque id strings from the snapshot.
+/// Returns {"follow_count": N, "feed_default": "network"|"following"}.
+/// Returned string must be freed with nmp_free_string.
+char* olas_apply_selected_follow_packs(void* app, const char* ids_json);
 
 /// Build the Blossom upload action input JSON for nmp_app_dispatch_action.
 ///

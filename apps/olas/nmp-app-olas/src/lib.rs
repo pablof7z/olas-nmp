@@ -251,11 +251,11 @@ pub use notifications::olas_group_notifications_json;
 mod identity_ffi;
 pub use identity_ffi::olas_active_account_recovery_key;
 
-// P0-A: follow-pack discovery and bulk-apply (kind:30000 interest + apply loop).
+// Follow-pack discovery (kinds 39089/39092) for the onboarding step.
 mod follow_packs;
 pub use follow_packs::{
-    olas_apply_follow_pack_pubkeys, olas_close_follow_pack_discovery,
-    olas_decode_follow_pack_event_json, olas_open_follow_pack_discovery,
+    olas_apply_selected_follow_packs, olas_close_follow_pack_discovery,
+    olas_follow_packs_snapshot_json, olas_open_follow_pack_discovery,
 };
 
 // P0-E / P0-F: real social proof and ranked discover sections.
@@ -295,6 +295,7 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
             nmp_defaults::NmpDefaults::default(),
         );
         picture_feed::install_runtime_handles(app_ref, &handles);
+        follow_packs::install_pack_observer(app_ref);
         let _ = extras::declare_initial_relays(app_ref);
         if let Some(wot) = handles.wot {
             social::set_wot_runtime(wot);
