@@ -103,10 +103,21 @@ final class UploadQueue {
 
         setStep(.publishing)
 
-        guard let publishInput = NMPBridge.shared.picturePostPublishJSON(
+        // P3-C: parse caption for mentions + hashtags, then use tagged publish.
+        let tagsPayload = NMPBridge.shared.parseCaptionTagsJSON(caption)
+        let extraTagsJSON: String? = {
+            guard let t = tagsPayload else { return nil }
+            let allTags = t.pTags + t.tTags
+            guard !allTags.isEmpty else { return nil }
+            return (try? JSONSerialization.data(withJSONObject: allTags))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        }()
+
+        guard let publishInput = NMPBridge.shared.picturePostPublishTaggedJSON(
             uploadedImages: uploadedImages,
             caption: caption,
-            geohash: geohash
+            geohash: geohash,
+            extraTagsJSON: extraTagsJSON
         ) else { setStep(.error("Couldn't prepare post.")); return }
 
         guard let pubTerminal = await NMPBridge.shared.dispatchAndAwaitResult(

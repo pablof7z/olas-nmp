@@ -13,10 +13,18 @@ enum NotificationsTab: String, CaseIterable {
     case zaps = "Zaps"
 }
 
+// MARK: - ViewModel
+
 @Observable @MainActor
 final class NotificationsViewModel {
-    var notifications: [OlasNotification] = []
+    /// Grouped + deduped rows produced by Rust.
+    var groupedNotifications: [OlasGroupedNotification] = []
     var isLoading = false
+
+    // Raw per-notification payload JSON strings accumulated from the event stream.
+    private var rawPayloads: [String] = []
+    // IDs of notifications already accumulated (dedup).
+    private var seenIds: Set<String> = []
 
     func start() {
         isLoading = true
@@ -25,66 +33,77 @@ final class NotificationsViewModel {
         }
     }
 
-    private struct ZapInfo: Decodable { let amount_sats: Int64; let referenced_event_id: String }
-
     private func handleEvent(_ json: String) {
-        guard let data = json.data(using: .utf8),
-              let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
         isLoading = false
+        // Rust decodes & validates the notification; ignore unrecognised event kinds.
+        guard let payload = NMPBridge.shared.notificationPayloadJSON(json) else { return }
+        // Deduplicate by notification ID.
+        guard let id = extractId(from: payload), seenIds.insert(id).inserted else { return }
+        rawPayloads.append(payload)
+        rebuildGroups()
+    }
 
-        switch event.kind {
-        case 7: // reaction
-            let n = OlasNotification(
-                id: event.id, type: .reaction, actorPubkey: event.author,
-                postId: event.tags.first(where: { $0.first == "e" })?[safe: 1],
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 9735: // zap — decoded entirely in Rust
-            guard let zapJSON = NMPBridge.shared.decodeZapNotification(json),
-                  let zapData = zapJSON.data(using: .utf8),
-                  let zap = try? JSONDecoder().decode(ZapInfo.self, from: zapData) else { return }
-            let n = OlasNotification(
-                id: event.id, type: .zap(zap.amount_sats), actorPubkey: event.author,
-                postId: zap.referenced_event_id.isEmpty ? nil : zap.referenced_event_id,
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 1: // mention / comment
-            let mentionedId = event.tags.first(where: { $0.first == "e" })?[safe: 1]
-            let n = OlasNotification(
-                id: event.id, type: .comment, actorPubkey: event.author,
-                postId: mentionedId,
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        case 3: // follow
-            let n = OlasNotification(
-                id: event.id, type: .follow, actorPubkey: event.author,
-                postId: nil,
-                createdAt: event.createdAt
-            )
-            notifications.insert(n, at: 0)
-        default:
-            break
+    private func extractId(from payloadJSON: String) -> String? {
+        guard let data = payloadJSON.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = obj["id"] as? String else { return nil }
+        return id
+    }
+
+    private func rebuildGroups() {
+        guard !rawPayloads.isEmpty else { return }
+        let joined = rawPayloads.joined(separator: ",")
+        let arrayJSON = "[\(joined)]"
+        groupedNotifications = NMPBridge.shared.groupNotificationsJSON(arrayJSON) ?? []
+    }
+
+    func filtered(by tab: NotificationsTab) -> [OlasGroupedNotification] {
+        switch tab {
+        case .all: return groupedNotifications
+        case .mentions: return groupedNotifications.filter {
+            $0.kind == "comment" || $0.kind == "mention"
+        }
+        case .zaps: return groupedNotifications.filter { $0.kind == "zap" }
         }
     }
 
-    func filtered(by tab: NotificationsTab) -> [OlasNotification] {
-        switch tab {
-        case .all: return notifications
-        case .mentions: return notifications.filter {
-            if case .comment = $0.type { return true }
-            if case .mention = $0.type { return true }
-            return false
+    // MARK: - Time sections (presentation-only, native responsibility)
+
+    struct NotifSection: Identifiable {
+        let title: String
+        let items: [OlasGroupedNotification]
+        var id: String { title }
+    }
+
+    func sections(for tab: NotificationsTab) -> [NotifSection] {
+        let items = filtered(by: tab)
+        guard !items.isEmpty else { return [] }
+
+        let cal = Calendar.current
+        let now = Date()
+        let startOfToday = cal.startOfDay(for: now)
+        let startOfWeek = cal.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
+
+        var today: [OlasGroupedNotification] = []
+        var week: [OlasGroupedNotification] = []
+        var earlier: [OlasGroupedNotification] = []
+
+        for item in items {
+            let date = Date(timeIntervalSince1970: TimeInterval(item.latestTs))
+            if date >= startOfToday { today.append(item) }
+            else if date >= startOfWeek { week.append(item) }
+            else { earlier.append(item) }
         }
-        case .zaps: return notifications.filter {
-            if case .zap = $0.type { return true }
-            return false
-        }
-        }
+
+        var result: [NotifSection] = []
+        if !today.isEmpty   { result.append(NotifSection(title: "Today", items: today)) }
+        if !week.isEmpty    { result.append(NotifSection(title: "This Week", items: week)) }
+        if !earlier.isEmpty { result.append(NotifSection(title: "Earlier", items: earlier)) }
+        return result
     }
 }
+
+// MARK: - View
 
 struct NotificationsView: View {
     @State private var vm = NotificationsViewModel()
@@ -110,21 +129,14 @@ struct NotificationsView: View {
                 .padding(.vertical, OlasSpacing.xs)
                 Divider().overlay(Color.olasBorder)
 
-                if vm.isLoading && vm.notifications.isEmpty {
+                if vm.isLoading && vm.groupedNotifications.isEmpty {
                     Spacer()
                     ProgressView().tint(Color.olasText2)
                     Spacer()
                 } else if vm.filtered(by: selectedTab).isEmpty {
                     emptyState
                 } else {
-                    List(vm.filtered(by: selectedTab)) { notification in
-                        NotificationItemView(notification: notification)
-                            .listRowBackground(Color.olasBackground)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparatorTint(Color.olasBorder)
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    sectionedList
                 }
             }
             .background(Color.olasBackground)
@@ -155,6 +167,32 @@ struct NotificationsView: View {
             }
         }
         .onAppear { vm.start() }
+    }
+
+    private var sectionedList: some View {
+        List {
+            ForEach(vm.sections(for: selectedTab)) { section in
+                Section {
+                    ForEach(section.items) { notification in
+                        NotificationItemView(notification: notification)
+                            .listRowBackground(Color.olasBackground)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparatorTint(Color.olasBorder)
+                    }
+                } header: {
+                    Text(section.title)
+                        .font(OlasFont.caption())
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.olasText3)
+                        .padding(.horizontal, OlasSpacing.md)
+                        .padding(.top, OlasSpacing.xs)
+                        .listRowInsets(EdgeInsets())
+                        .background(Color.olasBackground)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private var tabBar: some View {
@@ -192,11 +230,5 @@ struct NotificationsView: View {
                 .foregroundStyle(Color.olasText3)
             Spacer()
         }
-    }
-}
-
-private extension Array {
-    subscript(safe index: Index) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }

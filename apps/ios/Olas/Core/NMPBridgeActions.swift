@@ -217,6 +217,102 @@ extension NMPBridge {
         }
     }
 
+    // MARK: - P3-B: notification grouping
+
+    /// Return the raw JSON payload string produced by `olas_notification_json`
+    /// for a given raw KernelEvent JSON. Used to accumulate payloads before
+    /// passing them to `groupNotificationsJSON`.
+    func notificationPayloadJSON(_ eventJSON: String) -> String? {
+        let ptr = eventJSON.withCString { olas_notification_json($0) }
+        guard let ptr else { return nil }
+        defer { nmp_free_string(ptr) }
+        return String(cString: ptr)
+    }
+
+    /// Group an array of raw notification payload JSON strings into clustered
+    /// rows (one per kind+target_post pair). `payloadsArrayJSON` is a valid
+    /// JSON array of individual notification payload objects.
+    func groupNotificationsJSON(_ payloadsArrayJSON: String) -> [OlasGroupedNotification]? {
+        payloadsArrayJSON.withCString { ptr in
+            guard let res = olas_group_notifications_json(ptr) else { return nil }
+            defer { nmp_free_string(res) }
+            let json = String(cString: res)
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode([OlasGroupedNotification].self, from: data)
+        }
+    }
+
+    // MARK: - P3-C: caption tag parsing
+
+    /// Parse `nostr:npub1…` mentions (NIP-27) and `#hashtag` tokens from a caption.
+    /// Returns nil when the caption contains no mentions or hashtags (or is empty).
+    func parseCaptionTagsJSON(_ caption: String) -> CaptionTagsPayload? {
+        caption.withCString { ptr in
+            guard let res = olas_parse_caption_tags_json(ptr) else { return nil }
+            defer { nmp_free_string(res) }
+            let json = String(cString: res)
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(CaptionTagsPayload.self, from: data)
+        }
+    }
+
+    /// Extended picture-post publish that injects `p` and `t` tags extracted
+    /// from the caption. `extraTagsJSON` is a JSON array of tag arrays, e.g.
+    /// `[["p","<hex>"],["t","bitcoin"]]`. Pass nil to get the same result as
+    /// `picturePostPublishJSON`.
+    func picturePostPublishTaggedJSON(
+        uploadedImages: [(descriptorJSON: String, alt: String?, dim: String?)],
+        caption: String,
+        geohash: String?,
+        extraTagsJSON: String?
+    ) -> String? {
+        var entries: [[String: Any]] = []
+        for item in uploadedImages {
+            guard let descriptorData = item.descriptorJSON.data(using: .utf8),
+                  let descriptorObj = try? JSONSerialization.jsonObject(with: descriptorData)
+            else { continue }
+            var entry: [String: Any] = ["descriptor": descriptorObj]
+            if let alt = item.alt, !alt.isEmpty { entry["alt"] = alt }
+            if let dim = item.dim, !dim.isEmpty { entry["dim"] = dim }
+            entries.append(entry)
+        }
+        guard !entries.isEmpty,
+              let entriesData = try? JSONSerialization.data(withJSONObject: entries),
+              let entriesJSON = String(data: entriesData, encoding: .utf8)
+        else { return nil }
+
+        func withOpt(_ s: String?, _ body: (UnsafePointer<CChar>?) -> String?) -> String? {
+            if let s { return s.withCString { body($0) } }
+            return body(nil)
+        }
+        return entriesJSON.withCString { imagesPtr in
+            caption.withCString { captionPtr in
+                withOpt(geohash) { geoPtr in
+                    withOpt(extraTagsJSON) { extraPtr in
+                        guard let ptr = olas_picture_post_publish_tagged_json(
+                            imagesPtr, captionPtr, geoPtr, extraPtr
+                        ) else { return nil }
+                        defer { nmp_free_string(ptr) }
+                        return String(cString: ptr)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - P3-D: recovery key export
+
+    /// Return the active local account's Recovery Key (bech32 nsec format).
+    ///
+    /// Returns nil when no local account is signed in (remote signer, NIP-46, etc.).
+    /// MUST NOT be logged. Display only in the explicit "Back up account" flow.
+    func activeAccountRecoveryKey() -> String? {
+        guard let app = appPtr else { return nil }
+        guard let res = olas_active_account_recovery_key(app) else { return nil }
+        defer { nmp_free_string(res) }
+        return String(cString: res)
+    }
+
     // MARK: - P0-A: follow-pack discovery and apply
 
     /// Open the kind:30000 follow-pack discovery interest.

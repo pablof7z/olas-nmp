@@ -11,9 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class NotificationsUiState(
-    val notifications: List<NotificationItem> = emptyList(),
+    val grouped: List<GroupedNotificationItem> = emptyList(),
     val isLoading: Boolean = true,
 )
 
@@ -24,87 +26,78 @@ class NotificationsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Raw per-notification payload JSON strings accumulated from the event stream.
+    private val rawPayloads = mutableListOf<String>()
+    // IDs already accumulated (dedup).
+    private val seenIds = mutableSetOf<String>()
+
     init {
         NMPBridge.nostrEvents
             .onEach { raw ->
                 val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
                     ?: run {
-                        // Not a valid NostrEvent frame — mark loading done on first frame.
                         if (_uiState.value.isLoading) {
                             _uiState.value = _uiState.value.copy(isLoading = false)
                         }
                         return@onEach
                     }
-                handleEvent(event)
+                handleEvent(raw, event)
             }
             .launchIn(viewModelScope)
     }
 
-    private fun handleEvent(event: NostrEvent) {
-        val item: NotificationItem? = when (event.kind) {
-            7 -> {
-                // kind 7 — reaction to one of our posts
-                NotificationItem(
-                    id           = event.id,
-                    type         = NotificationType.REACTION,
-                    actorName    = event.author.take(8),
-                    actorAvatar  = null,
-                    body         = "reacted to your photo.",
-                    thumbnailUrl = null,
-                    createdAt    = event.created_at,
-                )
+    private fun handleEvent(raw: String, event: NostrEvent) {
+        // Only process notification-relevant event kinds.
+        if (event.kind !in setOf(7, 9735, 1, 3)) {
+            if (_uiState.value.isLoading) {
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
-            9735 -> {
-                // kind 9735 — zap receipt
-                val bolt11 = event.tags.firstOrNull { it.firstOrNull() == "bolt11" }?.getOrNull(1) ?: ""
-                val msats = if (bolt11.isNotEmpty()) NMPBridge.bolt11AmountMsats(bolt11) else 0L
-                val sats = msats / 1000
-                NotificationItem(
-                    id           = event.id,
-                    type         = NotificationType.ZAP,
-                    actorName    = event.author.take(8),
-                    actorAvatar  = null,
-                    body         = "zapped you $sats sats.",
-                    thumbnailUrl = null,
-                    createdAt    = event.created_at,
-                )
-            }
-            1 -> {
-                // kind 1 — text note mentioning us (comment / mention)
-                NotificationItem(
-                    id           = event.id,
-                    type         = NotificationType.MENTION,
-                    actorName    = event.author.take(8),
-                    actorAvatar  = null,
-                    body         = "mentioned you.",
-                    thumbnailUrl = null,
-                    createdAt    = event.created_at,
-                )
-            }
-            3 -> {
-                // kind 3 — contact list update (new follow)
-                NotificationItem(
-                    id           = event.id,
-                    type         = NotificationType.FOLLOW,
-                    actorName    = event.author.take(8),
-                    actorAvatar  = null,
-                    body         = "started following you.",
-                    thumbnailUrl = null,
-                    createdAt    = event.created_at,
-                )
-            }
-            else -> null
+            return
         }
 
-        val current = _uiState.value
-        if (item != null) {
-            _uiState.value = current.copy(
-                notifications = (listOf(item) + current.notifications).distinctBy { it.id },
-                isLoading     = false,
+        // Rust decodes the event and validates it as a notification payload.
+        val payload = NMPBridge.notificationJson(raw) ?: run {
+            if (_uiState.value.isLoading) {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
+            return
+        }
+
+        // Deduplicate by notification ID.
+        val id = runCatching { JSONObject(payload).optString("id") }.getOrNull()
+            ?.takeIf { it.isNotEmpty() } ?: return
+        if (!seenIds.add(id)) return
+
+        rawPayloads.add(payload)
+        rebuildGroups()
+    }
+
+    private fun rebuildGroups() {
+        if (rawPayloads.isEmpty()) return
+
+        // Build JSON array string from accumulated payloads.
+        val arrayJson = rawPayloads.joinToString(separator = ",", prefix = "[", postfix = "]")
+        val groupedJson = NMPBridge.groupNotificationsJson(arrayJson) ?: return
+
+        val grouped = runCatching { parseGroupedJson(groupedJson) }.getOrElse { emptyList() }
+        _uiState.value = _uiState.value.copy(grouped = grouped, isLoading = false)
+    }
+
+    private fun parseGroupedJson(json: String): List<GroupedNotificationItem> {
+        val arr = JSONArray(json)
+        return (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            val pubkeysArr = obj.optJSONArray("actorPubkeys") ?: return@mapNotNull null
+            val pubkeys = (0 until pubkeysArr.length()).map { pubkeysArr.getString(it) }
+            GroupedNotificationItem(
+                groupId     = obj.optString("groupId"),
+                kind        = obj.optString("kind"),
+                targetPostId = obj.optString("targetPostId").takeIf { it.isNotEmpty() },
+                actorPubkeys = pubkeys,
+                count       = obj.optInt("count", 1),
+                latestTs    = obj.optLong("latestTs"),
+                zapSats     = obj.optLong("zapSats").takeIf { obj.has("zapSats") },
             )
-        } else if (current.isLoading) {
-            // Any event frame clears the initial loading state.
-            _uiState.value = current.copy(isLoading = false)
         }
     }
 }

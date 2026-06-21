@@ -117,11 +117,26 @@ class UploadViewModel : ViewModel() {
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
 
+                // P3-C: parse caption for nostr:npub mentions and #hashtag tokens so
+                // the published kind:20 carries p/t tags — mirrors iOS UploadQueue.
+                val extraTagsJson: String? = runCatching {
+                    val tagsJson = NMPBridge.parseCaptionTagsJson(caption) ?: return@runCatching null
+                    val obj = JSONObject(tagsJson)
+                    val combined = JSONArray()
+                    val pTags = obj.optJSONArray("p_tags") ?: JSONArray()
+                    val tTags = obj.optJSONArray("t_tags") ?: JSONArray()
+                    for (i in 0 until pTags.length()) combined.put(pTags.get(i))
+                    for (i in 0 until tTags.length()) combined.put(tTags.get(i))
+                    if (combined.length() > 0) combined.toString() else null
+                }.getOrNull()
+
                 // Build the publish input in Rust (one kind:20 for all images).
-                val publishInput = NMPBridge.picturePostPublishJson(
+                // Uses tagged variant so p/t tags from the caption are injected.
+                val publishInput = NMPBridge.picturePostPublishTaggedJson(
                     uploadedImagesJson = uploadedImages.toString(),
                     caption            = caption,
                     geohash            = geohash,
+                    extraTagsJson      = extraTagsJson,
                 ) ?: throw IllegalStateException("Failed to build publish input")
 
                 val published = withTimeoutOrNull(30_000L) {

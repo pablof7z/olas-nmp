@@ -23,6 +23,9 @@ object Routes {
     const val ONBOARDING_COMPLETE = "onboarding/complete"
     const val SIGN_IN             = "onboarding/signin"
 
+    // P3-D: recovery key export
+    const val RECOVERY_KEY = "settings/recovery_key"
+
     // Dynamic routes
     fun profile(pubkey: String) = "profile/$pubkey"
 }

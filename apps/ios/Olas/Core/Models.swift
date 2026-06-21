@@ -160,6 +160,37 @@ enum UploadStep: Equatable {
     case error(String)
 }
 
+// MARK: - Grouped Notification (P3-B)
+
+/// Decoded from `olas_group_notifications_json`.
+/// Rust groups individual notifications by (kind, target_post_id) and deduplicates actors.
+struct OlasGroupedNotification: Identifiable, Codable {
+    let groupId: String
+    let kind: String           // "reaction" | "comment" | "mention" | "follow" | "repost" | "zap"
+    let targetPostId: String?
+    let actorPubkeys: [String] // hex pubkeys, deduped, most-recent first
+    let count: Int
+    let latestTs: Int64        // unix seconds — used for time-section assignment (native)
+    let zapSats: Int64?
+
+    var id: String { groupId }
+}
+
+// MARK: - Caption Tags (P3-C)
+
+/// Decoded from `olas_parse_caption_tags_json`.
+struct CaptionTagsPayload: Codable {
+    let content: String
+    let pTags: [[String]]  // [["p", hex_pubkey], …]
+    let tTags: [[String]]  // [["t", hashtag], …]
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case pTags = "p_tags"
+        case tTags = "t_tags"
+    }
+}
+
 // MARK: - Relay
 
 struct RelayEntry: Identifiable {

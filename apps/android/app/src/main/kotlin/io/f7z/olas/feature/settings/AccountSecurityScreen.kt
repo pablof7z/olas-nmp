@@ -123,9 +123,7 @@ fun AccountSecurityScreen(navController: NavController) {
 
             item {
                 TextButton(
-                    onClick  = {
-                        // Tracked by https://github.com/pablof7z/olas/issues/52.
-                    },
+                    onClick  = { navController.navigate(io.f7z.olas.navigation.Routes.RECOVERY_KEY) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(

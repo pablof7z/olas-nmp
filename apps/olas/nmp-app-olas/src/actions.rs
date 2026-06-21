@@ -241,6 +241,165 @@ pub extern "C" fn olas_picture_post_publish_json(
     result.unwrap_or(std::ptr::null_mut())
 }
 
+// ── P3-C: caption tag parsing (NIP-27 mentions + hashtags) ───────────────────
+
+/// Parse `nostr:npub1…` mentions (NIP-27) and `#hashtag` tokens from a caption.
+///
+/// Input: raw caption text that may contain:
+///   - `nostr:npub1…` URIs (inserted by the autocomplete popover when the user
+///     selects a mention suggestion — the UI swaps `@name` → `nostr:npub1…`)
+///   - `#hashtag` words
+///
+/// Output JSON:
+/// ```json
+/// {
+///   "content": "<caption as-is — nostr: refs stay per NIP-27>",
+///   "p_tags": [["p", "<hex_pubkey>"], …],
+///   "t_tags": [["t", "<hashtag>"], …]
+/// }
+/// ```
+///
+/// Rules:
+/// - Each distinct `nostr:npub1…` URI → one `["p", "<hex>"]` tag.
+/// - Each distinct `#word` → one `["t", "<word_lowercased>"]` tag.
+/// - Duplicates are silently deduplicated (first occurrence wins).
+/// - Returns NULL on null / empty input.
+///
+/// Returned string must be freed with `nmp_free_string`.
+#[no_mangle]
+pub extern "C" fn olas_parse_caption_tags_json(caption: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> *mut c_char {
+        let Some(text) = opt_cstr_owned(caption) else {
+            return std::ptr::null_mut();
+        };
+
+        let mut p_tags: Vec<Vec<String>> = Vec::new();
+        let mut seen_pubkeys: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        let mut t_tags: Vec<Vec<String>> = Vec::new();
+        let mut seen_hashtags: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        // ── nostr:npub1… → p tags (NIP-27) ──────────────────────────────────
+        // Walk the text finding all occurrences; decode each npub bech32 to hex.
+        let mut search = text.as_str();
+        while let Some(rel_pos) = search.find("nostr:npub1") {
+            let tail = &search[rel_pos..];
+            // Consume through the end of the bech32 token (alphanumeric only).
+            let end = tail
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != ':')
+                .unwrap_or(tail.len());
+            let uri = &tail[..end];
+            // Strip the "nostr:" scheme prefix, leaving the bare bech32 npub.
+            let bech32 = &uri["nostr:".len()..];
+            if let Ok(nmp_core::nip19::Nip19Entity::Npub(hex)) =
+                nmp_core::nip19::parse(bech32)
+            {
+                if seen_pubkeys.insert(hex.clone()) {
+                    p_tags.push(vec!["p".to_string(), hex]);
+                }
+            }
+            search = &tail[end..];
+        }
+
+        // ── #hashtag → t tags ─────────────────────────────────────────────
+        for token in text.split_whitespace() {
+            if !token.starts_with('#') {
+                continue;
+            }
+            // Strip leading '#', then trailing punctuation so "#bitcoin!" → "bitcoin".
+            let stripped = token
+                .trim_start_matches('#')
+                .trim_end_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_');
+            if stripped.is_empty() {
+                continue;
+            }
+            let lower = stripped.to_lowercase();
+            if seen_hashtags.insert(lower.clone()) {
+                t_tags.push(vec!["t".to_string(), lower]);
+            }
+        }
+
+        let output = serde_json::json!({
+            "content": text,
+            "p_tags": p_tags,
+            "t_tags": t_tags,
+        });
+
+        match serde_json::to_string(&output) {
+            Ok(s) => CString::new(s)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }));
+    result.unwrap_or(std::ptr::null_mut())
+}
+
+/// Extended picture-post publish that injects additional NIP tags (p, t, …).
+///
+/// Identical to `olas_picture_post_publish_json` but also merges `extra_tags_json`
+/// (a JSON array of tag arrays such as `[["p","<hex>"],["t","bitcoin"]]`) into the
+/// kind:20 tags.  Pass `NULL` for `extra_tags_json` to get the same result as the
+/// base function.
+///
+/// Returns JSON suitable for `nmp_app_dispatch_action(app, "nmp.publish", …)`.
+/// Returned pointer must be freed with `nmp_free_string`.
+#[no_mangle]
+pub extern "C" fn olas_picture_post_publish_tagged_json(
+    uploaded_images_json: *const c_char,
+    caption: *const c_char,
+    geohash: *const c_char,
+    extra_tags_json: *const c_char,
+) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| -> *mut c_char {
+        // Build the base publish JSON via the existing function.
+        let base_ptr = olas_picture_post_publish_json(uploaded_images_json, caption, geohash);
+        if base_ptr.is_null() {
+            return std::ptr::null_mut();
+        }
+        // If no extra tags, return the base output unchanged.
+        let Some(extra_str) = opt_cstr_owned(extra_tags_json) else {
+            return base_ptr; // already a valid *mut c_char
+        };
+        // Parse the extra tags array.
+        let extra_tags: Vec<Vec<String>> = match serde_json::from_str(&extra_str) {
+            Ok(v) => v,
+            Err(_) => return base_ptr,
+        };
+        if extra_tags.is_empty() {
+            return base_ptr;
+        }
+        // Parse the base JSON, inject the extra tags, re-serialise.
+        let base_json_str = unsafe {
+            std::ffi::CStr::from_ptr(base_ptr).to_string_lossy().into_owned()
+        };
+        nmp_ffi::nmp_free_string(base_ptr);
+
+        let mut val: serde_json::Value = match serde_json::from_str(&base_json_str) {
+            Ok(v) => v,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        // Shape: {"PublishRaw":{"tags":[…], …}}
+        if let Some(tags) = val
+            .get_mut("PublishRaw")
+            .and_then(|pr| pr.get_mut("tags"))
+            .and_then(|t| t.as_array_mut())
+        {
+            for tag in extra_tags {
+                tags.push(serde_json::to_value(tag).unwrap_or(serde_json::Value::Null));
+            }
+        }
+        match serde_json::to_string(&val) {
+            Ok(s) => CString::new(s)
+                .map(CString::into_raw)
+                .unwrap_or(std::ptr::null_mut()),
+            Err(_) => std::ptr::null_mut(),
+        }
+    });
+    result.unwrap_or(std::ptr::null_mut())
+}
+
 fn opt_cstr_owned(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         return None;

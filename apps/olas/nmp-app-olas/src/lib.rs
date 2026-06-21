@@ -187,6 +187,8 @@ pub use nmp_ffi::NmpApp;
 mod jni;
 #[cfg(target_os = "android")]
 mod jni_extras;
+#[cfg(target_os = "android")]
+mod jni_p3_exports;
 
 // Relay seeding, search feed, and account creation helpers.
 mod extras;
@@ -231,11 +233,21 @@ mod photo_feed;
 pub use photo_feed::olas_filter_photo_post_json;
 
 // Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.
+// P3-C adds: olas_parse_caption_tags_json, olas_picture_post_publish_tagged_json.
 mod actions;
 pub use actions::{
     olas_blossom_upload_input_json, olas_bookmark_event_action_json,
-    olas_picture_post_publish_json, olas_react_action_json, olas_zap_action_json,
+    olas_parse_caption_tags_json, olas_picture_post_publish_json,
+    olas_picture_post_publish_tagged_json, olas_react_action_json, olas_zap_action_json,
 };
+
+// P3-B: Rust-side notification grouping (clusters by kind+post, deduplicates actors).
+mod notifications;
+pub use notifications::olas_group_notifications_json;
+
+// P3-D: Account recovery key export (bech32 secret, never logged).
+mod identity_ffi;
+pub use identity_ffi::olas_active_account_recovery_key;
 
 // P0-A: follow-pack discovery and bulk-apply (kind:30000 interest + apply loop).
 mod follow_packs;

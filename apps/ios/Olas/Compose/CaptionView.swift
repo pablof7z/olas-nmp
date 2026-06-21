@@ -12,6 +12,10 @@ struct CaptionView: View {
     @State private var showServerPicker = false
     @FocusState private var captionFocused: Bool
 
+    // P3-C: @mention autocomplete
+    @State private var mentionQuery: String? = nil
+    @State private var mentionResults: [ProfileWire] = []
+
     // Location
     @State private var locationManager = LocationOnce()
 
@@ -28,13 +32,23 @@ struct CaptionView: View {
             VStack(alignment: .leading, spacing: 0) {
                 imageStrip
 
-                TextEditor(text: $caption)
-                    .font(OlasFont.body())
-                    .foregroundStyle(Color.olasText1)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 80, maxHeight: 160)
-                    .padding(.horizontal, OlasSpacing.sm)
-                    .focused($captionFocused)
+                ZStack(alignment: .bottom) {
+                    TextEditor(text: $caption)
+                        .font(OlasFont.body())
+                        .foregroundStyle(Color.olasText1)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 80, maxHeight: 160)
+                        .padding(.horizontal, OlasSpacing.sm)
+                        .focused($captionFocused)
+                        .onChange(of: caption) { _, newValue in
+                            updateMentionQuery(newValue)
+                        }
+
+                    // @mention autocomplete dropdown
+                    if let _ = mentionQuery, !mentionResults.isEmpty {
+                        mentionDropdown
+                    }
+                }
 
                 Divider().background(Color.olasBorder)
 
@@ -116,6 +130,82 @@ struct CaptionView: View {
             }
         }
         .onAppear { captionFocused = true }
+    }
+
+    // MARK: - @mention autocomplete
+
+    private var mentionDropdown: some View {
+        VStack(spacing: 0) {
+            ForEach(mentionResults.prefix(5), id: \.pubkey) { profile in
+                Button {
+                    insertMention(profile)
+                } label: {
+                    HStack(spacing: OlasSpacing.xs) {
+                        NostrAvatar(profile: profile, size: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(profile.displayName ?? profile.npubShort)
+                                .font(OlasFont.subheadline())
+                                .foregroundStyle(Color.olasText1)
+                            if let nip05 = profile.nip05, !nip05.isEmpty {
+                                Text(nip05)
+                                    .font(OlasFont.caption())
+                                    .foregroundStyle(Color.olasText3)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, OlasSpacing.md)
+                    .padding(.vertical, OlasSpacing.xs)
+                }
+                .buttonStyle(.plain)
+                if profile.pubkey != (mentionResults.prefix(5).last?.pubkey ?? "") {
+                    Divider().background(Color.olasBorder)
+                }
+            }
+        }
+        .background(Color.olasSurface2)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .padding(.horizontal, OlasSpacing.sm)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    private func updateMentionQuery(_ text: String) {
+        // Extract the last whitespace-delimited token that begins with '@'
+        let tokens = text.components(separatedBy: .whitespacesAndNewlines)
+        let last = tokens.last ?? ""
+        guard last.hasPrefix("@"), last.count > 1 else {
+            mentionQuery = nil
+            mentionResults = []
+            return
+        }
+        let query = String(last.dropFirst()).lowercased()
+        mentionQuery = query
+        let cache = NMPBridge.shared.profileCache
+        mentionResults = cache.values.filter { profile in
+            let name = (profile.displayName ?? "").lowercased()
+            return name.contains(query)
+        }.sorted { a, b in
+            let na = (a.displayName ?? "").lowercased()
+            let nb = (b.displayName ?? "").lowercased()
+            let aPre = na.hasPrefix(query)
+            let bPre = nb.hasPrefix(query)
+            if aPre != bPre { return aPre }
+            return na < nb
+        }
+    }
+
+    private func insertMention(_ profile: ProfileWire) {
+        // Replace the trailing '@query' token with 'nostr:<npub>'
+        guard !profile.npub.isEmpty else { return }
+        var tokens = caption.components(separatedBy: .whitespacesAndNewlines)
+        if tokens.last?.hasPrefix("@") == true { tokens.removeLast() }
+        let replacement = "nostr:\(profile.npub)"
+        tokens.append(replacement)
+        caption = tokens.joined(separator: " ") + " "
+        mentionQuery = nil
+        mentionResults = []
     }
 
     private var imageStrip: some View {

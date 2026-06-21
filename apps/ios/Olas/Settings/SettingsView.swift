@@ -148,10 +148,8 @@ struct SettingsView: View {
     private var securitySettings: some View {
         List {
             Section {
-                Button("Export Recovery Key") {
-                    // Key export flow
-                }
-                .foregroundStyle(Color.olasDestructive)
+                NavigationLink("Back up account") { RecoveryKeyView() }
+                    .foregroundStyle(Color.olasText1)
                 Button("Backup to Keychain") {}
                     .foregroundStyle(Color.olasBlue)
             }

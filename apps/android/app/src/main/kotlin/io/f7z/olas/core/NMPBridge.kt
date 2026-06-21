@@ -130,6 +130,17 @@ object NMPBridge {
     private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
 
+    // P3-B/C/D: wave6 depth features
+    private external fun nativeGroupNotificationsJson(notificationsJson: String): String?
+    private external fun nativeParseCaptionTagsJson(caption: String): String?
+    private external fun nativePicturePostPublishTaggedJson(
+        uploadedImagesJson: String,
+        caption: String?,
+        geohash: String?,
+        extraTagsJson: String?,
+    ): String?
+    private external fun nativeActiveAccountRecoveryKey(handle: Long): String?
+
     // P0-E: Real social proof
     private external fun nativeSocialProofJson(handle: Long, activePubkey: String, targetPubkey: String): String?
 
@@ -448,25 +459,18 @@ object NMPBridge {
     fun releaseProfile(pubkey: String, consumerId: String) =
         nativeReleaseProfile(appHandle, pubkey, consumerId)
 
-    // --- P0-E: Real social proof -----------------------------------------------
+    // --- Internal delegates for NMPBridgeP3.kt (P3-B/C/D, P0-E/F) ---------------
+    // These thin wrappers call private externals so the split file can expose
+    // the public API without triggering JVM name-mangling on `internal external fun`.
 
-    /**
-     * Query social proof for [targetPubkey] from [activePubkey]'s follow graph.
-     * Returns: `{"mutual_followers":[...],"mutual_count":N,"reason_kind":"followed_by_mutuals"|"new_account"}`
-     * Returns null when the active account is unknown or the WoT graph is not yet bootstrapped.
-     */
-    fun socialProofJson(activePubkey: String, targetPubkey: String): String? =
-        if (activePubkey.isEmpty() || targetPubkey.isEmpty()) null
-        else nativeSocialProofJson(appHandle, activePubkey, targetPubkey)
-
-    // --- P0-F: Ranked discover sections ----------------------------------------
-
-    /**
-     * Return ranked discover sections for [activePubkey] from the WoT follow graph.
-     * Returns: `[{"title":"...","reason":"...","profiles":[{"pubkey":"...","mutual_count":N}]}]`
-     * Returns null when the active account is unknown or the WoT runtime is absent.
-     */
-    fun discoverSectionsJson(activePubkey: String): String? =
-        if (activePubkey.isEmpty()) null
-        else nativeDiscoverSectionsJson(appHandle, activePubkey)
+    internal fun groupNotificationsJsonImpl(j: String): String? = nativeGroupNotificationsJson(j)
+    internal fun parseCaptionTagsJsonImpl(caption: String): String? = nativeParseCaptionTagsJson(caption)
+    internal fun picturePostPublishTaggedJsonImpl(u: String, c: String?, g: String?, e: String?): String? =
+        nativePicturePostPublishTaggedJson(u, c, g, e)
+    internal fun activeAccountRecoveryKeyImpl(): String? =
+        if (appHandle == 0L) null else nativeActiveAccountRecoveryKey(appHandle)
+    internal fun socialProofJsonImpl(ap: String, tp: String): String? =
+        nativeSocialProofJson(appHandle, ap, tp)
+    internal fun discoverSectionsJsonImpl(ap: String): String? =
+        nativeDiscoverSectionsJson(appHandle, ap)
 }

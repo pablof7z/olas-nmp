@@ -59,6 +59,7 @@ import io.f7z.olas.feature.onboarding.WelcomeScreen
 import io.f7z.olas.feature.profile.ProfileScreen
 import io.f7z.olas.feature.search.SearchScreen
 import io.f7z.olas.feature.settings.AccountSecurityScreen
+import io.f7z.olas.feature.settings.RecoveryKeyScreen
 import io.f7z.olas.feature.settings.RelaySettingsScreen
 import io.f7z.olas.feature.settings.ServerSettingsScreen
 import io.f7z.olas.feature.settings.SettingsScreen
@@ -191,6 +192,7 @@ fun OlasApp() {
                     composable(Routes.RELAY_SETTINGS)    { RelaySettingsScreen(navController) }
                     composable(Routes.SERVER_SETTINGS)   { ServerSettingsScreen(navController) }
                     composable(Routes.ACCOUNT_SECURITY)  { AccountSecurityScreen(navController) }
+                    composable(Routes.RECOVERY_KEY)      { RecoveryKeyScreen(navController) }
                     composable(Routes.WALLET_SETTINGS)   { WalletSettingsScreen(navController) }
                 }
             }
