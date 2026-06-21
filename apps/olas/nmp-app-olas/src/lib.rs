@@ -239,6 +239,13 @@ pub use actions::{
     olas_picture_post_publish_json, olas_react_action_json, olas_zap_action_json,
 };
 
+// Follow-pack discovery (kinds 39089/39092) for the onboarding step.
+mod follow_packs;
+pub use follow_packs::{
+    olas_apply_selected_follow_packs, olas_close_follow_pack_discovery,
+    olas_follow_packs_snapshot_json, olas_open_follow_pack_discovery,
+};
+
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
 /// Call this once, before nmp_app_start, after nmp_app_new.
@@ -263,6 +270,7 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
             nmp_defaults::NmpDefaults::default(),
         );
         picture_feed::install_runtime_handles(app_ref, &handles);
+        follow_packs::install_pack_observer(app_ref);
         let _ = extras::declare_initial_relays(app_ref);
         nmp_blossom::register_actions(app_ref);
     }));
