@@ -1,4 +1,7 @@
 import SwiftUI
+import os
+
+private let headerDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag")
 
 struct PostCardHeaderView: View {
     let post: PhotoPost
@@ -46,6 +49,7 @@ struct PostCardHeaderView: View {
 
             if showFollowButton {
                 Button {
+                    headerDiag.error("FEEDDIAG Follow button tapped pubkey=\(post.authorPubkey) wasFollowing=\(isFollowing)")
                     if isFollowing {
                         bridge.unfollow(pubkey: post.authorPubkey)
                         isFollowing = false

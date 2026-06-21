@@ -187,6 +187,8 @@ pub use nmp_ffi::NmpApp;
 mod jni;
 #[cfg(target_os = "android")]
 mod jni_extras;
+#[cfg(target_os = "android")]
+mod jni_p3_exports;
 
 // Relay seeding, search feed, and account creation helpers.
 mod extras;
@@ -233,11 +235,36 @@ pub use picture_feed::{
 };
 
 // Action JSON builders — blossom upload, react, zap, bookmark, picture-post publish.
+// P3-C adds: olas_parse_caption_tags_json, olas_picture_post_publish_tagged_json.
 mod actions;
 pub use actions::{
     olas_blossom_upload_input_json, olas_bookmark_event_action_json,
-    olas_picture_post_publish_json, olas_react_action_json, olas_zap_action_json,
+    olas_parse_caption_tags_json, olas_picture_post_publish_json,
+    olas_picture_post_publish_tagged_json, olas_react_action_json, olas_zap_action_json,
 };
+
+// P3-B: Rust-side notification grouping (clusters by kind+post, deduplicates actors).
+mod notifications;
+pub use notifications::olas_group_notifications_json;
+
+// P3-D: Account recovery key export (bech32 secret, never logged).
+mod identity_ffi;
+pub use identity_ffi::olas_active_account_recovery_key;
+
+// P0-A: follow-pack discovery and bulk-apply (kind:30000 interest + apply loop).
+mod follow_packs;
+pub use follow_packs::{
+    olas_apply_follow_pack_pubkeys, olas_close_follow_pack_discovery,
+    olas_decode_follow_pack_event_json, olas_open_follow_pack_discovery,
+};
+
+// P0-E / P0-F: real social proof and ranked discover sections.
+mod social;
+pub use social::{olas_discover_sections_json, olas_social_proof_json};
+
+// P2-A / P2-C: invite link resolution (inbound) and minting (outbound).
+mod invites;
+pub use invites::{olas_my_invite_link, olas_resolve_invite_json};
 
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
@@ -245,6 +272,9 @@ pub use actions::{
 /// It wires:
 ///   - nmp-defaults (follow/unfollow/react/zap/WoT bootstrap/routing)
 ///   - nmp-blossom upload action ("nmp.blossom.upload")
+///
+/// Also captures the WoT runtime handle so that `olas_social_proof_json` and
+/// `olas_discover_sections_json` can query the live follow graph.
 ///
 /// The caller (Swift or JNI) must also call nmp_app_start after this returns.
 #[no_mangle]
@@ -258,12 +288,17 @@ pub extern "C" fn olas_app_register(app: *mut NmpApp) {
         // SAFETY: caller guarantees a valid pointer from nmp_app_new, no other
         // exclusive reference aliases it here (same pattern as nmp-app-chirp).
         let app_ref = unsafe { &mut *app };
+        // Use the handles variant so we can capture the WoT runtime for
+        // social-proof and discover-section queries (P0-E / P0-F).
         let handles = nmp_defaults::register_defaults_with_handles(
             app_ref,
             nmp_defaults::NmpDefaults::default(),
         );
         picture_feed::install_runtime_handles(app_ref, &handles);
         let _ = extras::declare_initial_relays(app_ref);
+        if let Some(wot) = handles.wot {
+            social::set_wot_runtime(wot);
+        }
         nmp_blossom::register_actions(app_ref);
     }));
 }

@@ -74,6 +74,7 @@ object NMPBridge {
     private external fun nativeOpenAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeCloseAuthorPhotoFeed(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeSignInNsec(handle: Long, nsec: String)
+    private external fun nativeRemoveAccount(handle: Long, identityId: String)
     private external fun nativeAddRelay(handle: Long, url: String, role: String)
     private external fun nativeOpenPhotoFeed(handle: Long, contactListOnly: Boolean, consumerId: String)
     private external fun nativeProfileJson(handle: Long, eventJson: String): String?
@@ -94,13 +95,19 @@ object NMPBridge {
     private external fun nativeBolt11AmountSats(bolt11: String): Long
     private external fun nativeBookmarkEventActionJson(accountPubkey: String, eventId: String): String?
     private external fun nativeLocationGeohash4(latitude: Double, longitude: Double): String?
+    /** P0-B: multi-image publish — accepts JSON array of uploaded-image descriptors. */
     private external fun nativePicturePostPublishJson(
-        blossomResultJson: String,
+        uploadedImagesJson: String,
         caption: String?,
-        alt: String?,
-        dim: String?,
         geohash: String?,
     ): String?
+
+    // P0-A: follow-pack discovery
+    private external fun nativeOpenFollowPackDiscovery(handle: Long, consumerId: String)
+    private external fun nativeCloseFollowPackDiscovery(handle: Long, consumerId: String)
+    private external fun nativeDecodeFollowPackEventJson(eventJson: String): String?
+    private external fun nativeApplyFollowPackPubkeys(handle: Long, pubkeysJson: String, activePubkey: String): String?
+    private external fun nativeActiveFollowingCount(handle: Long): Long
     private external fun nativeLoadOlderFeed(handle: Long, key: String)
     private external fun nativeLifecycleForeground(handle: Long)
     private external fun nativeLifecycleBackground(handle: Long)
@@ -127,6 +134,29 @@ object NMPBridge {
     private external fun nativeCurrentPhotoFeed(handle: Long, key: String): String?
     private external fun nativeWotPresetGet(handle: Long): String?
     private external fun nativeWotPresetSet(handle: Long, preset: String)
+
+    // P3-B/C/D: wave6 depth features
+    private external fun nativeGroupNotificationsJson(notificationsJson: String): String?
+    private external fun nativeParseCaptionTagsJson(caption: String): String?
+    private external fun nativePicturePostPublishTaggedJson(
+        uploadedImagesJson: String,
+        caption: String?,
+        geohash: String?,
+        extraTagsJson: String?,
+    ): String?
+    private external fun nativeActiveAccountRecoveryKey(handle: Long): String?
+
+    // P0-E: Real social proof
+    private external fun nativeSocialProofJson(handle: Long, activePubkey: String, targetPubkey: String): String?
+
+    // P0-F: Ranked discover sections
+    private external fun nativeDiscoverSectionsJson(handle: Long, activePubkey: String): String?
+
+    // P2-A: Invite link resolution
+    private external fun nativeResolveInviteJson(token: String): String?
+
+    // P2-C: Invite link minting
+    private external fun nativeMyInviteLink(activePubkey: String): String?
 
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
@@ -168,8 +198,20 @@ object NMPBridge {
         if (!storedNsec.isNullOrBlank()) {
             nativeSignInNsec(appHandle, storedNsec)
         }
-        // blossom.band (nostr.build CDN) stores files for any NIP-98-authenticated key.
-        nativeBlossomServerUrlSet(appHandle, "https://blossom.band")
+        // Re-add default relays AFTER start so the actor processes AddRelay commands
+        // while running=true (restore_active_session inside Start can overwrite relay list).
+        val defaultRelays = listOf(
+            "wss://relay.damus.io" to "both",
+            "wss://nos.lol" to "both",
+            "wss://relay.primal.net" to "both",
+            "wss://purplepag.es" to "indexer",
+        )
+        for ((url, role) in defaultRelays) {
+            nativeAddRelay(appHandle, url, role)
+        }
+        // Default media server: blossom.primal.net (matches Rust default; chosen silently
+        // during onboarding). Users can change this later in Server Settings.
+        nativeBlossomServerUrlSet(appHandle, "https://blossom.primal.net")
     }
 
     fun createAccount(name: String, username: String) =
@@ -204,8 +246,15 @@ object NMPBridge {
     }
 
     fun signOut() {
+        // Remove the active account from the kernel (identity_id is the hex
+        // pubkey). A removed active account emits no active_account snapshot
+        // frame, so clear the local state ourselves so the UI reverts to the
+        // signed-out state. Mirrors iOS NMPBridge.signOut().
+        activeAccountPubkey?.let { nativeRemoveAccount(appHandle, it) }
         appContext?.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
             ?.edit()?.remove(KEY_STORED_NSEC)?.apply()
+        activeAccountPubkey = null
+        _activeAccountPubkeyFlow.value = null
     }
 
     /** Following feed — kind 20 scoped to contact list. */
@@ -345,14 +394,53 @@ object NMPBridge {
     fun blossomUploadInputJson(filePath: String, mime: String?, serverUrl: String?): String? =
         nativeBlossomUploadInputJson(filePath, mime, serverUrl)
 
-    /** Build the nmp.publish (PublishRaw) kind:20 input JSON in Rust from a Blossom result. */
+    /**
+     * P0-B: Build the nmp.publish (PublishRaw) kind:20 input JSON in Rust from
+     * an array of finished Blossom upload descriptors. Emits one kind:20 with
+     * multiple NIP-68 `imeta` tags — one per image.
+     *
+     * uploadedImagesJson: JSON array of
+     *   `[{"descriptor":{...BUD-02...},"alt":"...","dim":"WxH"}, ...]`
+     */
     fun picturePostPublishJson(
-        blossomResultJson: String,
+        uploadedImagesJson: String,
         caption: String?,
-        alt: String?,
-        dim: String?,
         geohash: String?,
-    ): String? = nativePicturePostPublishJson(blossomResultJson, caption, alt, dim, geohash)
+    ): String? = nativePicturePostPublishJson(uploadedImagesJson, caption, geohash)
+
+    // --- P0-A: Follow-pack discovery and bulk-apply --------------------------
+
+    /** Open kind:30000 follow-pack discovery interest (canonical Olas curators). */
+    fun openFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
+        nativeOpenFollowPackDiscovery(appHandle, consumerId)
+
+    /** Close follow-pack discovery interest. */
+    fun closeFollowPackDiscovery(consumerId: String = "olas.follow_packs") =
+        nativeCloseFollowPackDiscovery(appHandle, consumerId)
+
+    /**
+     * Decode a raw kind:30000 event JSON from the event observer into a
+     * FollowPackDescriptor JSON string (or null if not a valid pack event).
+     */
+    fun decodeFollowPackEventJson(eventJson: String): String? =
+        nativeDecodeFollowPackEventJson(eventJson)
+
+    /**
+     * Apply selected follow packs: dispatch nmp.follow for each pubkey.
+     * pubkeysJson: JSON array of hex pubkey strings (deduped, self-excluded by Rust).
+     * Returns: `{"follow_count":N,"feed_default":"following|network"}` or null.
+     */
+    fun applyFollowPackPubkeys(pubkeysJson: String, activePubkey: String = ""): String? =
+        nativeApplyFollowPackPubkeys(appHandle, pubkeysJson, activePubkey)
+
+    /**
+     * Live "Following" count for the active account — the number of distinct
+     * `p` tags in its current kind:3 contact list, read synchronously from the
+     * local event store (read-your-writes; reflects a just-applied follow pack
+     * with no relay round-trip). Returns 0 when unavailable / no list yet.
+     */
+    fun activeFollowingCount(): Int =
+        nativeActiveFollowingCount(appHandle).toInt().coerceAtLeast(0)
 
     /** Native supplies the raw OS location fix; Rust owns geohash precision/encoding. */
     fun locationGeohash4(latitude: Double, longitude: Double): String? =
@@ -387,4 +475,26 @@ object NMPBridge {
 
     fun releaseProfile(pubkey: String, consumerId: String) =
         nativeReleaseProfile(appHandle, pubkey, consumerId)
+
+    // --- Internal delegates for NMPBridgeP3.kt (P3-B/C/D, P0-E/F) ---------------
+    // These thin wrappers call private externals so the split file can expose
+    // the public API without triggering JVM name-mangling on `internal external fun`.
+
+    internal fun groupNotificationsJsonImpl(j: String): String? = nativeGroupNotificationsJson(j)
+    internal fun parseCaptionTagsJsonImpl(caption: String): String? = nativeParseCaptionTagsJson(caption)
+    internal fun picturePostPublishTaggedJsonImpl(u: String, c: String?, g: String?, e: String?): String? =
+        nativePicturePostPublishTaggedJson(u, c, g, e)
+    internal fun activeAccountRecoveryKeyImpl(): String? =
+        if (appHandle == 0L) null else nativeActiveAccountRecoveryKey(appHandle)
+    internal fun socialProofJsonImpl(ap: String, tp: String): String? =
+        nativeSocialProofJson(appHandle, ap, tp)
+    internal fun discoverSectionsJsonImpl(ap: String): String? =
+        nativeDiscoverSectionsJson(appHandle, ap)
+
+    // P2-A/P2-C invite delegates (public API exposed via NMPBridgeP3.kt).
+    internal fun resolveInviteJsonImpl(token: String): String? = nativeResolveInviteJson(token)
+    internal fun myInviteLinkImpl(): String? {
+        val pk = activeAccountPubkey ?: return null
+        return if (pk.isEmpty()) null else nativeMyInviteLink(pk)
+    }
 }

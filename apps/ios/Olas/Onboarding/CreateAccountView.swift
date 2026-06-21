@@ -10,7 +10,6 @@ struct CreateAccountView: View {
             HStack(spacing: 6) {
                 progressDot(filled: true)
                 progressDot(filled: false)
-                progressDot(filled: false)
             }
             .padding(.top, 56)
 

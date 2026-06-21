@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OnboardingCompleteView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("firstPostCoachmarkSeen") private var firstPostCoachmarkSeen = false
     @State private var checkmarkProgress: CGFloat = 0
     @State private var showContent = false
 
@@ -32,7 +33,7 @@ struct OnboardingCompleteView: View {
                     .font(OlasFont.title1())
                     .foregroundStyle(Color.olasText1)
 
-                Text("Your account is ready. Start exploring Olas.")
+                Text("Your account is ready. Share your first photo!")
                     .font(OlasFont.body())
                     .foregroundStyle(Color.olasText2)
                     .multilineTextAlignment(.center)
@@ -41,20 +42,38 @@ struct OnboardingCompleteView: View {
 
             Spacer()
 
-            Button {
-                hasCompletedOnboarding = true
-            } label: {
-                HStack(spacing: OlasSpacing.xs) {
-                    Text("Explore Olas")
-                        .font(OlasFont.headline())
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 16, weight: .semibold))
+            VStack(spacing: OlasSpacing.sm) {
+                // Primary CTA: open compose immediately after switching to the main UI.
+                Button {
+                    // Signal ContentView to open compose the moment it appears.
+                    UserDefaults.standard.set(true, forKey: "openComposeOnNextLaunch")
+                    // Coachmark not needed — compose is already opening.
+                    firstPostCoachmarkSeen = true
+                    hasCompletedOnboarding = true
+                } label: {
+                    HStack(spacing: OlasSpacing.xs) {
+                        Image(systemName: "camera")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Share your first photo")
+                            .font(OlasFont.headline())
+                    }
+                    .foregroundStyle(Color.olasBackground)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Color.olasText1, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .foregroundStyle(Color.olasBackground)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(Color.olasText1, in: RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(OlasPressedButtonStyle())
+
+                // Secondary CTA: go to feed; coachmark will appear near the compose tab.
+                Button {
+                    hasCompletedOnboarding = true
+                } label: {
+                    Text("Look around first")
+                        .font(OlasFont.subheadline())
+                        .foregroundStyle(Color.olasText2)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(OlasPressedButtonStyle())
             }
-            .buttonStyle(OlasPressedButtonStyle())
             .opacity(showContent ? 1 : 0)
             .padding(.horizontal, OlasSpacing.xl)
             .padding(.bottom, 48)

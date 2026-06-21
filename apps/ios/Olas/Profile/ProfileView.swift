@@ -8,8 +8,8 @@ struct ProfileView: View {
     @State private var posts: [PhotoPost] = []
     @State private var followingCount = 0
     @State private var followerCount = 0
-    @State private var selectedPost: PhotoPost?
     @State private var showSignIn = false
+    @Environment(PhotoLiftState.self) private var photoLift
 
     private var resolvedPubkey: String {
         pubkey ?? NMPBridge.shared.activeAccountPubkey ?? ""
@@ -18,63 +18,70 @@ struct ProfileView: View {
     @State private var showSettings = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Group {
-                if isOwn && resolvedPubkey.isEmpty {
-                    signInPrompt
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            Color.clear.frame(height: 44)
-                            ProfileHeaderView(
-                                profile: profile,
-                                isOwn: isOwn,
-                                followingCount: followingCount,
-                                followerCount: followerCount
-                            )
-                            Rectangle()
-                                .fill(Color.olasBorder)
-                                .frame(height: 1)
-                                .padding(.vertical, OlasSpacing.sm)
-                            ProfileGridView(posts: posts) { post in
-                                selectedPost = post
+        // Own profile is a tab root and owns its NavigationStack; when pushed
+        // from another screen (e.g. Search) it inherits the pusher's stack and
+        // must NOT nest a second one.
+        if isOwn {
+            NavigationStack { profileContent }
+        } else {
+            profileContent
+        }
+    }
+
+    private var navigationTitleText: String {
+        if isOwn { return "Profile" }
+        let name = profile.displayNameOrName
+        return name.isEmpty ? "Profile" : name
+    }
+
+    private var profileContent: some View {
+        Group {
+            if isOwn && resolvedPubkey.isEmpty {
+                signInPrompt
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ProfileHeaderView(
+                            profile: profile,
+                            isOwn: isOwn,
+                            followingCount: followingCount,
+                            followerCount: followerCount
+                        )
+                        Rectangle()
+                            .fill(Color.olasBorder)
+                            .frame(height: 1)
+                            .padding(.vertical, OlasSpacing.sm)
+                        ProfileGridView(posts: posts) { post in
+                            // Open via zoom transition to the same fullscreen viewer as the feed.
+                            withAnimation(.olasStandard) {
+                                photoLift.open(post: post, index: 0, context: "profile")
                             }
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.olasBackground)
-
-            // Custom nav bar — no NavigationStack to avoid UIKitAdaptableTabView on iOS 26
-            HStack {
-                Spacer()
-                Text("Profile")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.olasText1)
-                Spacer()
-                if isOwn && !resolvedPubkey.isEmpty {
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.olasBackground)
+        .navigationTitle(navigationTitleText)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if isOwn && !resolvedPubkey.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundStyle(Color.olasText1)
                     }
-                    .padding(.trailing, OlasSpacing.md)
-                } else {
-                    Color.clear.frame(width: 44, height: 44)
                 }
             }
-            .frame(height: 44)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.olasBorder).frame(height: 0.5)
-            }
         }
-        .background(Color.olasBackground)
         .onAppear { loadProfile() }
-        .onChange(of: NMPBridge.shared.activeAccountPubkey) { _, _ in
+        .onChange(of: NMPBridge.shared.activeAccountPubkey) { _, newValue in
             // Re-load when sign-in completes so the handler sees the correct pubkey.
             if isOwn { loadProfile() }
+            // Logout: account cleared → close Settings so we land on the sign-in prompt.
+            if isOwn, newValue == nil { showSettings = false }
         }
         .onDisappear {
             let pk = resolvedPubkey
@@ -89,9 +96,6 @@ struct ProfileView: View {
         .sheet(isPresented: $showSettings) {
             NavigationStack { SettingsView() }
         }
-        .sheet(item: $selectedPost) { post in
-            PostDetailView(post: post)
-        }
     }
 
     private var signInPrompt: some View {
@@ -102,7 +106,7 @@ struct ProfileView: View {
                 .foregroundStyle(Color.olasText3)
             VStack(spacing: OlasSpacing.xs) {
                 Text("Sign in to Olas")
-                    .font(OlasFont.title2())
+                    .font(OlasFont.title1())
                     .foregroundStyle(Color.olasText1)
                 Text("Use your Nostr key to access your profile and post photos.")
                     .font(OlasFont.body())
@@ -133,6 +137,10 @@ struct ProfileView: View {
         NMPBridge.shared.claimProfile(pubkey: pk)
         NMPBridge.shared.openAuthorPhotoFeed(pubkey: pk)
         let authorFeedKey = NMPBridge.authorPhotoFeedKey(pubkey: pk)
+        // Live "Following" count from the local kind:3 (own profile only). The
+        // contact list may not be ingested the instant the screen opens (e.g.
+        // right after onboarding applies a follow pack), so poll briefly.
+        if isOwn { refreshFollowingCount() }
         // Apply cached profile immediately if available (from snapshot).
         if let cached = NMPBridge.shared.profileCache[pk] {
             applyProfileWire(cached, pubkey: pk)
@@ -153,9 +161,27 @@ struct ProfileView: View {
         }
     }
 
+    private func refreshFollowingCount() {
+        // Poll until the kind:3 lands (read-your-writes is immediate after a
+        // local publish, but the contact list may still be syncing on open).
+        Task { @MainActor in
+            for _ in 0..<20 {
+                let count = NMPBridge.shared.activeFollowingCount()
+                if count != followingCount { followingCount = count }
+                if count > 0 { return }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+    }
+
     private func handleProfileEvent(_ json: String, pubkey: String) {
         guard let data = json.data(using: .utf8),
               let event = try? JSONDecoder().decode(NostrEvent.self, from: data) else { return }
+
+        // Active account's contact list changed — refresh the live count.
+        if isOwn, event.kind == 3, event.author == pubkey {
+            followingCount = NMPBridge.shared.activeFollowingCount()
+        }
 
         if event.kind == 0, event.author == pubkey {
             // Use the Rust decoder for consistent key casing and pubkey injection.
@@ -290,31 +316,6 @@ struct ManualKeySheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.foregroundStyle(Color.olasText2)
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-// MARK: - Post Detail
-
-struct PostDetailView: View {
-    let post: PhotoPost
-    @Environment(\.dismiss) private var dismiss
-    @State private var vm = FeedViewModel()
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                PostCardView(post: post, vm: vm)
-            }
-            .background(Color.olasBackground)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Color.olasText2)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)

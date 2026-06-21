@@ -2,15 +2,22 @@ import SwiftUI
 
 struct SuggestedAccountCard: View {
     let profile: OlasProfile
+    /// Social proof preloaded by the parent (Discover / Search). May be nil when
+    /// the card is rendered before social-proof data arrives.
+    let socialProof: SocialProof?
+
     @State private var isFollowing = false
     private var bridge: NMPBridge { NMPBridge.shared }
+
+    init(profile: OlasProfile, socialProof: SocialProof? = nil) {
+        self.profile = profile
+        self.socialProof = socialProof
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // Avatar
-            AsyncImage(url: URL(string: profile.picture ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+            CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)
             }
             .frame(width: 72, height: 72)
@@ -22,6 +29,14 @@ struct SuggestedAccountCard: View {
                     .font(OlasFont.feedUsername())
                     .foregroundStyle(Color.olasText1)
                     .lineLimit(1)
+
+                // Social proof line — truthful or honest fallback.
+                if let proof = socialProof {
+                    SocialProofRow(proof: proof)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity)
+                }
 
                 Button {
                     if isFollowing {

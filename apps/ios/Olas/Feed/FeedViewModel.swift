@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let feedDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag")
 
 @Observable @MainActor
 final class FeedViewModel {
@@ -8,6 +11,11 @@ final class FeedViewModel {
     var pendingNewCount = 0
     private var pendingPosts: [PhotoPost] = []
     private var handlerRegistered = false
+
+    let diagId = UInt32.random(in: 1000...9999)
+    init() {
+        feedDiag.error("FEEDDIAG vm.init id=\(self.diagId)")
+    }
 
     func start(mode: FeedMode) {
         let shouldReset = !handlerRegistered || self.mode != mode

@@ -15,6 +15,7 @@ struct PostCardActionsView: View {
                     color: post.isLiked ? .olasHeart : .olasText2,
                     label: "Like"
                 ) {
+                    OlasHaptics.impactLight()
                     withAnimation(.olasBouncy, completionCriteria: .logicallyComplete) {
                         likeScale = 1.35
                     } completion: {
@@ -151,6 +152,8 @@ struct ZapSheet: View {
     }
 
     private func sendZap() {
+        OlasHaptics.notificationSuccess()
+        OlasSound.zapChime()
         if let actionJSON = NMPBridge.shared.buildZapActionJSON(eventId: post.id, sats: selectedAmount) {
             _ = NMPBridge.shared.dispatchAction(namespace: "nmp.nip57.zap", json: actionJSON)
         }

@@ -3,10 +3,16 @@ package io.f7z.olas.feature.compose
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.parseCaptionTagsJson
+import io.f7z.olas.core.picturePostPublishTaggedJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -37,35 +44,103 @@ class UploadViewModel : ViewModel() {
     val state: StateFlow<UploadState> = _state.asStateFlow()
 
     /**
-     * Drive a NIP-68 picture post through the two canonical Rust actions, in
-     * lock-step with iOS. Native does only render + capability:
+     * P0-B: Drive a NIP-68 picture post through the two canonical Rust actions.
+     * Supports multi-image: each image is encoded + uploaded independently, then
+     * the full array of descriptors is passed to Rust's
+     * `olas_picture_post_publish_json` which emits ONE kind:20 with multiple
+     * NIP-68 `imeta` tags.
+     *
+     * Native does only render + capability:
      *   1. Downsample + JPEG-encode each image (render).
      *   2. Write the bytes to a temp file (capability — OS file I/O).
      *   3. Measure pixel dimensions for the imeta `dim` (a render fact).
      * Rust owns the rest: `nmp.blossom.upload` hashes + uploads; `nmp.publish`
-     * (PublishRaw) constructs, signs, and routes the kind:20. No SHA-256, no
-     * event JSON, no signing, no imeta assembly happen here. D8: no polling —
-     * each Rust action terminal resolves a suspended awaiter.
+     * constructs, signs, and routes the kind:20. D8: no polling.
      */
-    fun upload(context: Context, uris: List<Uri>, caption: String, altTexts: Map<Uri, String>) {
+    fun upload(
+        context: Context,
+        uris: List<Uri>,
+        caption: String,
+        altTexts: Map<Uri, String> = emptyMap(),
+        geohash: String? = null,
+        filter: PhotoFilter? = null,
+        intensity: Float = 1f,
+    ) {
         if (uris.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
             try {
                 _state.value = UploadState(UploadStep.ENCODING, 0f)
 
-                // Single-image parity with iOS: encode + upload the first image,
-                // await its BUD-02 descriptor, then publish one kind:20 carrying
-                // the caption + imeta. Rust signs + routes.
-                val uri = uris.first()
-                _state.value = _state.value.copy(step = UploadStep.UPLOADING, progress = 0f)
-                val publishInput = withContext(Dispatchers.IO) {
-                    uploadOne(appContext, uri, caption, altTexts[uri])
+                // Load media config from Rust once for all images.
+                val configJson = NMPBridge.mediaUploadConfigJson()
+                    ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
+                val config = runCatching { JSONObject(configJson) }.getOrNull()
+                val maxDimension = config?.optInt("max_dimension", 2048) ?: 2048
+                val jpegQuality = ((config?.optDouble("jpeg_quality", 0.92) ?: 0.92) * 100)
+                    .toInt().coerceIn(1, 100)
+
+                // Determine Blossom server list.
+                val servers = buildList {
+                    val configured = NMPBridge.blossomServerUrl().takeIf { it.isNotBlank() }
+                    if (configured != null) add(configured)
+                    add("https://blossom.band")
+                    add("https://blossom.primal.net")
+                }.distinct()
+
+                // Upload each image; collect descriptor + per-image metadata.
+                // Parity with iOS (CaptionView.swift): filteredPreview replaces images[0] only;
+                // subsequent images are uploaded unfiltered. Mirror that here.
+                val uploadedImages = JSONArray()
+                uris.forEachIndexed { index, uri ->
+                    val progress = index.toFloat() / uris.size
+                    _state.value = _state.value.copy(
+                        step     = UploadStep.UPLOADING,
+                        progress = progress,
+                    )
+                    val entry = withContext(Dispatchers.IO) {
+                        uploadOne(
+                            context       = appContext,
+                            uri           = uri,
+                            maxDimension  = maxDimension,
+                            jpegQuality   = jpegQuality,
+                            servers       = servers,
+                            filter        = if (index == 0) filter else null,
+                            intensity     = intensity,
+                        )
+                    }
+                    val obj = JSONObject().apply {
+                        put("descriptor", JSONObject(entry.descriptorJson))
+                        altTexts[uri]?.takeIf { it.isNotBlank() }?.let { put("alt", it) }
+                        put("dim", entry.dim)
+                    }
+                    uploadedImages.put(obj)
                 }
 
                 _state.value = UploadState(UploadStep.PUBLISHING, 1f)
-                // Dispatch publish; allow 30 s for relay confirmation before treating
-                // as optimistic success (event was signed+routed even if no OK arrived).
+
+                // P3-C: parse caption for nostr:npub mentions and #hashtag tokens so
+                // the published kind:20 carries p/t tags — mirrors iOS UploadQueue.
+                val extraTagsJson: String? = runCatching {
+                    val tagsJson = NMPBridge.parseCaptionTagsJson(caption) ?: return@runCatching null
+                    val obj = JSONObject(tagsJson)
+                    val combined = JSONArray()
+                    val pTags = obj.optJSONArray("p_tags") ?: JSONArray()
+                    val tTags = obj.optJSONArray("t_tags") ?: JSONArray()
+                    for (i in 0 until pTags.length()) combined.put(pTags.get(i))
+                    for (i in 0 until tTags.length()) combined.put(tTags.get(i))
+                    if (combined.length() > 0) combined.toString() else null
+                }.getOrNull()
+
+                // Build the publish input in Rust (one kind:20 for all images).
+                // Uses tagged variant so p/t tags from the caption are injected.
+                val publishInput = NMPBridge.picturePostPublishTaggedJson(
+                    uploadedImagesJson = uploadedImages.toString(),
+                    caption            = caption,
+                    geohash            = geohash,
+                    extraTagsJson      = extraTagsJson,
+                ) ?: throw IllegalStateException("Failed to build publish input")
+
                 val published = withTimeoutOrNull(30_000L) {
                     NMPBridge.dispatchAndAwaitResult("nmp.publish", publishInput)
                 }
@@ -79,42 +154,52 @@ class UploadViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Encode one image to a temp JPEG, upload via `nmp.blossom.upload`, await the
-     * BUD-02 descriptor, and return the ready-to-dispatch `nmp.publish` input
-     * JSON (built in Rust). Returns null on any failure.
-     */
-    private suspend fun uploadOne(context: Context, uri: Uri, caption: String, alt: String?): String {
-        // 1. Load upload config from Rust (max_dimension, jpeg_quality).
-        val configJson = NMPBridge.mediaUploadConfigJson() ?: """{"max_dimension":2048,"jpeg_quality":0.92}"""
-        val config = runCatching { JSONObject(configJson) }.getOrNull()
-        val maxDimension = config?.optInt("max_dimension", 2048) ?: 2048
-        val jpegQuality = ((config?.optDouble("jpeg_quality", 0.92) ?: 0.92) * 100).toInt().coerceIn(1, 100)
+    private data class UploadedEntry(val descriptorJson: String, val dim: String)
 
-        // 2. Decode + downsample (render).
+    /**
+     * Encode one image to a temp JPEG, upload via `nmp.blossom.upload`, and
+     * await the BUD-02 descriptor. Returns the descriptor JSON + dimensions.
+     *
+     * When [filter] is non-null and not "Original", the selected filter matrix
+     * (blended with identity at [intensity]) is rendered onto the bitmap via
+     * [Canvas] + [Paint] before JPEG compression — identical to the
+     * ColorFilter.colorMatrix overlay shown in the preview. This ensures the
+     * uploaded bytes match what the user saw (WYSIWYG).
+     */
+    private suspend fun uploadOne(
+        context: Context,
+        uri: Uri,
+        maxDimension: Int,
+        jpegQuality: Int,
+        servers: List<String>,
+        filter: PhotoFilter? = null,
+        intensity: Float = 1f,
+    ): UploadedEntry {
         val bitmap = context.contentResolver.openInputStream(uri).use { input ->
             BitmapFactory.decodeStream(input)
         } ?: throw IllegalStateException("Failed to decode image")
         val resized = downsample(bitmap, maxDimension)
-        val dim = "${resized.width}x${resized.height}"
+        // Bake the filter into pixel data using the same blendMatrix logic as
+        // FilterCarousel / EditPhotoScreen, so the JPEG matches the preview.
+        val toCompress = if (filter != null && filter.name != "Original") {
+            bakeFilter(resized, filter.matrix, intensity)
+        } else {
+            resized
+        }
+        val dim = "${toCompress.width}x${toCompress.height}"
 
-        // 3. Write JPEG to a temp file (capability).
         val tmp = File.createTempFile("olas_upload_", ".jpg", context.cacheDir)
         try {
-            tmp.outputStream().use { out -> resized.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out) }
+            tmp.outputStream().use { out ->
+                toCompress.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
+            }
 
-            // 4. Dispatch the Blossom upload action and await the descriptor.
-            // Try multiple servers in order; first success wins.
-            val servers = listOf(
-                NMPBridge.blossomServerUrl().takeIf { it.isNotBlank() } ?: "https://blossom.band",
-                "https://blossom.primal.net",
-            ).distinct()
             var terminal: NMPBridge.ActionTerminal? = null
             var lastError = "No servers tried"
             for (server in servers) {
                 val uploadInput = NMPBridge.blossomUploadInputJson(
-                    filePath = tmp.absolutePath,
-                    mime = "image/jpeg",
+                    filePath  = tmp.absolutePath,
+                    mime      = "image/jpeg",
                     serverUrl = server,
                 ) ?: continue
                 val result = NMPBridge.dispatchAndAwaitResult("nmp.blossom.upload", uploadInput)
@@ -122,24 +207,35 @@ class UploadViewModel : ViewModel() {
                     terminal = result
                     break
                 }
-                val reason = result?.reason?.takeIf { it.isNotEmpty() } ?: result?.resultJson?.take(150) ?: "dispatch rejected"
+                val reason = result?.reason?.takeIf { it.isNotEmpty() }
+                    ?: result?.resultJson?.take(150)
+                    ?: "dispatch rejected"
                 lastError = "[$server] $reason"
             }
             terminal ?: throw IllegalStateException("All servers failed. Last: $lastError")
-            if (terminal.resultJson == "null")
+            if (terminal.resultJson == "null") {
                 throw IllegalStateException("Upload returned empty result")
-
-            // 5. Build the nmp.publish (PublishRaw) input in Rust from the descriptor.
-            return NMPBridge.picturePostPublishJson(
-                blossomResultJson = terminal.resultJson,
-                caption = caption,
-                alt = alt,
-                dim = dim,
-                geohash = null,
-            ) ?: throw IllegalStateException("Failed to build publish input from upload result")
+            }
+            return UploadedEntry(descriptorJson = terminal.resultJson, dim = dim)
         } finally {
             tmp.delete()
         }
+    }
+
+    /**
+     * Apply [matrix] at [intensity] to [src] by drawing through a [Paint] with
+     * a [ColorMatrixColorFilter] onto a fresh [Bitmap]. Uses the same
+     * [blendMatrix] / [identityMatrix] functions as [FilterCarousel] so the
+     * result is pixel-identical to the Compose preview overlay.
+     */
+    private fun bakeFilter(src: Bitmap, matrix: FloatArray, intensity: Float): Bitmap {
+        val blended = blendMatrix(identityMatrix(), matrix, intensity)
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix(blended))
+        }
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(src, 0f, 0f, paint)
+        return out
     }
 
     private fun downsample(src: Bitmap, maxDimension: Int): Bitmap {

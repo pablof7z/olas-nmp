@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +35,31 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.ui.theme.OlasColors
+import org.json.JSONObject
+
+// ── Social proof helpers ─────────────────────────────────────────────────────
+
+/**
+ * Parse the raw social-proof JSON returned by Rust and produce a display string.
+ *
+ * "followed_by_mutuals" → "Followed by N of your follows"
+ * "new_account"         → null (caller may choose to show nothing)
+ */
+fun parseSocialProofLabel(json: String?): String? {
+    if (json == null) return null
+    return runCatching {
+        val obj = JSONObject(json)
+        val count = obj.optInt("mutual_count", 0)
+        val kind = obj.optString("reason_kind", "new_account")
+        when {
+            kind == "followed_by_mutuals" && count > 0 ->
+                "Followed by $count of your follows"
+            else -> null
+        }
+    }.getOrNull()
+}
+
+// ── ProfileHeader composable ─────────────────────────────────────────────────
 
 @Composable
 fun ProfileHeader(
@@ -39,11 +68,15 @@ fun ProfileHeader(
     isFollowing: Boolean,
     followerCount: Int,
     followingCount: Int,
+    socialProofJson: String?,
     onFollow: () -> Unit,
     onZap: () -> Unit,
     onEdit: () -> Unit,
+    onSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val socialProofLabel = parseSocialProofLabel(socialProofJson)
+
     Column(modifier = modifier.fillMaxWidth()) {
         // Banner — 16:9 aspect
         Box(
@@ -63,7 +96,6 @@ fun ProfileHeader(
         }
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Avatar overlapping banner — with monogram fallback when no picture
             Box(
                 modifier = Modifier
                     .padding(start = 16.dp)
@@ -100,6 +132,12 @@ fun ProfileHeader(
                 Text(profile.about, fontSize = 14.sp, color = OlasColors.Text1, maxLines = 5)
             }
 
+            // Real social proof row (others only) — NOT hardcoded.
+            if (!isOwnProfile && socialProofLabel != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(socialProofLabel, fontSize = 12.sp, color = OlasColors.Text2)
+            }
+
             Spacer(Modifier.height(12.dp))
 
             // Stats row
@@ -113,16 +151,25 @@ fun ProfileHeader(
 
             // Action buttons
             if (isOwnProfile) {
-                OutlinedButton(
-                    onClick  = onEdit,
-                    modifier = Modifier.fillMaxWidth().height(36.dp),
-                    border   = BorderStroke(1.dp, OlasColors.Text3),
-                    colors   = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor   = OlasColors.Text1,
-                    ),
-                ) {
-                    Text("Edit profile", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick  = onEdit,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        border   = BorderStroke(1.dp, OlasColors.Text3),
+                        colors   = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor   = OlasColors.Text1,
+                        ),
+                    ) {
+                        Text("Edit profile", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(
+                            imageVector        = Icons.Outlined.Settings,
+                            contentDescription = "Settings",
+                            tint               = OlasColors.Text1,
+                        )
+                    }
                 }
             } else {
                 Row {

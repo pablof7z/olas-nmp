@@ -25,6 +25,13 @@ enum SearchResultTab: String, CaseIterable {
     private var collectedProfiles: [String: OlasProfile] = [:]
     private var lastSearchQuery: String?
 
+    // Social-proof cache — populated asynchronously so the SwiftUI body never
+    // calls the synchronous WoT FFI directly.  Keyed by target pubkey.
+    private(set) var socialProofCache: [String: SocialProof] = [:]
+    // Tracks pubkeys whose proof has already been attempted to avoid re-queuing.
+    private var proofAttempted: Set<String> = []
+    private var proofTask: Task<Void, Never>?
+
     func startListening() {
         guard !isListening else { return }
         isListening = true
@@ -54,6 +61,8 @@ enum SearchResultTab: String, CaseIterable {
             profileResults = []
             postResults = []
             tagResults = []
+            socialProofCache = [:]
+            proofAttempted = []
             isSearching = false
             return
         }
@@ -67,6 +76,10 @@ enum SearchResultTab: String, CaseIterable {
         profileResults = []
         postResults = []
         tagResults = []
+        socialProofCache = [:]
+        proofAttempted = []
+        proofTask?.cancel()
+        proofTask = nil
         if let last = lastSearchQuery {
             NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
         }
@@ -79,6 +92,8 @@ enum SearchResultTab: String, CaseIterable {
         guard let last = lastSearchQuery else { return }
         NMPBridge.shared.closeSearchFeed(query: last, consumer: consumer)
         lastSearchQuery = nil
+        proofTask?.cancel()
+        proofTask = nil
     }
 
     private func handleSearchEvent(_ json: String) {
@@ -112,6 +127,9 @@ enum SearchResultTab: String, CaseIterable {
             let nip05 = (profile.nip05 ?? "").lowercased()
             return name.contains(q) || displayName.contains(q) || about.contains(q) || nip05.contains(q)
         }.sorted { ($0.displayNameOrName) < ($1.displayNameOrName) }
+        // Precompute social proof off the SwiftUI body builder (avoids main-thread
+        // jank from synchronous WoT FFI during layout). Runs after profileResults set.
+        loadSocialProofForResults()
     }
 
     private func tags(from posts: [PhotoPost], matching query: String) -> [String] {
@@ -124,6 +142,30 @@ enum SearchResultTab: String, CaseIterable {
         }
         return Array(tagSet).sorted()
     }
+
+    /// Asynchronously loads social-proof for any newly-appearing profile pubkeys.
+    /// Yields between each FFI call so other main-actor work (renders) can interleave.
+    /// Proof values are stored in `socialProofCache`; `@Observable` propagates the change.
+    private func loadSocialProofForResults() {
+        let activePubkey = NMPBridge.shared.activeAccountPubkey ?? ""
+        guard !activePubkey.isEmpty else { return }
+        let newPubkeys = profileResults.map { $0.pubkey }.filter { !proofAttempted.contains($0) }
+        guard !newPubkeys.isEmpty else { return }
+        proofAttempted.formUnion(newPubkeys)
+        proofTask?.cancel()
+        proofTask = Task { @MainActor [weak self] in
+            for pubkey in newPubkeys {
+                guard !Task.isCancelled, let self else { return }
+                if let json = NMPBridge.shared.socialProofJSON(activePubkey: activePubkey, targetPubkey: pubkey),
+                   let data = json.data(using: .utf8),
+                   let proof = try? JSONDecoder().decode(SocialProof.self, from: data) {
+                    self.socialProofCache[pubkey] = proof
+                }
+                // Yield so other scheduled main-actor work (renders) can run between items.
+                await Task.yield()
+            }
+        }
+    }
 }
 
 // MARK: - SearchView
@@ -133,44 +175,25 @@ struct SearchView: View {
     @State private var selectedResultTab: SearchResultTab = .people
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Custom search bar header — no NavigationStack
-            HStack(spacing: OlasSpacing.sm) {
-                HStack(spacing: OlasSpacing.xs) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(Color.olasText3)
-                        .font(.system(size: 15))
-                    TextField("Search people, photos, tags", text: $vm.query)
-                        .font(OlasFont.body())
-                        .foregroundStyle(Color.olasText1)
-                        .autocorrectionDisabled()
-                        .autocapitalization(.none)
-                        .submitLabel(.search)
-                    if !vm.query.isEmpty {
-                        Button { vm.query = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(Color.olasText3)
-                        }
-                    }
+        NavigationStack {
+            Group {
+                if vm.query.isEmpty {
+                    DiscoverView()
+                } else {
+                    searchResults
                 }
-                .padding(.horizontal, OlasSpacing.sm)
-                .padding(.vertical, 8)
-                .background(Color.olasSurface2, in: RoundedRectangle(cornerRadius: 10))
             }
-            .padding(.horizontal, OlasSpacing.md)
-            .padding(.vertical, OlasSpacing.xs)
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Color.olasBorder).frame(height: 0.5)
-            }
-
-            if vm.query.isEmpty {
-                DiscoverView()
-            } else {
-                searchResults
-            }
+            .background(Color.olasBackground)
+            .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(
+                text: $vm.query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search people, photos, tags"
+            )
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
         }
-        .background(Color.olasBackground)
         .onChange(of: vm.query) { _, newQuery in
             vm.onQueryChanged(newQuery)
         }
@@ -242,9 +265,7 @@ struct SearchView: View {
                     LazyVGrid(columns: columns, spacing: 1) {
                         ForEach(vm.postResults) { post in
                             NavigationLink(destination: Text(post.id)) {
-                                AsyncImage(url: URL(string: post.images.first?.url ?? "")) { img in
-                                    img.resizable().scaledToFill()
-                                } placeholder: {
+                                CachedImage(url: URL(string: post.images.first?.url ?? "")) {
                                     Rectangle().fill(Color.olasSurface2)
                                 }
                                 .aspectRatio(1, contentMode: .fill)
@@ -280,10 +301,11 @@ struct SearchView: View {
     }
 
     private func profileRow(_ profile: OlasProfile) -> some View {
-        HStack(spacing: OlasSpacing.md) {
-            AsyncImage(url: URL(string: profile.picture ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+        // Read from cache — populated asynchronously by loadSocialProofForResults()
+        // so the body never calls the synchronous WoT FFI during layout.
+        let proof = vm.socialProofCache[profile.pubkey]
+        return HStack(spacing: OlasSpacing.md) {
+            CachedImage(url: URL(string: profile.picture ?? "")) {
                 Circle().fill(Color.olasSurface2)
             }
             .frame(width: 44, height: 44)
@@ -297,6 +319,8 @@ struct SearchView: View {
                     Text(nip05)
                         .font(OlasFont.caption())
                         .foregroundStyle(Color.olasText2)
+                } else if let proof = proof {
+                    SocialProofRow(proof: proof)
                 }
             }
         }

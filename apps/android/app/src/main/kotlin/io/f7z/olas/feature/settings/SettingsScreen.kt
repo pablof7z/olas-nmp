@@ -11,26 +11,40 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
 import androidx.compose.runtime.remember
 import androidx.navigation.NavController
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.myInviteLink
+import io.f7z.olas.core.OlasSound
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
 
@@ -38,6 +52,28 @@ import io.f7z.olas.ui.theme.OlasColors
 fun SettingsScreen(navController: NavController) {
     // Settings catalog loaded from Rust; local structure mirrors the canonical Rust catalog.
     val settingsCatalog = remember { NMPBridge.settingsCatalogJson() }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var soundEffectsEnabled by remember { mutableStateOf(OlasSound.isEnabled(context)) }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title   = { Text("Log out of Olas?") },
+            text    = { Text("You'll need your Nostr key to sign back in.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutConfirm = false
+                    NMPBridge.signOut()
+                }) { Text("Log out", color = OlasColors.Destructive) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) { Text("Cancel") }
+            },
+            containerColor = OlasColors.Surface,
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -52,6 +88,19 @@ fun SettingsScreen(navController: NavController) {
             SettingsRow(icon = Icons.Filled.Shield, label = "Account security") {
                 navController.navigate(Routes.ACCOUNT_SECURITY)
             }
+            // P2-C: generate + share the user's personal invite link.
+            SettingsRow(icon = Icons.Filled.PersonAdd, label = "Invite friends") {
+                val link = NMPBridge.myInviteLink() ?: return@SettingsRow
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "Join me on Olas")
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "Check out Olas — photos without the algorithm. Use my invite link to join! $link",
+                    )
+                }
+                context.startActivity(Intent.createChooser(intent, "Invite friends"))
+            }
         }
         item {
             Spacer(Modifier.height(16.dp))
@@ -61,6 +110,19 @@ fun SettingsScreen(navController: NavController) {
             SettingsRow(icon = Icons.Filled.Tune, label = "Web of Trust") {
                 navController.navigate(Routes.WOT_SETTINGS)
             }
+        }
+        item {
+            Spacer(Modifier.height(16.dp))
+            SettingsSectionHeader("Sound")
+        }
+        item {
+            SoundEffectsRow(
+                enabled = soundEffectsEnabled,
+                onToggle = { enabled ->
+                    soundEffectsEnabled = enabled
+                    OlasSound.setEnabled(context, enabled)
+                },
+            )
         }
         item {
             Spacer(Modifier.height(16.dp))
@@ -77,7 +139,37 @@ fun SettingsScreen(navController: NavController) {
                 navController.navigate(Routes.WALLET_SETTINGS)
             }
         }
+        item {
+            Spacer(Modifier.height(16.dp))
+            DestructiveRow(
+                icon = Icons.AutoMirrored.Filled.Logout,
+                label = "Log out",
+            ) { showLogoutConfirm = true }
+        }
         item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+@Composable
+private fun DestructiveRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = OlasColors.Destructive)
+        Text(
+            text     = label,
+            fontSize = 17.sp,
+            color    = OlasColors.Destructive,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
     }
 }
 
@@ -116,6 +208,34 @@ fun SettingsRow(
             imageVector        = Icons.Filled.ChevronRight,
             contentDescription = null,
             tint               = OlasColors.Text3,
+        )
+    }
+    HorizontalDivider(color = OlasColors.Border.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 52.dp))
+}
+
+@Composable
+private fun SoundEffectsRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(imageVector = Icons.Filled.VolumeUp, contentDescription = null, tint = OlasColors.Text2)
+        Text(
+            text     = "Sound Effects",
+            fontSize = 17.sp,
+            color    = OlasColors.Text1,
+            modifier = Modifier.weight(1f).padding(start = 12.dp),
+        )
+        Switch(
+            checked         = enabled,
+            onCheckedChange = onToggle,
+            colors          = SwitchDefaults.colors(
+                checkedThumbColor   = OlasColors.Background,
+                checkedTrackColor   = OlasColors.Text1,
+                uncheckedTrackColor = OlasColors.Surface2,
+            ),
         )
     }
     HorizontalDivider(color = OlasColors.Border.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(start = 52.dp))

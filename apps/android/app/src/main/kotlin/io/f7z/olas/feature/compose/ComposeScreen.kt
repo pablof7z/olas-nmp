@@ -21,7 +21,9 @@ import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.launch
 
 // Step ordering is validated against NMPBridge.composeStepsJson() at startup.
+// Camera is a native-only first step; Rust still owns photo_picker/edit/caption.
 private sealed interface ComposeStep {
+    object Camera : ComposeStep
     object Pick : ComposeStep
     data class Edit(val uris: List<Uri>) : ComposeStep
     data class Caption(val uris: List<Uri>, val filter: PhotoFilter, val intensity: Float) : ComposeStep
@@ -34,7 +36,7 @@ fun ComposeScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     // Verify step ordering from Rust on first composition (no-op if null — Rust not yet wired).
     val steps = remember { NMPBridge.composeStepsJson() }
-    var step by remember { mutableStateOf<ComposeStep>(ComposeStep.Pick) }
+    var step by remember { mutableStateOf<ComposeStep>(ComposeStep.Camera) }
 
     ModalBottomSheet(
         onDismissRequest   = { navController.popBackStack() },
@@ -48,9 +50,15 @@ fun ComposeScreen(navController: NavController) {
                 .background(OlasColors.Background),
         ) {
             when (val current = step) {
+                is ComposeStep.Camera -> {
+                    CameraScreen(onCapture = { uri ->
+                        step = ComposeStep.Edit(listOf(uri))
+                    })
+                }
                 is ComposeStep.Pick -> {
                     PhotoPickerScreen(onSelected = { uris ->
                         if (uris.isNotEmpty()) step = ComposeStep.Edit(uris)
+                        else step = ComposeStep.Camera
                     })
                 }
                 is ComposeStep.Edit -> {
@@ -63,8 +71,10 @@ fun ComposeScreen(navController: NavController) {
                 }
                 is ComposeStep.Caption -> {
                     CaptionScreen(
-                        uris    = current.uris,
-                        onShare = {
+                        uris      = current.uris,
+                        filter    = current.filter,
+                        intensity = current.intensity,
+                        onShare   = {
                             scope.launch {
                                 sheetState.hide()
                                 navController.popBackStack()

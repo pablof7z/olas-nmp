@@ -1,18 +1,23 @@
 package io.f7z.olas.feature.onboarding
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +42,12 @@ import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
 fun WelcomeScreen(navController: NavController) {
+    val vm: OnboardingViewModel = viewModel()
+    val state by vm.uiState.collectAsStateWithLifecycle()
+
+    // P2-A: consume the pending invite token exactly once when the welcome screen appears.
+    LaunchedEffect(Unit) { vm.consumePendingInvite() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -58,6 +69,11 @@ fun WelcomeScreen(navController: NavController) {
             verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.Start,
         ) {
+            // P2-A: "A friend invited you" banner shown when launched via an invite link.
+            if (state.inviterPubkey != null) {
+                InviteBanner()
+                Spacer(Modifier.height(24.dp))
+            }
             Text(
                 text       = "olas",
                 fontSize   = 52.sp,
@@ -95,6 +111,33 @@ fun WelcomeScreen(navController: NavController) {
                 Text("I have an account", color = OlasColors.Text2, fontSize = 17.sp)
             }
         }
+    }
+}
+
+// P2-A: shown on WelcomeScreen when the app is launched via an invite link.
+@Composable
+private fun InviteBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(OlasColors.Surface2, RoundedCornerShape(12.dp))
+            .border(1.dp, OlasColors.Border, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector        = Icons.Filled.Mail,
+            contentDescription = null,
+            tint               = OlasColors.Blue,
+        )
+        // Title only — never render the inviter's npub/pubkey (no-jargon rule).
+        Text(
+            text       = "A friend invited you",
+            fontSize   = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color      = OlasColors.Text1,
+            modifier   = Modifier.weight(1f).padding(start = 10.dp),
+        )
     }
 }
 

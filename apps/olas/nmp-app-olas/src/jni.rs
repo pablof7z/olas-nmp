@@ -8,8 +8,8 @@ use jni::sys::{jlong, jstring};
 use jni::JNIEnv;
 use nmp_ffi::{
     nmp_app_add_relay, nmp_app_consume_all_builtin_projections, nmp_app_free, nmp_app_new,
-    nmp_app_set_update_callback, nmp_app_signin_nsec, nmp_app_start, nmp_app_stop, nmp_free_string,
-    NmpApp,
+    nmp_app_remove_account, nmp_app_set_update_callback, nmp_app_signin_nsec, nmp_app_start,
+    nmp_app_stop, nmp_free_string, NmpApp,
 };
 
 use crate::{olas_app_register, olas_create_account};
@@ -296,6 +296,25 @@ pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeSignInNsec(
             return;
         };
         nmp_app_signin_nsec(app, secret.as_ptr(), 1);
+    }));
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_f7z_olas_core_NMPBridge_nativeRemoveAccount(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    identity_id: JString,
+) {
+    if handle == 0 {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let (app, _) = unpack(handle);
+        let Some(identity_id) = jstring_to_cstring(&mut env, &identity_id) else {
+            return;
+        };
+        nmp_app_remove_account(app, identity_id.as_ptr());
     }));
 }
 

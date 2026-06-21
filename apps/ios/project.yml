@@ -14,6 +14,9 @@ packages:
   FlatBuffers:
     url: https://github.com/google/flatbuffers.git
     from: 25.12.19
+  Kingfisher:
+    url: https://github.com/onevcat/Kingfisher.git
+    from: 8.0.0
 targets:
   Olas:
     type: application
@@ -23,6 +26,7 @@ targets:
       - path: Components
     dependencies:
       - package: FlatBuffers
+      - package: Kingfisher
     info:
       path: Olas/Info.plist
       properties:
@@ -40,6 +44,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UIApplicationSupportsIndirectInputEvents: true
+        NSCameraUsageDescription: "Olas uses your camera so you can capture and share photos."
         LSApplicationQueriesSchemes:
           - nostrsigner
           - primal

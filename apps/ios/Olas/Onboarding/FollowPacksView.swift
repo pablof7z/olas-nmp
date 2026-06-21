@@ -1,12 +1,14 @@
 import SwiftUI
 
+// P0-A: follow packs are sourced from Rust-decoded kind:30000 events.
+// The old hardcoded FollowPack.defaults array has been removed.
+
 struct FollowPacksView: View {
     @Bindable var vm: OnboardingViewModel
-    private let packs = FollowPack.defaults
 
     private var selectedCount: Int { vm.selectedPackIds.count }
-    private var creatorCount: Int {
-        packs
+    private var totalCreators: Int {
+        vm.discoveredPacks
             .filter { vm.selectedPackIds.contains($0.id) }
             .reduce(0) { $0 + $1.count }
     }
@@ -25,18 +27,24 @@ struct FollowPacksView: View {
 
             ScrollView {
                 VStack(spacing: OlasSpacing.sm) {
-                    ForEach(packs) { pack in
-                        FollowPackCard(
-                            pack: pack,
-                            isSelected: vm.selectedPackIds.contains(pack.id),
-                            onToggle: {
-                                if vm.selectedPackIds.contains(pack.id) {
-                                    vm.selectedPackIds.remove(pack.id)
-                                } else {
-                                    vm.selectedPackIds.insert(pack.id)
+                    if vm.discoveredPacks.isEmpty {
+                        // Loading state: packs arrive via the event observer
+                        ProgressView()
+                            .padding(.top, OlasSpacing.xl)
+                    } else {
+                        ForEach(vm.discoveredPacks) { pack in
+                            FollowPackCard(
+                                pack: pack,
+                                isSelected: vm.selectedPackIds.contains(pack.id),
+                                onToggle: {
+                                    if vm.selectedPackIds.contains(pack.id) {
+                                        vm.selectedPackIds.remove(pack.id)
+                                    } else {
+                                        vm.selectedPackIds.insert(pack.id)
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
                 .padding(.horizontal, OlasSpacing.md)
@@ -44,6 +52,8 @@ struct FollowPacksView: View {
                 .padding(.bottom, 120)
             }
         }
+        .onAppear { vm.startPackDiscovery() }
+        .onDisappear { vm.stopPackDiscovery() }
 
         // Bottom bar
         VStack(spacing: 0) {
@@ -51,14 +61,13 @@ struct FollowPacksView: View {
 
             VStack(spacing: OlasSpacing.sm) {
                 if selectedCount > 0 {
-                    Text("\(selectedCount) pack\(selectedCount == 1 ? "" : "s") · \(creatorCount) creators")
+                    Text("\(selectedCount) pack\(selectedCount == 1 ? "" : "s") · \(totalCreators) creators")
                         .font(OlasFont.subheadline())
                         .foregroundStyle(Color.olasText2)
                 }
 
                 Button {
-                    followSelectedPacks()
-                    vm.advance(to: .mediaServer)
+                    vm.applySelectedPacks()
                 } label: {
                     Text(selectedCount > 0 ? "Continue" : "Skip")
                         .font(OlasFont.headline())
@@ -74,25 +83,12 @@ struct FollowPacksView: View {
             .background(Color.olasBackground)
         }
     }
-
-    private func followSelectedPacks() {
-        guard !vm.selectedPackIds.isEmpty else { return }
-        let selectedPacks = packs.filter { vm.selectedPackIds.contains($0.id) }
-        for pack in selectedPacks {
-            for pubkey in pack.previewPubkeys {
-                let json = "{\"pubkey\":\"\(pubkey)\"}"
-                _ = NMPBridge.shared.dispatchAction(namespace: "nmp.follow", json: json)
-            }
-        }
-    }
 }
 
 struct FollowPackCard: View {
-    let pack: FollowPack
+    let pack: FollowPackDescriptor
     let isSelected: Bool
     let onToggle: () -> Void
-
-    private let previewAvatars = (1...6).map { "https://i.pravatar.cc/150?img=\($0 + 30)" }
 
     var body: some View {
         Button(action: onToggle) {
@@ -122,21 +118,13 @@ struct FollowPackCard: View {
                             .foregroundStyle(isSelected ? Color(hex: pack.accentColor) : Color.olasBorder)
                     }
 
-                    // Preview avatars
+                    // Preview avatars — real member pubkeys from Rust
                     HStack(spacing: -10) {
-                        ForEach(previewAvatars.prefix(6), id: \.self) { url in
-                            AsyncImage(url: URL(string: url)) { img in
-                                img.resizable().scaledToFill()
-                            } placeholder: {
-                                Circle().fill(Color.olasSurface2)
-                            }
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.olasSurface, lineWidth: 1.5))
+                        ForEach(pack.pubkeys.prefix(6), id: \.self) { pubkey in
+                            NostrAvatar(pubkey: pubkey, size: 28)
+                                .overlay(Circle().stroke(Color.olasSurface, lineWidth: 1.5))
                         }
-
                         Spacer()
-
                         Text("\(pack.count) creators")
                             .font(OlasFont.caption())
                             .foregroundStyle(Color.olasText2)

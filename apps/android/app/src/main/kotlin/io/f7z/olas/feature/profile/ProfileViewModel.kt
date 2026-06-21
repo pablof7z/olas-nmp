@@ -3,6 +3,7 @@ package io.f7z.olas.feature.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.socialProofJson
 import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.core.PhotoPost
@@ -24,6 +25,11 @@ data class ProfileUiState(
     val posts: List<PhotoPost> = emptyList(),
     val isLoading: Boolean = true,
     val isFollowing: Boolean = false,
+    /** Raw Rust JSON for the social-proof row; null until queried or when graph empty. */
+    val socialProofJson: String? = null,
+    // Live "Following" count for the active account's own profile, read from the
+    // local kind:3 (read-your-writes). Only meaningful for the own profile.
+    val followingCount: Int = 0,
 )
 
 class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
@@ -38,9 +44,29 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
     @Volatile
     private var targetPubkey: String? = requestedPubkey ?: NMPBridge.activeAccountPubkey
 
+    // Own profile when no specific pubkey was requested (or it matches the active account).
+    private val isOwnProfile: Boolean
+        get() = requestedPubkey == null || requestedPubkey == NMPBridge.activeAccountPubkey
+
     init {
         // Start listening immediately — non-blocking flow subscriptions.
         listenForProfile()
+
+        // Read the live Following count from the local kind:3. The contact list
+        // may not be ingested the instant the screen opens (e.g. right after
+        // onboarding applies a follow pack), so poll briefly until it lands.
+        if (isOwnProfile) {
+            viewModelScope.launch {
+                repeat(20) {
+                    val count = NMPBridge.activeFollowingCount()
+                    if (count != _uiState.value.followingCount) {
+                        _uiState.value = _uiState.value.copy(followingCount = count)
+                    }
+                    if (count > 0) return@launch
+                    delay(250L)
+                }
+            }
+        }
 
         // Claim profile on IO thread so we never block the main thread waiting on
         // the Rust actor channel (which may be busy delivering feed events).
@@ -56,6 +82,15 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             NMPBridge.openAuthorPhotoFeed(pk)
             NMPBridge.currentPhotoFeedJson(NMPBridge.authorPhotoFeedKey(pk))
                 ?.let { applyAuthorFeedSnapshot(pk, it, allowEmpty = false) }
+            // Load social proof for other profiles (own profile has no social proof).
+            if (requestedPubkey != null) {
+                val activePk = NMPBridge.activeAccountPubkey
+                    ?: NMPBridge.activeAccountPubkeyFlow.filterNotNull().first()
+                val proofJson = NMPBridge.socialProofJson(activePk, pk)
+                if (proofJson != null) {
+                    _uiState.value = _uiState.value.copy(socialProofJson = proofJson)
+                }
+            }
         }
 
         // After 10s with no profile, show a minimal stub using the pubkey.
@@ -99,13 +134,23 @@ class ProfileViewModel(private val requestedPubkey: String?) : ViewModel() {
             .onEach { raw ->
                 val event = runCatching { json.decodeFromString<NostrEvent>(raw) }.getOrNull()
                     ?: return@onEach
-                if (event.kind != 0) return@onEach
-                if (targetPubkey != null && event.author != targetPubkey) return@onEach
-                val profileJson = NMPBridge.decodeKind0EventJson(raw) ?: return@onEach
-                val profile = runCatching { json.decodeFromString<OlasProfile>(profileJson) }
-                    .getOrNull()
-                    ?: return@onEach
-                _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
+                when (event.kind) {
+                    3 -> {
+                        // Active account's contact list changed — refresh the count.
+                        if (isOwnProfile && event.author == NMPBridge.activeAccountPubkey) {
+                            val count = NMPBridge.activeFollowingCount()
+                            _uiState.value = _uiState.value.copy(followingCount = count)
+                        }
+                    }
+                    0 -> {
+                        if (targetPubkey != null && event.author != targetPubkey) return@onEach
+                        val profileJson = NMPBridge.decodeKind0EventJson(raw) ?: return@onEach
+                        val profile = runCatching { json.decodeFromString<OlasProfile>(profileJson) }.getOrNull() ?: return@onEach
+                        _uiState.value = _uiState.value.copy(profile = profile, isLoading = false)
+                    }
+                    // kind:20 posts are loaded via the photoFeedsJson projection
+                    // (applyAuthorFeedSnapshot), not the raw event handler.
+                }
             }
             .launchIn(viewModelScope)
     }

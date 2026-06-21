@@ -2,6 +2,7 @@ import Foundation
 import OlasFFI
 import SwiftUI
 import Combine
+import os
 
 // ── Bridge ───────────────────────────────────────────────────────────────────
 
@@ -184,10 +185,14 @@ import Combine
     }
 
     func handleActiveAccountJSON(_ json: String) {
+        os.Logger(subsystem: "io.f7z.olas", category: "feeddiag").error("FEEDDIAG activeAccountJSON raw=\(json) current=\(self.activeAccountPubkey ?? "nil")")
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let pubkey = obj["pubkey"], !pubkey.isEmpty else { return }
-        if activeAccountPubkey != pubkey { activeAccountPubkey = pubkey }
+        if activeAccountPubkey != pubkey {
+            os.Logger(subsystem: "io.f7z.olas", category: "feeddiag").error("FEEDDIAG activeAccountPubkey CHANGED \(self.activeAccountPubkey ?? "nil") -> \(pubkey)")
+            activeAccountPubkey = pubkey
+        }
     }
 
     func handlePhotoFeedJSON(key: String, json: String) {
@@ -281,6 +286,17 @@ import Combine
     func signInBunker(_ uri: String) {
         guard let app = appPtr else { return }
         uri.withCString { nmp_app_signin_bunker(app, $0, 1) }
+    }
+
+    /// Sign out of the active account: remove its signer from the kernel and
+    /// clear local active-account state so the UI reverts to the sign-in prompt.
+    /// `identity_id` is the active account's hex pubkey (nmp-core keys accounts
+    /// by pubkey hex). A removed active account produces no `active_account`
+    /// snapshot frame, so nothing clears `activeAccountPubkey` for us — do it here.
+    func signOut() {
+        guard let app = appPtr, let pubkey = activeAccountPubkey, !pubkey.isEmpty else { return }
+        pubkey.withCString { nmp_app_remove_account(app, $0) }
+        activeAccountPubkey = nil
     }
 
     // MARK: - Feed
@@ -420,6 +436,66 @@ import Combine
     func setWotPreset(_ preset: String) {
         guard let app = appPtr else { return }
         preset.withCString { olas_wot_preset_set(app, $0) }
+    }
+
+    // MARK: - P0-E: Real social proof
+
+    /// Query social proof for `targetPubkey` from `activePubkey`'s follow graph.
+    /// Returns: `{"mutual_followers":[...],"mutual_count":N,"reason_kind":"followed_by_mutuals"|"new_account"}`
+    /// Returns nil when the active account is unknown or the WoT graph is not yet bootstrapped.
+    func socialProofJSON(activePubkey: String, targetPubkey: String) -> String? {
+        guard let app = appPtr, !activePubkey.isEmpty, !targetPubkey.isEmpty else { return nil }
+        return activePubkey.withCString { ap in
+            targetPubkey.withCString { tp in
+                guard let res = olas_social_proof_json(app, ap, tp) else { return nil }
+                defer { nmp_free_string(res) }
+                return String(cString: res)
+            }
+        }
+    }
+
+    // MARK: - P0-F: Ranked discover sections
+
+    /// Return ranked discover sections for `activePubkey` from the WoT follow graph.
+    /// Returns: `[{"title":"...","reason":"...","profiles":[{"pubkey":"...","mutual_count":N}]}]`
+    /// Returns nil when the active account is unknown or the WoT runtime is absent.
+    func discoverSectionsJSON(activePubkey: String) -> String? {
+        guard let app = appPtr, !activePubkey.isEmpty else { return nil }
+        return activePubkey.withCString { ap in
+            guard let res = olas_discover_sections_json(app, ap) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
+    // MARK: - P2-A: Invite link resolution
+
+    /// Decode an invite token (full URL, bare npub, or hex pubkey) into inviter info.
+    /// Returns `(pubkey: "<hex>", hint: "npub1...")` or nil.
+    func resolveInvite(token: String) -> (pubkey: String, hint: String)? {
+        token.withCString { t in
+            guard let res = olas_resolve_invite_json(t) else { return nil }
+            defer { nmp_free_string(res) }
+            guard let data = String(cString: res).data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                  let pk = obj["inviter_pubkey"],
+                  let hint = obj["display_hint"]
+            else { return nil }
+            return (pubkey: pk, hint: hint)
+        }
+    }
+
+    // MARK: - P2-C: Invite link minting
+
+    /// Mint the canonical invite link for the active user.
+    /// Returns "https://olas.app/i/<npub>" or nil when no account is active.
+    func myInviteLink() -> String? {
+        guard let pk = activeAccountPubkey, !pk.isEmpty else { return nil }
+        return pk.withCString { c in
+            guard let res = olas_my_invite_link(c) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
     }
 
 }

@@ -1,8 +1,11 @@
 import SwiftUI
+import os
+
+private let feedViewDiag = Logger(subsystem: "io.f7z.olas", category: "feeddiag")
 
 struct FeedView: View {
     @State private var vm = FeedViewModel()
-    @State private var showFullscreen: (post: PhotoPost, index: Int)?
+    @Environment(PhotoLiftState.self) private var photoLift
 
     private var currentMode: FeedMode {
         NMPBridge.shared.feedMode == "following" ? .following : .network
@@ -15,6 +18,7 @@ struct FeedView: View {
                     // New posts pill
                     if vm.pendingNewCount > 0 {
                         Button {
+                            OlasHaptics.impactSoft()
                             withAnimation(.olasStandard) {
                                 vm.revealNewPosts()
                             }
@@ -35,7 +39,9 @@ struct FeedView: View {
 
                     ForEach(vm.posts) { post in
                         PostCardView(post: post, vm: vm, onImageTap: { idx in
-                            showFullscreen = (post, idx)
+                            withAnimation(.olasStandard) {
+                                photoLift.open(post: post, index: idx, context: "feed")
+                            }
                         })
                         .onAppear {
                             if post.id == vm.posts.last?.id {
@@ -60,6 +66,10 @@ struct FeedView: View {
             }
             .refreshable { vm.refresh() }
             .background(Color.olasBackground)
+            .onChange(of: vm.pendingNewCount) { oldValue, newValue in
+                // Fire a subtle selection tick the moment the first new-posts batch arrives.
+                if oldValue == 0 && newValue > 0 { OlasHaptics.selectionChanged() }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -72,20 +82,16 @@ struct FeedView: View {
                     feedPickerMenu
                 }
             }
-            .fullScreenCover(item: Binding(
-                get: { showFullscreen.map { p in FullscreenImageItem(post: p.post, index: p.index) } },
-                set: { _ in showFullscreen = nil }
-            )) { item in
-                FullscreenImageView(post: item.post, initialIndex: item.index)
-            }
         }
         .task {
+            feedViewDiag.error("FEEDDIAG FeedView.task fired vmId=\(vm.diagId) isRunning=\(NMPBridge.shared.isRunning)")
             vm.start(mode: currentMode)
             // If NMP was already running when the view appeared (e.g. tab revisit),
             // open the feed immediately.
             if NMPBridge.shared.isRunning { vm.openFeed() }
         }
         .onChange(of: NMPBridge.shared.isRunning) { _, running in
+            feedViewDiag.error("FEEDDIAG FeedView.onChange isRunning=\(running) vmId=\(vm.diagId)")
             // Open the feed the moment the bridge transitions to running — zero polling.
             if running { vm.openFeed() }
         }
@@ -113,18 +119,12 @@ struct FeedView: View {
 
     private func switchMode(_ mode: FeedMode) {
         guard mode != currentMode else { return }
+        OlasHaptics.selectionChanged()
         NMPBridge.shared.setFeedMode(mode == .following ? "following" : "network")
         vm.start(mode: mode)
         // NMP is always running when the user can interact with the mode picker.
         vm.openFeed()
     }
-}
-
-// Helper for fullscreen cover
-private struct FullscreenImageItem: Identifiable {
-    let id = UUID()
-    let post: PhotoPost
-    let index: Int
 }
 
 // MARK: - Skeleton
@@ -133,32 +133,95 @@ struct FeedSkeletonView: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<3, id: \.self) { _ in
-                skeletonCard
+                SkeletonCard()
                 Rectangle().fill(Color.olasBackground).frame(height: 8)
             }
         }
     }
+}
 
-    private var skeletonCard: some View {
+// Each card gets its own shimmer phase so sibling cards animate independently.
+private struct SkeletonCard: View {
+    @State private var shimmerPhase: CGFloat = -1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Header row
             HStack(spacing: OlasSpacing.sm) {
-                Circle().fill(Color.olasSurface2).frame(width: 32, height: 32)
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 100, height: 14)
+                Circle()
+                    .fill(Color.olasSurface2)
+                    .frame(width: 32, height: 32)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 100, height: 14)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
                 Spacer()
             }
             .padding(.horizontal, OlasSpacing.sm)
             .padding(.vertical, OlasSpacing.sm)
 
+            // Image placeholder — 4:5 aspect ratio matches feed default
             Rectangle()
                 .fill(Color.olasSurface2)
                 .frame(maxWidth: .infinity)
-                .aspectRatio(4.0/5.0, contentMode: .fill)
+                .aspectRatio(4.0 / 5.0, contentMode: .fill)
+                .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
 
+            // Caption lines
             VStack(alignment: .leading, spacing: OlasSpacing.xs) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 120, height: 13)
-                RoundedRectangle(cornerRadius: 4).fill(Color.olasSurface2).frame(width: 200, height: 13)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 120, height: 13)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.olasSurface2)
+                    .frame(width: 200, height: 13)
+                    .shimmer(phase: shimmerPhase, reduceMotion: reduceMotion)
             }
             .padding(OlasSpacing.sm)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(
+                .linear(duration: 1.4).repeatForever(autoreverses: false)
+            ) {
+                shimmerPhase = 1
+            }
+        }
+    }
+}
+
+// MARK: - Shimmer modifier
+
+private extension View {
+    /// Sweeps a highlight band left → right over the receiver.
+    /// When `reduceMotion` is true the modifier is a no-op (static surface only).
+    @ViewBuilder
+    func shimmer(phase: CGFloat, reduceMotion: Bool) -> some View {
+        if reduceMotion {
+            self
+        } else {
+            self.overlay(
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: Color.white.opacity(0.10), location: 0.4),
+                            .init(color: Color.white.opacity(0.18), location: 0.5),
+                            .init(color: Color.white.opacity(0.10), location: 0.6),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: w * 2)
+                    .offset(x: phase * w * 2 - w)
+                }
+                .clipped()
+            )
         }
     }
 }

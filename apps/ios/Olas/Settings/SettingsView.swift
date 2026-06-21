@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var showAdvanced = false
+    @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled = false
+    @State private var inviteLink: URL? = nil
 
     private struct SettingItem: Decodable { let id: String; let label: String }
 
@@ -57,6 +59,25 @@ struct SettingsView: View {
                 ForEach(displayTier1, id: \.id) { item in
                     NavigationLink(item.label) { destination(for: item.id) }
                 }
+                // P2-C: Invite friends — generate + share the user's personal link.
+                if let link = inviteLink {
+                    ShareLink(
+                        item: link,
+                        subject: Text("Join me on Olas"),
+                        message: Text("Check out Olas — photos without the algorithm. Use my invite link to join!")
+                    ) {
+                        Label("Invite friends", systemImage: "person.badge.plus")
+                    }
+                } else {
+                    Button {
+                        if let urlStr = NMPBridge.shared.myInviteLink(),
+                           let url = URL(string: urlStr) {
+                            inviteLink = url
+                        }
+                    } label: {
+                        Label("Invite friends", systemImage: "person.badge.plus")
+                    }
+                }
             }
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
@@ -71,6 +92,12 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
+        .task {
+            // Pre-load the invite link so the ShareLink renders immediately on tap.
+            if let urlStr = NMPBridge.shared.myInviteLink(), let url = URL(string: urlStr) {
+                inviteLink = url
+            }
+        }
     }
 
     private var notificationsSettings: some View {
@@ -98,6 +125,10 @@ struct SettingsView: View {
             }
             Section("Data") {
                 Toggle("Data Saver", isOn: .constant(false))
+            }
+            Section("Sound") {
+                Toggle("Sound Effects", isOn: $soundEffectsEnabled)
+                    .tint(Color.olasBlue)
             }
         }
         .scrollContentBackground(.hidden)
@@ -143,10 +174,8 @@ struct SettingsView: View {
     private var securitySettings: some View {
         List {
             Section {
-                Button("Export Recovery Key") {
-                    // Key export flow
-                }
-                .foregroundStyle(Color.olasDestructive)
+                NavigationLink("Back up account") { RecoveryKeyView() }
+                    .foregroundStyle(Color.olasText1)
                 Button("Backup to Keychain") {}
                     .foregroundStyle(Color.olasBlue)
             }
@@ -167,6 +196,8 @@ struct SettingsView: View {
 // MARK: - Account Settings
 
 struct AccountSettingsView: View {
+    @State private var showLogoutConfirm = false
+
     var body: some View {
         List {
             Section {
@@ -178,9 +209,17 @@ struct AccountSettingsView: View {
                 }
             }
             Section {
-                Button("Log out") {}
+                Button("Log out") { showLogoutConfirm = true }
                     .foregroundStyle(Color.olasDestructive)
             }
+        }
+        .confirmationDialog("Log out of Olas?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button("Log out", role: .destructive) {
+                NMPBridge.shared.signOut()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll need your Nostr key to sign back in.")
         }
         .scrollContentBackground(.hidden)
         .background(Color.olasBackground)

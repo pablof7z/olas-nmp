@@ -101,64 +101,33 @@ struct OlasProfile: Codable {
     }
 }
 
-// MARK: - Follow Pack
+// MARK: - Follow Pack (Rust-decoded from kind:30000 events)
 
-struct FollowPack: Identifiable {
-    let id: String
+/// Decoded from `olas_decode_follow_pack_event_json` — the Rust FFI source of truth.
+/// The old hardcoded `FollowPack.defaults` static has been removed (P0-A fix).
+struct FollowPackDescriptor: Identifiable, Codable {
+    let id: String           // JSON: "id"  (kind:30000 `d` tag)
     let name: String
     let description: String
-    let category: String
-    let accentColor: String
+    let accentColor: String  // JSON: "accent_color"
+    let pubkeys: [String]    // resolved member pubkeys from `p` tags
     let count: Int
-    let previewPubkeys: [String]
 
-    static let defaults: [FollowPack] = [
-        FollowPack(
-            id: "visual-storytellers",
-            name: "Visual Storytellers",
-            description: "Photographers pushing the boundaries of everyday imagery",
-            category: "Photography",
-            accentColor: "#0A84FF",
-            count: 847,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "world-travelers",
-            name: "World Travelers",
-            description: "Explore the globe through stunning travel photography",
-            category: "Travel",
-            accentColor: "#34C759",
-            count: 1203,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "digital-artists",
-            name: "Digital Artists",
-            description: "Cutting-edge digital art and creative visual design",
-            category: "Art",
-            accentColor: "#FF375F",
-            count: 629,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "food-culture",
-            name: "Food & Culture",
-            description: "Culinary photography celebrating food around the world",
-            category: "Food",
-            accentColor: "#FBB131",
-            count: 412,
-            previewPubkeys: []
-        ),
-        FollowPack(
-            id: "nostr-builders",
-            name: "Nostr Builders",
-            description: "Developers and creators building the open social web",
-            category: "Tech",
-            accentColor: "#BF5AF2",
-            count: 2891,
-            previewPubkeys: []
-        )
-    ]
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, count, pubkeys
+        case accentColor = "accent_color"
+    }
+}
+
+/// Returned by `olas_apply_follow_pack_pubkeys` after dispatching all follows.
+struct FollowPackApplyResult: Codable {
+    let followCount: Int    // JSON: "follow_count"
+    let feedDefault: String // JSON: "feed_default" — "following" | "network"
+
+    enum CodingKeys: String, CodingKey {
+        case followCount = "follow_count"
+        case feedDefault = "feed_default"
+    }
 }
 
 // MARK: - Feed Mode
@@ -198,6 +167,37 @@ enum UploadStep: Equatable {
     case publishing
     case done
     case error(String)
+}
+
+// MARK: - Grouped Notification (P3-B)
+
+/// Decoded from `olas_group_notifications_json`.
+/// Rust groups individual notifications by (kind, target_post_id) and deduplicates actors.
+struct OlasGroupedNotification: Identifiable, Codable {
+    let groupId: String
+    let kind: String           // "reaction" | "comment" | "mention" | "follow" | "repost" | "zap"
+    let targetPostId: String?
+    let actorPubkeys: [String] // hex pubkeys, deduped, most-recent first
+    let count: Int
+    let latestTs: Int64        // unix seconds — used for time-section assignment (native)
+    let zapSats: Int64?
+
+    var id: String { groupId }
+}
+
+// MARK: - Caption Tags (P3-C)
+
+/// Decoded from `olas_parse_caption_tags_json`.
+struct CaptionTagsPayload: Codable {
+    let content: String
+    let pTags: [[String]]  // [["p", hex_pubkey], …]
+    let tTags: [[String]]  // [["t", hashtag], …]
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case pTags = "p_tags"
+        case tTags = "t_tags"
+    }
 }
 
 // MARK: - Relay

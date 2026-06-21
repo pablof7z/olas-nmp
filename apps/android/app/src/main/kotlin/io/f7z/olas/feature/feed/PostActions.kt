@@ -27,7 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import io.f7z.olas.core.OlasHaptics
+import io.f7z.olas.core.OlasSound
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
@@ -93,8 +97,10 @@ private fun LikeButton(isLiked: Boolean, onClick: () -> Unit) {
         animationSpec = spring(dampingRatio = 0.4f),
         label = "like_scale",
     )
+    val view = LocalView.current
     IconButton(
         onClick  = {
+            OlasHaptics.impactLight(view)
             liked = !liked
             onClick()
         },
@@ -117,8 +123,15 @@ private fun ZapButton(onClick: () -> Unit) {
         animationSpec = spring(dampingRatio = 0.4f),
         label         = "zap_scale",
     )
+    val view = LocalView.current
+    val context = LocalContext.current
     IconButton(
-        onClick  = { zapped = !zapped; onClick() },
+        onClick  = {
+            OlasHaptics.notificationSuccess(view)
+            OlasSound.zapChime(context)  // parity with iOS zap chime
+            zapped = !zapped
+            onClick()
+        },
         modifier = Modifier.size(44.dp),
     ) {
         Icon(

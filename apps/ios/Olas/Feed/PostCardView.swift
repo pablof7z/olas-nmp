@@ -9,6 +9,8 @@ struct PostCardView: View {
     @State private var showHeartBurst = false
     @State private var heartBurstLocation: CGPoint = .zero
     @State private var isExpanded = false
+    @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(\.activeZoomId) private var activeZoomId
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,7 +34,7 @@ struct PostCardView: View {
                 if post.images.count == 1 {
                     singleImage(post.images[0], width: geo.size.width)
                         .onTapGesture { onImageTap?(0) }
-                        .onTapGesture(count: 2) { location in
+                        .onTapGesture(count: 2) { _ in
                             triggerHeartBurst(at: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2))
                             vm.toggleLike(postId: post.id)
                         }
@@ -49,26 +51,15 @@ struct PostCardView: View {
         .aspectRatio(imageAspectRatio, contentMode: .fit)
     }
 
+    @ViewBuilder
     private func singleImage(_ image: ImageMeta, width: CGFloat) -> some View {
-        AsyncImage(url: URL(string: image.url)) { phase in
-            switch phase {
-            case .success(let img):
-                img.resizable().scaledToFill()
-            case .failure:
-                ZStack {
-                    Rectangle().fill(Color.olasSurface2)
-                    Image(systemName: "photo")
-                        .font(.system(size: 40, weight: .thin))
-                        .foregroundStyle(Color.olasText3)
-                }
-            default:
-                Rectangle().fill(Color.olasSurface2).overlay {
-                    ProgressView().tint(Color.olasText3)
-                }
-            }
-        }
-        .frame(width: width)
-        .clipped()
+        let sourceId = "feed-\(post.id)-0"
+        CachedImage(url: URL(string: image.url), meta: image)
+            .frame(width: width)
+            .clipped()
+            // Yield source ownership when this thumbnail is the active lift so
+            // the fullscreen image (isSource: true) controls its own full-screen frame.
+            .zoomSource(id: sourceId, namespace: zoomNamespace, isLiftActive: activeZoomId == sourceId)
     }
 
     private func carouselImages(width: CGFloat) -> some View {
@@ -78,26 +69,13 @@ struct PostCardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(Array(post.images.enumerated()), id: \.offset) { idx, image in
-                        AsyncImage(url: URL(string: image.url)) { phase in
-                            switch phase {
-                            case .success(let img):
-                                img.resizable().scaledToFill()
-                            case .failure:
-                                ZStack {
-                                    Rectangle().fill(Color.olasSurface2)
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 40, weight: .thin))
-                                        .foregroundStyle(Color.olasText3)
-                                }
-                            default:
-                                Rectangle().fill(Color.olasSurface2).overlay {
-                                    ProgressView().tint(Color.olasText3)
-                                }
-                            }
-                        }
-                        .frame(width: width)
-                        .clipped()
-                        .onTapGesture { onImageTap?(idx) }
+                        CachedImage(url: URL(string: image.url), meta: image)
+                            .frame(width: width)
+                            .clipped()
+                            // Each page is an independent zoom source; yield when active.
+                            .zoomSource(id: "feed-\(post.id)-\(idx)", namespace: zoomNamespace,
+                                        isLiftActive: activeZoomId == "feed-\(post.id)-\(idx)")
+                            .onTapGesture { onImageTap?(idx) }
                     }
                 }
             }
@@ -128,6 +106,7 @@ struct PostCardView: View {
     }
 
     private func triggerHeartBurst(at point: CGPoint) {
+        OlasHaptics.impactLight()
         heartBurstLocation = point
         withAnimation(.olasBouncy, completionCriteria: .logicallyComplete) {
             showHeartBurst = true

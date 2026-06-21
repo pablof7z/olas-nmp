@@ -329,7 +329,6 @@ pub extern "C" fn olas_onboarding_steps_json() -> *mut c_char {
             "welcome",
             "create_account",
             "sign_in",
-            "media_server",
             "follow_packs",
             "complete",
         ]);

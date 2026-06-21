@@ -1,5 +1,6 @@
 package io.f7z.olas.feature.profile
 
+import io.f7z.olas.navigation.Routes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,7 +35,11 @@ import androidx.navigation.NavController
 import io.f7z.olas.ui.theme.OlasColors
 
 @Composable
-fun ProfileScreen(navController: NavController, pubkey: String?) {
+fun ProfileScreen(
+    navController: NavController,
+    pubkey: String?,
+    onImageTap: (url: String) -> Unit = { _ -> },
+) {
     val vm: ProfileViewModel = viewModel(
         factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -72,18 +77,24 @@ fun ProfileScreen(navController: NavController, pubkey: String?) {
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     ProfileHeader(
-                        profile        = state.profile!!,
-                        isOwnProfile   = isOwnProfile,
-                        isFollowing    = state.isFollowing,
-                        followerCount  = 0,
-                        followingCount = 0,
-                        onFollow       = { vm.toggleFollow() },
-                        onZap          = {},
-                        onEdit         = { navController.navigate("profile_edit") },
+                        profile         = state.profile!!,
+                        isOwnProfile    = isOwnProfile,
+                        isFollowing     = state.isFollowing,
+                        followerCount   = 0,
+                        followingCount  = state.followingCount,
+                        socialProofJson = state.socialProofJson,
+                        onFollow        = { vm.toggleFollow() },
+                        onZap           = {},
+                        onEdit          = { navController.navigate("profile_edit") },
+                        onSettings      = { navController.navigate(Routes.SETTINGS) },
                     )
                 }
                 items(state.posts, key = { it.id }) { post ->
-                    ProfileGridCell(post = post)
+                    val thumbnailUrl = post.images.firstOrNull()?.url
+                    ProfileGridCell(
+                        post  = post,
+                        onTap = { if (thumbnailUrl != null) onImageTap(thumbnailUrl) },
+                    )
                 }
                 if (state.posts.isEmpty() && !state.isLoading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {

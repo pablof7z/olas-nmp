@@ -1,5 +1,54 @@
 import SwiftUI
 
+// MARK: - Social proof model
+
+struct SocialProof: Decodable {
+    let mutualFollowers: [String]
+    let mutualCount: Int
+    let reasonKind: String
+
+    var isReal: Bool { reasonKind == "followed_by_mutuals" && mutualCount > 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case mutualFollowers = "mutual_followers"
+        case mutualCount     = "mutual_count"
+        case reasonKind      = "reason_kind"
+    }
+}
+
+// MARK: - SocialProofRow
+
+struct SocialProofRow: View {
+    let proof: SocialProof
+    private var bridge: NMPBridge { NMPBridge.shared }
+
+    private var label: String {
+        let names = proof.mutualFollowers.prefix(2).compactMap {
+            bridge.profile(forPubkey: $0)?.displayName ?? bridge.profile(forPubkey: $0)?.npubShort
+        }
+        if names.isEmpty {
+            return "Followed by \(proof.mutualCount) of your follows"
+        }
+        let base = names.joined(separator: ", ")
+        let extra = proof.mutualCount - names.count
+        return extra > 0
+            ? "Followed by \(base) + \(extra) more"
+            : "Followed by \(base)"
+    }
+
+    // Renders nothing when there is no genuine mutual overlap — mirrors Android
+    // parseSocialProofLabel which returns null for the zero-overlap / new_account case.
+    var body: some View {
+        if proof.isReal {
+            Text(label)
+                .font(OlasFont.caption())
+                .foregroundStyle(Color.olasText2)
+        }
+    }
+}
+
+// MARK: - ProfileHeaderView
+
 struct ProfileHeaderView: View {
     let profile: OlasProfile
     let isOwn: Bool
@@ -7,15 +56,14 @@ struct ProfileHeaderView: View {
     let followerCount: Int
 
     @State private var isFollowing: Bool = false
+    @State private var socialProof: SocialProof? = nil
 
     private var bridge: NMPBridge { NMPBridge.shared }
 
     var body: some View {
         VStack(spacing: 0) {
             // Banner
-            AsyncImage(url: URL(string: profile.banner ?? "")) { img in
-                img.resizable().scaledToFill()
-            } placeholder: {
+            CachedImage(url: URL(string: profile.banner ?? "")) {
                 Rectangle().fill(Color.olasSurface2)
             }
             .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
@@ -125,11 +173,9 @@ struct ProfileHeaderView: View {
                             .padding(.top, 2)
                     }
 
-                    // Trust line (others only)
-                    if !isOwn {
-                        Text("Followed by people you follow")
-                            .font(OlasFont.caption())
-                            .foregroundStyle(Color.olasText2)
+                    // Real social proof row (others only) — NOT hardcoded.
+                    if !isOwn, let proof = socialProof {
+                        SocialProofRow(proof: proof)
                             .padding(.top, 2)
                     }
 
@@ -144,6 +190,20 @@ struct ProfileHeaderView: View {
                 .padding(.top, -24) // compensate avatar offset
             }
         }
+        .onAppear { loadSocialProof() }
+        .onChange(of: profile.pubkey) { _, _ in loadSocialProof() }
+    }
+
+    private func loadSocialProof() {
+        guard !isOwn, let activePubkey = bridge.activeAccountPubkey, !activePubkey.isEmpty else {
+            return
+        }
+        guard let json = bridge.socialProofJSON(activePubkey: activePubkey, targetPubkey: profile.pubkey),
+              let data = json.data(using: .utf8),
+              let proof = try? JSONDecoder().decode(SocialProof.self, from: data) else {
+            return
+        }
+        socialProof = proof
     }
 
     private func statItem(count: Int, label: String) -> some View {
