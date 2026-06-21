@@ -260,6 +260,10 @@ pub use follow_packs::{
 mod social;
 pub use social::{olas_discover_sections_json, olas_social_proof_json};
 
+// P2-A / P2-C: invite link resolution (inbound) and minting (outbound).
+mod invites;
+pub use invites::{olas_my_invite_link, olas_resolve_invite_json};
+
 /// Register Olas-specific protocol extensions on a freshly constructed NmpApp.
 ///
 /// Call this once, before nmp_app_start, after nmp_app_new.

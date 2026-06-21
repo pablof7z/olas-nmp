@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.groupNotificationsJson
 import io.f7z.olas.core.NostrEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

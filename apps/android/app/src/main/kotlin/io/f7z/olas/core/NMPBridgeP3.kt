@@ -68,3 +68,22 @@ fun NMPBridge.socialProofJson(activePubkey: String, targetPubkey: String): Strin
 fun NMPBridge.discoverSectionsJson(activePubkey: String): String? =
     if (activePubkey.isEmpty()) null
     else discoverSectionsJsonImpl(activePubkey)
+
+// --- P2-A: Invite link resolution ---------------------------------------------
+
+/**
+ * Resolve an invite token → inviter info.
+ * [token] accepts full URLs (https://olas.app/i/<npub>, olas://i/<npub>),
+ * bare npub1... strings, or 64-char hex pubkeys.
+ * Returns: `{"inviter_pubkey":"<hex>","display_hint":"npub1..."}` or null.
+ */
+fun NMPBridge.resolveInviteJson(token: String): String? =
+    if (token.isEmpty()) null else resolveInviteJsonImpl(token)
+
+// --- P2-C: Invite link minting ------------------------------------------------
+
+/**
+ * Mint the canonical invite link for the active user.
+ * Returns `"https://olas.app/i/<npub>"` or null when no account is active.
+ */
+fun NMPBridge.myInviteLink(): String? = myInviteLinkImpl()

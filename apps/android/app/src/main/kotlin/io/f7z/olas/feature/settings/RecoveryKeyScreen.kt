@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.activeAccountRecoveryKey
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

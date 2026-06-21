@@ -3,6 +3,7 @@ package io.f7z.olas.feature.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.socialProofJson
 import io.f7z.olas.core.NostrEvent
 import io.f7z.olas.core.OlasProfile
 import io.f7z.olas.core.PhotoPost

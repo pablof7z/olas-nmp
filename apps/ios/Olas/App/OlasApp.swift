@@ -23,6 +23,19 @@ struct OlasApp: App {
                     }
                     #endif
                 }
+                // P2-A: capture invite deep links (olas://i/<npub> and
+                // https://olas.app/i/<npub> via Universal Links when the
+                // apple-app-site-association is deployed on olas.app).
+                // Store the raw URL string so OnboardingViewModel can read
+                // it on first launch without needing a shared observable.
+                .onOpenURL { url in
+                    let str = url.absoluteString
+                    let isInvite = str.hasPrefix("olas://i/")
+                        || str.hasPrefix("https://olas.app/i/")
+                    if isInvite {
+                        UserDefaults.standard.set(str, forKey: "pendingInviteToken")
+                    }
+                }
         })
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {

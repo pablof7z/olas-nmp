@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
@@ -38,9 +39,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
 import androidx.compose.runtime.remember
 import androidx.navigation.NavController
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.myInviteLink
 import io.f7z.olas.core.OlasSound
 import io.f7z.olas.navigation.Routes
 import io.f7z.olas.ui.theme.OlasColors
@@ -84,6 +87,19 @@ fun SettingsScreen(navController: NavController) {
             SettingsRow(icon = Icons.Filled.Person, label = "Edit profile") {}
             SettingsRow(icon = Icons.Filled.Shield, label = "Account security") {
                 navController.navigate(Routes.ACCOUNT_SECURITY)
+            }
+            // P2-C: generate + share the user's personal invite link.
+            SettingsRow(icon = Icons.Filled.PersonAdd, label = "Invite friends") {
+                val link = NMPBridge.myInviteLink() ?: return@SettingsRow
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "Join me on Olas")
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "Check out Olas — photos without the algorithm. Use my invite link to join! $link",
+                    )
+                }
+                context.startActivity(Intent.createChooser(intent, "Invite friends"))
             }
         }
         item {

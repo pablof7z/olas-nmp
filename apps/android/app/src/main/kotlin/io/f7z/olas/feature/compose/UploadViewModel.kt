@@ -11,6 +11,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.parseCaptionTagsJson
+import io.f7z.olas.core.picturePostPublishTaggedJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

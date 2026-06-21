@@ -23,6 +23,14 @@ struct WelcomeView: View {
 
             // Content
             VStack(spacing: 0) {
+                // P2-A: "Invited you" banner — only shown when launched via an invite link.
+                if vm.inviterPubkey != nil {
+                    InviteBanner()
+                        .padding(.top, OlasSpacing.xl)
+                        .padding(.horizontal, OlasSpacing.xl)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 Spacer()
 
                 VStack(spacing: OlasSpacing.md) {
@@ -71,6 +79,7 @@ struct WelcomeView: View {
                 .padding(.bottom, OlasSpacing.xl)
             }
         }
+        .onAppear { vm.consumePendingInvite() }
     }
 
     private var mosaicBackground: some View {
@@ -86,5 +95,27 @@ struct WelcomeView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
+    }
+}
+
+// MARK: - Invite banner
+
+private struct InviteBanner: View {
+    var body: some View {
+        HStack(spacing: OlasSpacing.sm) {
+            Image(systemName: "envelope.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.olasBlue)
+
+            // Title only — never render the inviter's npub/pubkey (no-jargon rule).
+            Text("A friend invited you")
+                .font(OlasFont.subheadline())
+                .foregroundStyle(Color.olasText1)
+
+            Spacer()
+        }
+        .padding(OlasSpacing.md)
+        .background(Color.olasSurface2, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.olasBorder, lineWidth: 1))
     }
 }

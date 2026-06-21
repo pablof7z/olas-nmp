@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.f7z.olas.core.NMPBridge
+import io.f7z.olas.core.discoverSectionsJson
 import io.f7z.olas.ui.theme.OlasColors
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

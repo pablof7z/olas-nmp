@@ -34,6 +34,7 @@ import java.util.Calendar
 private enum class NotifTab { ALL, MENTIONS, ZAPS }
 
 @Suppress("UNUSED_PARAMETER")
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun NotificationsScreen(navController: NavController) {
     val vm: NotificationsViewModel = viewModel()

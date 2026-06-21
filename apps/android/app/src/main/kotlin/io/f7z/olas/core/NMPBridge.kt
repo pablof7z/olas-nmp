@@ -147,6 +147,12 @@ object NMPBridge {
     // P0-F: Ranked discover sections
     private external fun nativeDiscoverSectionsJson(handle: Long, activePubkey: String): String?
 
+    // P2-A: Invite link resolution
+    private external fun nativeResolveInviteJson(token: String): String?
+
+    // P2-C: Invite link minting
+    private external fun nativeMyInviteLink(activePubkey: String): String?
+
     /** Called from Rust on the kernel's listener thread (raw FlatBuffer frames). */
     interface UpdateListener {
         fun onUpdate(data: ByteArray)
@@ -473,4 +479,11 @@ object NMPBridge {
         nativeSocialProofJson(appHandle, ap, tp)
     internal fun discoverSectionsJsonImpl(ap: String): String? =
         nativeDiscoverSectionsJson(appHandle, ap)
+
+    // P2-A/P2-C invite delegates (public API exposed via NMPBridgeP3.kt).
+    internal fun resolveInviteJsonImpl(token: String): String? = nativeResolveInviteJson(token)
+    internal fun myInviteLinkImpl(): String? {
+        val pk = activeAccountPubkey ?: return null
+        return if (pk.isEmpty()) null else nativeMyInviteLink(pk)
+    }
 }

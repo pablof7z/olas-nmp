@@ -432,6 +432,36 @@ import os
         }
     }
 
+    // MARK: - P2-A: Invite link resolution
+
+    /// Decode an invite token (full URL, bare npub, or hex pubkey) into inviter info.
+    /// Returns `(pubkey: "<hex>", hint: "npub1...")` or nil.
+    func resolveInvite(token: String) -> (pubkey: String, hint: String)? {
+        token.withCString { t in
+            guard let res = olas_resolve_invite_json(t) else { return nil }
+            defer { nmp_free_string(res) }
+            guard let data = String(cString: res).data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                  let pk = obj["inviter_pubkey"],
+                  let hint = obj["display_hint"]
+            else { return nil }
+            return (pubkey: pk, hint: hint)
+        }
+    }
+
+    // MARK: - P2-C: Invite link minting
+
+    /// Mint the canonical invite link for the active user.
+    /// Returns "https://olas.app/i/<npub>" or nil when no account is active.
+    func myInviteLink() -> String? {
+        guard let pk = activeAccountPubkey, !pk.isEmpty else { return nil }
+        return pk.withCString { c in
+            guard let res = olas_my_invite_link(c) else { return nil }
+            defer { nmp_free_string(res) }
+            return String(cString: res)
+        }
+    }
+
 }
 
 // MARK: - NostrProfileHost
