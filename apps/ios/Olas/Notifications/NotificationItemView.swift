@@ -1,28 +1,17 @@
 import SwiftUI
 
 struct NotificationItemView: View {
-    let notification: OlasNotification
+    let notification: OlasGroupedNotification
+
+    // Avatar stack constants
+    private static let avatarSize: CGFloat = 30
+    private static let avatarOverlap: CGFloat = 18 // x-offset per subsequent avatar
 
     var body: some View {
         HStack(alignment: .top, spacing: OlasSpacing.sm) {
-            // Avatar with type badge
+            // Stacked actor avatars with type badge on the last one
             ZStack(alignment: .bottomTrailing) {
-                ZStack {
-                    Circle().fill(Color.olasSurface2)
-                    if let initial = (notification.actorName ?? notification.actorPubkey).first {
-                        Text(String(initial).uppercased())
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.olasText2)
-                    }
-                    if let url = notification.actorAvatar.flatMap(URL.init) {
-                        // Transparent placeholder so the initial/circle behind shows
-                        // until (and unless) the avatar loads.
-                        CachedImage(url: url) { Color.clear }
-                    }
-                }
-                .frame(width: 36, height: 36)
-                .clipShape(Circle())
-
+                stackedAvatars
                 typeBadge
             }
 
@@ -32,25 +21,32 @@ struct NotificationItemView: View {
                     .foregroundStyle(Color.olasText1)
                     .lineLimit(2)
 
-                Text(notification.createdAt.relativeTimeString)
+                Text(notification.latestTs.relativeTimeString)
                     .font(OlasFont.feedTimestamp())
                     .foregroundStyle(Color.olasText3)
             }
 
             Spacer()
-
-            // Post thumbnail
-            if let thumbnail = notification.postThumbnail {
-                CachedImage(url: URL(string: thumbnail)) {
-                    Rectangle().fill(Color.olasSurface2)
-                }
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
         }
         .padding(.horizontal, OlasSpacing.md)
         .padding(.vertical, OlasSpacing.sm)
         .background(Color.olasBackground)
+    }
+
+    // MARK: - Stacked avatars (up to 3, overlapping left-to-right)
+
+    @ViewBuilder
+    private var stackedAvatars: some View {
+        let actors = Array(notification.actorPubkeys.prefix(3))
+        let totalWidth = Self.avatarSize + CGFloat(max(0, actors.count - 1)) * Self.avatarOverlap
+        ZStack(alignment: .leading) {
+            ForEach(Array(actors.enumerated()), id: \.offset) { i, pubkey in
+                NostrAvatar(pubkey: pubkey, size: Self.avatarSize)
+                    .offset(x: CGFloat(i) * Self.avatarOverlap)
+                    .zIndex(Double(actors.count - i)) // first actor on top
+            }
+        }
+        .frame(width: totalWidth, height: Self.avatarSize)
     }
 
     @ViewBuilder
@@ -65,33 +61,43 @@ struct NotificationItemView: View {
     }
 
     private var badgeInfo: (String, Color) {
-        switch notification.type {
-        case .reaction:  return ("heart.fill", Color.olasHeart)
-        case .comment:   return ("bubble.right.fill", Color.olasBlue)
-        case .mention:   return ("at", Color.olasBlue)
-        case .follow:    return ("person.fill.badge.plus", Color.olasSuccess)
-        case .repost:    return ("arrow.2.squarepath", Color.olasText2)
-        case .zap:       return ("bolt.fill", Color.olasZap)
+        switch notification.kind {
+        case "reaction": return ("heart.fill", Color.olasHeart)
+        case "comment":  return ("bubble.right.fill", Color.olasBlue)
+        case "mention":  return ("at", Color.olasBlue)
+        case "follow":   return ("person.fill.badge.plus", Color.olasSuccess)
+        case "repost":   return ("arrow.2.squarepath", Color.olasText2)
+        case "zap":      return ("bolt.fill", Color.olasZap)
+        default:         return ("bell.fill", Color.olasText2)
         }
     }
 
-    private var notificationText: some View {
-        let actor = notification.actorName ?? String(notification.actorPubkey.prefix(8))
-        let grouped = notification.groupCount > 1 ? " and \(notification.groupCount - 1) others" : ""
-        let groupedText = "\(actor)\(grouped)"
+    // MARK: - Actor label: "alice, bob +N others"
 
-        return switch notification.type {
-        case .reaction:  Text("**\(groupedText)** reacted to your photo")
-        case .comment:   Text("**\(groupedText)** commented on your photo")
-        case .mention:   Text("**\(groupedText)** mentioned you")
-        case .follow:    Text("**\(groupedText)** followed you")
-        case .repost:    Text("**\(groupedText)** reposted your photo")
-        case .zap(let amount):
-            if amount > 0 {
-                Text("**\(groupedText)** zapped ⚡ \(amount) sats")
-            } else {
-                Text("**\(groupedText)** zapped your photo")
-            }
+    private var actorLabel: String {
+        let cache = NMPBridge.shared.profileCache
+        let names = notification.actorPubkeys.prefix(2).map { pubkey in
+            cache[pubkey]?.displayName ?? cache[pubkey]?.name ?? String(pubkey.prefix(8))
+        }
+        let others = notification.count - names.count
+        let base = names.joined(separator: ", ")
+        return others > 0 ? "\(base) +\(others) others" : base
+    }
+
+    @ViewBuilder
+    private var notificationText: some View {
+        let actor = actorLabel
+        switch notification.kind {
+        case "reaction": Text("**\(actor)** reacted to your photo")
+        case "comment":  Text("**\(actor)** commented on your photo")
+        case "mention":  Text("**\(actor)** mentioned you")
+        case "follow":   Text("**\(actor)** followed you")
+        case "repost":   Text("**\(actor)** reposted your photo")
+        case "zap":
+            let sats = notification.zapSats ?? 0
+            if sats > 0 { Text("**\(actor)** zapped ⚡ \(sats) sats") }
+            else { Text("**\(actor)** zapped your photo") }
+        default: Text("**\(actor)** interacted with you")
         }
     }
 }

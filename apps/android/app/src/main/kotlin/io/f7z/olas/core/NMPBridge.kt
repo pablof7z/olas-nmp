@@ -130,6 +130,17 @@ object NMPBridge {
     private external fun nativeReleaseProfile(handle: Long, pubkey: String, consumerId: String)
     private external fun nativeDecodeClaimedProfiles(handle: Long, frame: ByteArray): String?
 
+    // P3-B/C/D: wave6 depth features
+    private external fun nativeGroupNotificationsJson(notificationsJson: String): String?
+    private external fun nativeParseCaptionTagsJson(caption: String): String?
+    private external fun nativePicturePostPublishTaggedJson(
+        uploadedImagesJson: String,
+        caption: String?,
+        geohash: String?,
+        extraTagsJson: String?,
+    ): String?
+    private external fun nativeActiveAccountRecoveryKey(handle: Long): String?
+
     // P0-E: Real social proof
     private external fun nativeSocialProofJson(handle: Long, activePubkey: String, targetPubkey: String): String?
 
@@ -447,6 +458,32 @@ object NMPBridge {
 
     fun releaseProfile(pubkey: String, consumerId: String) =
         nativeReleaseProfile(appHandle, pubkey, consumerId)
+
+    // --- P3-B/C/D: wave6 depth features ------------------------------------------
+
+    /** Group a JSON array of individual notification payloads into clustered rows. */
+    fun groupNotificationsJson(notificationsJson: String): String? =
+        nativeGroupNotificationsJson(notificationsJson)
+
+    /** Parse `nostr:npub1…` mentions and `#hashtag` tokens from a caption. */
+    fun parseCaptionTagsJson(caption: String): String? =
+        nativeParseCaptionTagsJson(caption)
+
+    /** Extended picture-post publish that injects p/t tags from the caption. */
+    fun picturePostPublishTaggedJson(
+        uploadedImagesJson: String,
+        caption: String?,
+        geohash: String?,
+        extraTagsJson: String?,
+    ): String? = nativePicturePostPublishTaggedJson(uploadedImagesJson, caption, geohash, extraTagsJson)
+
+    /**
+     * Return the active local account's Recovery Key (bech32 nsec format).
+     * Returns null when no local account is signed in.
+     * DO NOT log the return value — it is the raw secret key.
+     */
+    fun activeAccountRecoveryKey(): String? =
+        if (appHandle == 0L) null else nativeActiveAccountRecoveryKey(appHandle)
 
     // --- P0-E: Real social proof -----------------------------------------------
 

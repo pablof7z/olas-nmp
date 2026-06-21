@@ -295,3 +295,50 @@ char* olas_social_proof_json(void* app, const char* active_pubkey, const char* t
 /// Returns NULL when active_pubkey is empty or the WoT runtime is absent.
 /// Returned string must be freed with nmp_free_string.
 char* olas_discover_sections_json(void* app, const char* active_pubkey);
+
+// ── P3-B: Grouped notifications ──────────────────────────────────────────────
+
+/// Group a JSON array of individual notification payloads (as emitted by
+/// olas_notification_json) into a clustered array, one row per (kind, post_id).
+///
+/// Input: JSON array of notification objects:
+///   [{id, kind, actorPubkey, postId?, createdAt, zapSats?}, …]
+/// Output: JSON array sorted most-recent first:
+///   [{groupId, kind, targetPostId?, actorPubkeys:[hex,…], count, latestTs, zapSats?}]
+///
+/// Returns NULL on null / empty / unparseable input.
+/// Returned string must be freed with nmp_free_string.
+char* olas_group_notifications_json(const char* notifications_json);
+
+// ── P3-C: Caption tag parsing (NIP-27 mentions + hashtags) ──────────────────
+
+/// Parse nostr: mentions and #hashtag tokens from a caption string.
+///
+/// Input: caption text (may contain nostr:npub1… URIs and #word tokens).
+/// Output JSON: {"content":"<caption>","p_tags":[["p","<hex>"],…],"t_tags":[["t","<tag>"],…]}
+///
+/// Returned string must be freed with nmp_free_string.
+char* olas_parse_caption_tags_json(const char* caption);
+
+/// Extended picture-post publish that merges additional NIP tags.
+///
+/// Same as olas_picture_post_publish_json but extra_tags_json (a JSON array of
+/// tag arrays, e.g. [["p","<hex>"],["t","bitcoin"]]) is merged into the kind:20
+/// tags.  Pass NULL for extra_tags_json to behave identically to the base function.
+///
+/// Returned string must be freed with nmp_free_string.
+char* olas_picture_post_publish_tagged_json(const char* uploaded_images_json,
+                                             const char* caption,
+                                             const char* geohash,
+                                             const char* extra_tags_json);
+
+// ── P3-D: Account Recovery Key export ────────────────────────────────────────
+
+/// Export the active account's secret key as a Recovery Key string (bech32).
+///
+/// Returns the bech32 secret for the active local account, or NULL when no local
+/// account is signed in (remote signer / no account).
+///
+/// SECURITY: the caller MUST NOT log the returned string. Present it only through
+/// the "Back up account" UI flow. Free with nmp_free_string immediately after use.
+char* olas_active_account_recovery_key(void* app);
